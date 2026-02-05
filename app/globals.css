@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer base {
+  :root {
+    /* Onyx Dark Theme for NoX VTC */
+    --background: 0 0% 6%; /* #0F0F0F */
+    --foreground: 0 0% 95%;
+    --card: 0 0% 10%; /* #1A1A1A */
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 41 47% 55%; /* Sand Gold #C5A059 */
+    --primary-foreground: 0 0% 6%;
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 55%;
+    --accent: 41 47% 55%;
+    --accent-foreground: 0 0% 6%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 18%;
+    --input: 0 0% 14%;
+    --ring: 41 47% 55%;
+    --chart-1: 41 47% 55%;
+    --chart-2: 41 47% 45%;
+    --chart-3: 41 47% 35%;
+    --chart-4: 0 0% 40%;
+    --chart-5: 0 0% 30%;
+    --radius: 1rem;
+    --gold: 41 47% 55%;
+    --gold-glow: 41 47% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Gold glow effect */
+.gold-glow {
+  box-shadow: 0 0 20px rgba(197, 160, 89, 0.3);
+}
+
+.gold-glow-sm {
+  box-shadow: 0 0 10px rgba(197, 160, 89, 0.2);
+}
+
+/* Glassmorphism for navigation */
+.glass-nav {
+  background: rgba(26, 26, 26, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
