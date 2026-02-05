@@ -56,30 +56,30 @@ export function QuickActions() {
   const actions = [
     {
       icon: <FileText className="h-5 w-5" strokeWidth={1.5} />,
-      label: "New BC",
+      label: "+ Bon Commande",
       disabled: false,
     },
     {
       icon: <Receipt className="h-5 w-5" strokeWidth={1.5} />,
-      label: "New Invoice",
+      label: "+ Facture",
       disabled: false,
     },
     {
       icon: <Car className="h-5 w-5" strokeWidth={1.5} />,
-      label: "+ Vehicle",
+      label: "+ Véhicule",
       disabled: true,
     },
     {
       icon: <UserPlus className="h-5 w-5" strokeWidth={1.5} />,
-      label: "+ Driver",
+      label: "+ Chauffeur",
       disabled: true,
     },
   ]
 
   return (
     <section className="px-4">
-      <h2 className="text-sm font-semibold text-foreground mb-3">Quick Actions</h2>
-      <div className="grid grid-cols-4 gap-3">
+      <h2 className="text-sm font-semibold text-foreground mb-3">Actions Rapides</h2>
+      <div className="grid grid-cols-2 gap-3">
         {actions.map((action) => (
           <QuickActionTile
             key={action.label}

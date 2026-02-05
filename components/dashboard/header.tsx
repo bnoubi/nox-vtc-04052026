@@ -20,9 +20,10 @@ export function DashboardHeader() {
         </div>
       </div>
 
-      {/* Token Wallet Badge */}
+      {/* Crédits NoX Badge */}
       <div className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-onyx-card border border-gold/20 gold-glow-sm">
         <Coins className="h-4 w-4 text-gold" strokeWidth={1.5} />
+        <span className="text-xs text-muted-foreground mr-1">Crédits</span>
         <span className="text-sm font-semibold text-gold">5</span>
       </div>
     </header>

@@ -15,12 +15,12 @@ interface NavItem {
 const navItems: NavItem[] = [
   {
     icon: <LayoutDashboard className="h-5 w-5" strokeWidth={1.5} />,
-    label: "Dashboard",
+    label: "Tableau de Bord",
     id: "dashboard",
   },
   {
     icon: <Calendar className="h-5 w-5" strokeWidth={1.5} />,
-    label: "Calendar",
+    label: "Calendrier",
     id: "calendar",
   },
   {
@@ -30,12 +30,12 @@ const navItems: NavItem[] = [
   },
   {
     icon: <Users className="h-5 w-5" strokeWidth={1.5} />,
-    label: "Users",
+    label: "Clients",
     id: "users",
   },
   {
     icon: <Settings className="h-5 w-5" strokeWidth={1.5} />,
-    label: "Settings",
+    label: "Réglages",
     id: "settings",
   },
 ]

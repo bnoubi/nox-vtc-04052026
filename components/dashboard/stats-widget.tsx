@@ -15,9 +15,9 @@ const revenueData = [
 
 const cancellationData = [
   { name: "Client", value: 45, color: "#C5A059" },
-  { name: "Driver", value: 25, color: "#666666" },
-  { name: "Weather", value: 15, color: "#444444" },
-  { name: "Other", value: 15, color: "#333333" },
+  { name: "Chauffeur", value: 25, color: "#666666" },
+  { name: "Météo", value: 15, color: "#444444" },
+  { name: "Autre", value: 15, color: "#333333" },
 ]
 
 export function StatsWidget() {
@@ -31,18 +31,18 @@ export function StatsWidget() {
 
   return (
     <section className="px-4">
-      <h2 className="text-sm font-semibold text-foreground mb-3">Statistics</h2>
+      <h2 className="text-sm font-semibold text-foreground mb-3">Statistiques</h2>
       
       <div className="grid grid-cols-2 gap-3">
         {/* Revenue Chart */}
         <div className="p-4 rounded-2xl bg-onyx-card border border-onyx-border/50">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-muted-foreground">Revenue</span>
+            <span className="text-xs text-muted-foreground">Chiffre d{"'"}Affaires</span>
             <span className="text-xs font-medium text-emerald-400">+12%</span>
           </div>
           <p className="text-lg font-bold text-foreground mb-2">
             {new Intl.NumberFormat("fr-FR").format(avgRevenue)}€
-            <span className="text-xs text-muted-foreground font-normal ml-1">/day</span>
+            <span className="text-xs text-muted-foreground font-normal ml-1">/jour</span>
           </p>
           <div className="h-16 -mx-2">
             {mounted ? (
@@ -72,8 +72,8 @@ export function StatsWidget() {
         {/* Cancellation Motifs */}
         <div className="p-4 rounded-2xl bg-onyx-card border border-onyx-border/50">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-muted-foreground">Cancellations</span>
-            <span className="text-xs font-medium text-muted-foreground">This month</span>
+            <span className="text-xs text-muted-foreground">Annulations</span>
+            <span className="text-xs font-medium text-muted-foreground">Ce mois</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="h-16 w-16">

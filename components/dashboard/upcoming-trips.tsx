@@ -99,9 +99,9 @@ export function UpcomingTrips() {
   return (
     <section className="px-4">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-foreground">Upcoming Trips</h2>
+        <h2 className="text-sm font-semibold text-foreground">Prochaines Courses</h2>
         <button className="text-xs text-gold font-medium hover:text-gold-light transition-colors">
-          View All
+          Tout voir
         </button>
       </div>
       <div className="space-y-3">
