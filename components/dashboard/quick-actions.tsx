@@ -18,7 +18,7 @@ function QuickActionTile({ icon, label, disabled, onClick }: QuickActionProps) {
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "relative flex flex-col items-center justify-center gap-2 aspect-square rounded-2xl border transition-all duration-200",
+        "relative flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl border transition-all duration-200",
         disabled
           ? "bg-onyx-card/50 border-onyx-border/50 opacity-60 cursor-not-allowed"
           : "bg-onyx-card border-gold/20 hover:border-gold/40 hover:gold-glow-sm active:scale-[0.98]"
@@ -26,24 +26,24 @@ function QuickActionTile({ icon, label, disabled, onClick }: QuickActionProps) {
     >
       {/* Lock icon for disabled tiles */}
       {disabled && (
-        <div className="absolute top-2 right-2">
-          <Lock className="h-3.5 w-3.5 text-gold/70" strokeWidth={1.5} />
+        <div className="absolute top-1.5 right-1.5">
+          <Lock className="h-3 w-3 text-gold/70" strokeWidth={1.5} />
         </div>
       )}
       
       <div className={cn(
-        "p-3 rounded-xl",
+        "p-2 rounded-lg",
         disabled ? "bg-onyx-border/30" : "bg-gold/10"
       )}>
         <span className={cn(
           disabled ? "text-muted-foreground" : "text-gold"
         )}>
-          {icon}
+          {React.cloneElement(icon as React.ReactElement, { className: "h-4 w-4" })}
         </span>
       </div>
       
       <span className={cn(
-        "text-xs font-medium",
+        "text-[11px] font-medium",
         disabled ? "text-muted-foreground" : "text-foreground"
       )}>
         {label}
@@ -56,7 +56,7 @@ export function QuickActions() {
   const actions = [
     {
       icon: <FileText className="h-5 w-5" strokeWidth={1.5} />,
-      label: "+ Bon Commande",
+      label: "+ Bon de Commande",
       disabled: false,
     },
     {
