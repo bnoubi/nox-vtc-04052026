@@ -35,7 +35,7 @@ export function StatsWidget() {
             <span className="text-xs font-medium text-emerald-400">+12%</span>
           </div>
           <p className="text-lg font-bold text-foreground mb-2">
-            {avgRevenue.toLocaleString()}€
+            {new Intl.NumberFormat("fr-FR").format(avgRevenue)}€
             <span className="text-xs text-muted-foreground font-normal ml-1">/day</span>
           </p>
           <div className="h-16 -mx-2">
