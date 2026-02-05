@@ -7,7 +7,7 @@ import { SecurityBadge } from "@/components/dashboard/security-badge"
 
 export default function DashboardPage() {
   return (
-    <main className="min-h-screen bg-background pb-28">
+    <main className="min-h-screen bg-background pb-36">
       {/* Subtle gradient overlay */}
       <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
       

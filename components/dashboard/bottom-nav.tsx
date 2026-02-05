@@ -44,41 +44,46 @@ export function BottomNav() {
   const [activeId, setActiveId] = useState("dashboard")
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-6 pt-2">
-      <div className="bg-[#0F0F0F]/90 backdrop-blur-md rounded-2xl border border-gold/10 px-1 py-3">
-        <div className="flex items-center justify-around">
-          {navItems.map((item) => {
-            const isActive = activeId === item.id
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveId(item.id)}
-                className={cn(
-                  "flex flex-col items-center justify-center gap-1 min-w-0 flex-1 py-1 rounded-xl transition-all duration-200",
-                  isActive
-                    ? "text-gold"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <div
+    <>
+      {/* Gradient fade above nav */}
+      <div className="fixed bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none z-40" />
+      
+      <nav className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-6 pt-2">
+        <div className="bg-[#0F0F0F]/95 backdrop-blur-xl rounded-2xl border border-gold/10 px-2 py-3">
+          <div className="grid grid-cols-5 gap-1">
+            {navItems.map((item) => {
+              const isActive = activeId === item.id
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveId(item.id)}
                   className={cn(
-                    "transition-all duration-200",
-                    isActive && "gold-glow-sm rounded-lg p-1 -m-1"
+                    "flex flex-col items-center justify-center gap-1 py-1 rounded-xl transition-all duration-200",
+                    isActive
+                      ? "text-gold"
+                      : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {item.icon}
-                </div>
-                <span className={cn(
-                  "text-[9px] font-medium truncate max-w-full text-center",
-                  isActive ? "text-gold" : "text-muted-foreground"
-                )}>
-                  {item.label}
-                </span>
-              </button>
-            )
-          })}
+                  <div
+                    className={cn(
+                      "transition-all duration-200",
+                      isActive && "gold-glow-sm rounded-lg p-1 -m-1"
+                    )}
+                  >
+                    {item.icon}
+                  </div>
+                  <span className={cn(
+                    "text-[8px] font-medium leading-tight text-center w-full",
+                    isActive ? "text-gold" : "text-muted-foreground"
+                  )}>
+                    {item.label}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+    </>
   )
 }

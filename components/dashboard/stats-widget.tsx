@@ -1,7 +1,16 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Area, AreaChart, Cell, Pie, PieChart, ResponsiveContainer } from "recharts"
+import dynamic from "next/dynamic"
+
+const RevenueChart = dynamic(
+  () => import("./charts").then((mod) => mod.RevenueChart),
+  { ssr: false, loading: () => <div className="w-full h-full bg-onyx-border/20 rounded animate-pulse" /> }
+)
+
+const CancellationChart = dynamic(
+  () => import("./charts").then((mod) => mod.CancellationChart),
+  { ssr: false, loading: () => <div className="w-full h-full bg-onyx-border/20 rounded-full animate-pulse" /> }
+)
 
 const revenueData = [
   { day: "Mon", amount: 1200 },
@@ -21,13 +30,8 @@ const cancellationData = [
 ]
 
 export function StatsWidget() {
-  const [mounted, setMounted] = useState(false)
   const totalRevenue = revenueData.reduce((sum, d) => sum + d.amount, 0)
   const avgRevenue = Math.round(totalRevenue / revenueData.length)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   return (
     <section className="px-4">
@@ -45,27 +49,7 @@ export function StatsWidget() {
             <span className="text-xs text-muted-foreground font-normal ml-1">/jour</span>
           </p>
           <div className="h-16 -mx-2">
-            {mounted ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={revenueData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="goldGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#C5A059" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#C5A059" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <Area
-                    type="monotone"
-                    dataKey="amount"
-                    stroke="#C5A059"
-                    strokeWidth={1.5}
-                    fill="url(#goldGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="w-full h-full bg-onyx-border/20 rounded animate-pulse" />
-            )}
+            <RevenueChart data={revenueData} />
           </div>
         </div>
 
@@ -77,28 +61,7 @@ export function StatsWidget() {
           </div>
           <div className="flex items-center gap-3">
             <div className="h-16 w-16">
-              {mounted ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={cancellationData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={18}
-                      outerRadius={30}
-                      paddingAngle={2}
-                      dataKey="value"
-                      strokeWidth={0}
-                    >
-                      {cancellationData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="w-full h-full bg-onyx-border/20 rounded-full animate-pulse" />
-              )}
+              <CancellationChart data={cancellationData} />
             </div>
             <div className="flex flex-col gap-1">
               {cancellationData.slice(0, 3).map((item) => (
