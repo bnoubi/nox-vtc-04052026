@@ -1,38 +1,66 @@
-import { DashboardHeader } from "@/components/dashboard/header"
-import { QuickActions } from "@/components/dashboard/quick-actions"
-import { UpcomingTrips } from "@/components/dashboard/upcoming-trips"
-import { StatsWidget } from "@/components/dashboard/stats-widget"
-import { BottomNav } from "@/components/dashboard/bottom-nav"
-import { SecurityBadge } from "@/components/dashboard/security-badge"
+"use client"
 
-export default function DashboardPage() {
+import { useState, useEffect } from "react"
+import { AnimatePresence, motion } from "framer-motion"
+import { BottomNav, type TabId } from "@/components/dashboard/bottom-nav"
+import { SecurityBadge } from "@/components/dashboard/security-badge"
+import { DashboardTab } from "@/components/dashboard/tab-dashboard"
+import { CalendarTab } from "@/components/dashboard/tab-calendar"
+import { DocumentsTab } from "@/components/dashboard/tab-documents"
+import { ClientsTab } from "@/components/dashboard/tab-clients"
+import { SettingsTab } from "@/components/dashboard/tab-settings"
+
+const tabComponents: Record<TabId, React.ComponentType> = {
+  dashboard: DashboardTab,
+  calendar: CalendarTab,
+  documents: DocumentsTab,
+  clients: ClientsTab,
+  settings: SettingsTab,
+}
+
+export default function AppPage() {
+  const [activeTab, setActiveTab] = useState<TabId>("dashboard")
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const ActiveComponent = tabComponents[activeTab]
+
+  if (!mounted) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
+      </main>
+    )
+  }
+
   return (
-    <main className="min-h-screen bg-background pb-36">
+    <main className="min-h-screen bg-background">
       {/* Subtle gradient overlay */}
       <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
-      
-      <div className="relative max-w-md mx-auto">
-        {/* Header */}
-        <DashboardHeader />
 
-        {/* Content */}
-        <div className="space-y-6 pt-2">
-          {/* Quick Actions */}
-          <QuickActions />
-
-          {/* Upcoming Trips */}
-          <UpcomingTrips />
-
-          {/* Stats */}
-          <StatsWidget />
-        </div>
+      <div className="relative max-w-md mx-auto h-screen flex flex-col pb-32">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+            className="flex-1 overflow-y-auto"
+          >
+            <ActiveComponent />
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Security Badge */}
       <SecurityBadge />
 
       {/* Bottom Navigation */}
-      <BottomNav />
+      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
     </main>
   )
 }
