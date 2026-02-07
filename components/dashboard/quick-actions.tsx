@@ -4,6 +4,7 @@ import React, { useState } from "react"
 import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AddClientModal } from "./add-client-modal"
+import { CreateBCFlow } from "./create-bc"
 import { usePlan } from "./plan-context"
 
 interface QuickActionProps {
@@ -55,6 +56,7 @@ function QuickActionTile({ icon, label, disabled, onClick }: QuickActionProps) {
 
 export function QuickActions() {
   const [showClientModal, setShowClientModal] = useState(false)
+  const [showBCFlow, setShowBCFlow] = useState(false)
   const { plan } = usePlan()
   const isPro = plan === "PRO"
 
@@ -67,6 +69,7 @@ export function QuickActions() {
         <QuickActionTile
           icon={<FileText className="h-5 w-5" strokeWidth={1.5} />}
           label="+ Bon de Commande"
+          onClick={() => setShowBCFlow(true)}
         />
         <QuickActionTile
           icon={<Receipt className="h-5 w-5" strokeWidth={1.5} />}
@@ -92,6 +95,10 @@ export function QuickActions() {
       <AddClientModal
         open={showClientModal}
         onClose={() => setShowClientModal(false)}
+      />
+      <CreateBCFlow
+        open={showBCFlow}
+        onClose={() => setShowBCFlow(false)}
       />
     </section>
   )

@@ -24,54 +24,13 @@ import {
 import { cn } from "@/lib/utils"
 import { usePlan } from "./plan-context"
 import { GoldConfetti } from "./gold-confetti"
+import { allDrivers, allVehicles } from "./data"
 
 // ── Constants ──────────────────────────────────────────────────
 const PRO_LIMIT = 2
 const GOLD_LIMIT = 10
 
 type SettingsScreen = "main" | "team" | "fleet"
-
-interface Driver {
-  id: string
-  name: string
-  initials: string
-  online: boolean
-}
-
-interface Vehicle {
-  id: string
-  model: string
-  plate: string
-  inService: boolean
-}
-
-// ── Full Data (10 drivers, 10 vehicles) ────────────────────────
-
-const allDrivers: Driver[] = [
-  { id: "1", name: "Karim Benzari", initials: "KB", online: true },
-  { id: "2", name: "Sophie Martin", initials: "SM", online: false },
-  { id: "3", name: "Lucas Fernandez", initials: "LF", online: true },
-  { id: "4", name: "Am\u00e9lie Rousseau", initials: "AR", online: true },
-  { id: "5", name: "Thomas Nguyen", initials: "TN", online: false },
-  { id: "6", name: "Fatima El Amrani", initials: "FA", online: true },
-  { id: "7", name: "Pierre Leclerc", initials: "PL", online: false },
-  { id: "8", name: "Nadia Bousquet", initials: "NB", online: true },
-  { id: "9", name: "Julien Morel", initials: "JM", online: true },
-  { id: "10", name: "Yasmine Khedira", initials: "YK", online: false },
-]
-
-const allVehicles: Vehicle[] = [
-  { id: "1", model: "Mercedes Classe S", plate: "AB-123-CD", inService: true },
-  { id: "2", model: "BMW S\u00e9rie 7", plate: "EF-456-GH", inService: true },
-  { id: "3", model: "Audi A8 L", plate: "IJ-789-KL", inService: true },
-  { id: "4", model: "Mercedes Classe V", plate: "MN-012-OP", inService: true },
-  { id: "5", model: "Van Mercedes Sprinter", plate: "QR-345-ST", inService: false },
-  { id: "6", model: "Tesla Model S", plate: "UV-678-WX", inService: true },
-  { id: "7", model: "Range Rover Autobiography", plate: "YZ-901-AB", inService: true },
-  { id: "8", model: "Porsche Panamera", plate: "CD-234-EF", inService: false },
-  { id: "9", model: "Lexus LS 500h", plate: "GH-567-IJ", inService: true },
-  { id: "10", model: "Bentley Flying Spur", plate: "KL-890-MN", inService: true },
-]
 
 // ── Animation variants ────────────────────────────────────────
 

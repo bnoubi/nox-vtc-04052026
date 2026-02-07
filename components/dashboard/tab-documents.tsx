@@ -1,8 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Search, MoreHorizontal, Eye, Share2, XCircle, FileText, Receipt } from "lucide-react"
+import { Search, MoreHorizontal, Eye, Share2, XCircle, FileText, Receipt, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { CreateBCFlow } from "./create-bc"
 
 type DocType = "bc" | "facture"
 type DocStatus = "signe" | "en_attente" | "paye" | "brouillon" | "annule"
@@ -201,6 +202,7 @@ function DocCard({ doc }: { doc: Document }) {
 export function DocumentsTab() {
   const [activeType, setActiveType] = useState<DocType>("bc")
   const [search, setSearch] = useState("")
+  const [showBCFlow, setShowBCFlow] = useState(false)
 
   const filtered = documents.filter(
     (d) =>
@@ -265,6 +267,16 @@ export function DocumentsTab() {
           </span>
         </div>
       </div>
+
+      {/* Floating add button */}
+      <button
+        onClick={() => setShowBCFlow(true)}
+        className="fixed bottom-28 right-5 z-30 w-12 h-12 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 transition-transform"
+      >
+        <Plus className="h-5 w-5 text-primary-foreground" strokeWidth={2} />
+      </button>
+
+      <CreateBCFlow open={showBCFlow} onClose={() => setShowBCFlow(false)} />
 
       {/* Document List */}
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-20">
