@@ -1,8 +1,7 @@
 "use client"
 
 import React from "react"
-
-import { FileText, Receipt, Car, UserPlus, Lock } from "lucide-react"
+import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface QuickActionProps {
@@ -18,34 +17,34 @@ function QuickActionTile({ icon, label, disabled, onClick }: QuickActionProps) {
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "relative flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl border transition-all duration-200",
+        "relative flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-2xl border transition-all duration-200",
         disabled
           ? "bg-onyx-card/50 border-onyx-border/50 opacity-60 cursor-not-allowed"
-          : "bg-onyx-card border-gold/20 hover:border-gold/40 hover:gold-glow-sm active:scale-[0.98]"
+          : "bg-onyx-card border-gold/20 hover:border-gold/40 hover:gold-glow-sm active:scale-[0.98]",
       )}
     >
-      {/* Lock icon for disabled tiles */}
       {disabled && (
         <div className="absolute top-1.5 right-1.5">
           <Lock className="h-3 w-3 text-gold/70" strokeWidth={1.5} />
         </div>
       )}
-      
-      <div className={cn(
-        "p-2 rounded-lg",
-        disabled ? "bg-onyx-border/30" : "bg-gold/10"
-      )}>
-        <span className={cn(
-          disabled ? "text-muted-foreground" : "text-gold"
-        )}>
-          {React.cloneElement(icon as React.ReactElement, { className: "h-4 w-4" })}
+
+      <div
+        className={cn("p-2 rounded-lg", disabled ? "bg-onyx-border/30" : "bg-gold/10")}
+      >
+        <span className={cn(disabled ? "text-muted-foreground" : "text-gold")}>
+          {React.cloneElement(icon as React.ReactElement, {
+            className: "h-4 w-4",
+          })}
         </span>
       </div>
-      
-      <span className={cn(
-        "text-[11px] font-medium",
-        disabled ? "text-muted-foreground" : "text-foreground"
-      )}>
+
+      <span
+        className={cn(
+          "text-[10px] font-medium leading-tight text-center px-1",
+          disabled ? "text-muted-foreground" : "text-foreground",
+        )}
+      >
         {label}
       </span>
     </button>
@@ -65,8 +64,13 @@ export function QuickActions() {
       disabled: false,
     },
     {
+      icon: <UserRoundPlus className="h-5 w-5" strokeWidth={1.5} />,
+      label: "+ Client",
+      disabled: false,
+    },
+    {
       icon: <Car className="h-5 w-5" strokeWidth={1.5} />,
-      label: "+ Véhicule",
+      label: "+ V\u00e9hicule",
       disabled: true,
     },
     {
@@ -78,8 +82,10 @@ export function QuickActions() {
 
   return (
     <section className="px-4">
-      <h2 className="text-sm font-semibold text-foreground mb-3">Actions Rapides</h2>
-      <div className="grid grid-cols-2 gap-3">
+      <h2 className="text-sm font-semibold text-foreground mb-3">
+        Actions Rapides
+      </h2>
+      <div className="grid grid-cols-3 gap-2.5">
         {actions.map((action) => (
           <QuickActionTile
             key={action.label}

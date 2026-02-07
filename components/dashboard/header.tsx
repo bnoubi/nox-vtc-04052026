@@ -26,10 +26,10 @@ export function DashboardHeader() {
           <span className="text-[10px] font-bold text-gold tracking-wider">PRO</span>
         </div>
 
-        {/* Crédits NoX Badge */}
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-onyx-card border border-gold/20 gold-glow-sm">
-          <Coins className="h-3.5 w-3.5 text-gold" strokeWidth={1.5} />
-          <span className="text-sm font-semibold text-gold">5</span>
+        {/* Crédits NoX Badge - Greyed for PRO */}
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-onyx-card border border-onyx-border/30 opacity-40">
+          <Coins className="h-3.5 w-3.5 text-gold/60" strokeWidth={1.5} />
+          <span className="text-sm font-semibold text-gold/60">5</span>
         </div>
       </div>
     </header>
