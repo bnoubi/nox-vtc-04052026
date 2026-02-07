@@ -2,13 +2,18 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Coins } from "lucide-react"
+import { usePlan } from "./plan-context"
+import { cn } from "@/lib/utils"
 
 export function DashboardHeader() {
+  const { plan } = usePlan()
+  const isGold = plan === "GOLD"
+
   return (
     <header className="flex items-center justify-between px-4 py-4">
       {/* User Profile */}
       <div className="flex items-center gap-3">
-        <Avatar className="h-11 w-11 border border-gold/30">
+        <Avatar className={cn("h-11 w-11 border", isGold ? "border-gold/50" : "border-gold/30")}>
           <AvatarImage src="/placeholder-avatar.jpg" alt="User" />
           <AvatarFallback className="bg-onyx-card text-foreground text-sm font-medium">
             JD
@@ -21,12 +26,22 @@ export function DashboardHeader() {
       </div>
 
       <div className="flex items-center gap-2">
-        {/* PRO Badge */}
-        <div className="px-2.5 py-1.5 rounded-xl bg-gold/15 border border-gold/30">
-          <span className="text-[10px] font-bold text-gold tracking-wider">PRO</span>
+        {/* Plan Badge */}
+        <div className={cn(
+          "px-3 py-1.5 rounded-xl border",
+          isGold
+            ? "bg-gradient-to-r from-gold/25 via-gold/15 to-gold/25 border-gold/50 gold-badge-glow"
+            : "bg-gold/15 border-gold/30"
+        )}>
+          <span className={cn(
+            "text-[10px] font-bold tracking-wider",
+            isGold ? "gold-gradient-text" : "text-gold"
+          )}>
+            {plan}
+          </span>
         </div>
 
-        {/* Crédits NoX Badge - Greyed for PRO */}
+        {/* Wallet Badge - Greyed for both plans (unlimited docs) */}
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-onyx-card border border-onyx-border/30 opacity-40">
           <Coins className="h-3.5 w-3.5 text-gold/60" strokeWidth={1.5} />
           <span className="text-sm font-semibold text-gold/60">5</span>

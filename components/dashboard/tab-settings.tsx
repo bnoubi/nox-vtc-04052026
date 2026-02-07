@@ -19,27 +19,17 @@ import {
   Wifi,
   WifiOff,
   Crown,
+  Headphones,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { usePlan } from "./plan-context"
+import { GoldConfetti } from "./gold-confetti"
 
-// ── Plan Logic ─────────────────────────────────────────────────
-// Change this to "GOLD" to unlock all slots (up to 10)
-type Plan = "PRO" | "GOLD"
-const CURRENT_PLAN: Plan = "PRO"
+// ── Constants ──────────────────────────────────────────────────
 const PRO_LIMIT = 2
 const GOLD_LIMIT = 10
 
-// ── Types ──────────────────────────────────────────────────────
-
 type SettingsScreen = "main" | "team" | "fleet"
-
-interface SettingItem {
-  icon: React.ReactNode
-  label: string
-  description?: string
-  badge?: string
-  screen?: SettingsScreen
-}
 
 interface Driver {
   id: string
@@ -55,84 +45,35 @@ interface Vehicle {
   inService: boolean
 }
 
-// ── Data ───────────────────────────────────────────────────────
+// ── Full Data (10 drivers, 10 vehicles) ────────────────────────
 
 const allDrivers: Driver[] = [
   { id: "1", name: "Karim Benzari", initials: "KB", online: true },
   { id: "2", name: "Sophie Martin", initials: "SM", online: false },
-  // GOLD-only slots (shown when plan === "GOLD")
   { id: "3", name: "Lucas Fernandez", initials: "LF", online: true },
-  { id: "4", name: "Am\u00e9lie Rousseau", initials: "AR", online: false },
-  { id: "5", name: "Thomas Nguyen", initials: "TN", online: true },
+  { id: "4", name: "Am\u00e9lie Rousseau", initials: "AR", online: true },
+  { id: "5", name: "Thomas Nguyen", initials: "TN", online: false },
+  { id: "6", name: "Fatima El Amrani", initials: "FA", online: true },
+  { id: "7", name: "Pierre Leclerc", initials: "PL", online: false },
+  { id: "8", name: "Nadia Bousquet", initials: "NB", online: true },
+  { id: "9", name: "Julien Morel", initials: "JM", online: true },
+  { id: "10", name: "Yasmine Khedira", initials: "YK", online: false },
 ]
 
 const allVehicles: Vehicle[] = [
   { id: "1", model: "Mercedes Classe S", plate: "AB-123-CD", inService: true },
   { id: "2", model: "BMW S\u00e9rie 7", plate: "EF-456-GH", inService: true },
-  // GOLD-only slots
-  { id: "3", model: "Audi A8 L", plate: "IJ-789-KL", inService: false },
+  { id: "3", model: "Audi A8 L", plate: "IJ-789-KL", inService: true },
   { id: "4", model: "Mercedes Classe V", plate: "MN-012-OP", inService: true },
+  { id: "5", model: "Van Mercedes Sprinter", plate: "QR-345-ST", inService: false },
+  { id: "6", model: "Tesla Model S", plate: "UV-678-WX", inService: true },
+  { id: "7", model: "Range Rover Autobiography", plate: "YZ-901-AB", inService: true },
+  { id: "8", model: "Porsche Panamera", plate: "CD-234-EF", inService: false },
+  { id: "9", model: "Lexus LS 500h", plate: "GH-567-IJ", inService: true },
+  { id: "10", model: "Bentley Flying Spur", plate: "KL-890-MN", inService: true },
 ]
 
-const profileSettings: SettingItem[] = [
-  {
-    icon: <User className="h-4 w-4" strokeWidth={1.5} />,
-    label: "Mon Profil",
-    description: "Jean Dupont",
-  },
-  {
-    icon: <Building2 className="h-4 w-4" strokeWidth={1.5} />,
-    label: "Profil Entreprise",
-    description: "NoX VTC SAS",
-  },
-  {
-    icon: <FileText className="h-4 w-4" strokeWidth={1.5} />,
-    label: "SIRET / RIB",
-    description: "Documents l\u00e9gaux",
-  },
-]
-
-const managementSettings: SettingItem[] = [
-  {
-    icon: <Users className="h-4 w-4" strokeWidth={1.5} />,
-    label: "Gestion de l\u2019\u00c9quipe",
-    description:
-      CURRENT_PLAN === "GOLD"
-        ? `${allDrivers.length} chauffeurs actifs`
-        : "2 chauffeurs actifs",
-    screen: "team",
-  },
-  {
-    icon: <Car className="h-4 w-4" strokeWidth={1.5} />,
-    label: "Gestion du Parc",
-    description:
-      CURRENT_PLAN === "GOLD"
-        ? `${allVehicles.length} v\u00e9hicules en service`
-        : "2 v\u00e9hicules en service",
-    screen: "fleet",
-  },
-]
-
-const appSettings: SettingItem[] = [
-  {
-    icon: <Bell className="h-4 w-4" strokeWidth={1.5} />,
-    label: "Notifications",
-    description: "Push, Email, SMS",
-  },
-  {
-    icon: <CreditCard className="h-4 w-4" strokeWidth={1.5} />,
-    label: "Moyen de Paiement",
-    description: "Visa **** 4242",
-  },
-  {
-    icon: <Shield className="h-4 w-4" strokeWidth={1.5} />,
-    label: "S\u00e9curit\u00e9",
-    badge: "AES-256",
-    description: "Chiffrement de bout en bout",
-  },
-]
-
-// ── Transition variants ────────────────────────────────────────
+// ── Animation variants ────────────────────────────────────────
 
 const slideIn = {
   initial: { opacity: 0, x: 60 },
@@ -146,7 +87,15 @@ const slideBack = {
   exit: { opacity: 0, x: 60 },
 }
 
-// ── Sub-components ─────────────────────────────────────────────
+// ── Setting Row ───────────────────────────────────────────────
+
+interface SettingItem {
+  icon: React.ReactNode
+  label: string
+  description?: string
+  badge?: string
+  screen?: SettingsScreen
+}
 
 function SettingRow({
   item,
@@ -186,11 +135,18 @@ function SettingRow({
   )
 }
 
-function LockedSlot({ type }: { type: "driver" | "vehicle" }) {
+// ── Locked Slot ───────────────────────────────────────────────
+
+function LockedSlot({
+  type,
+  onUpgrade,
+}: {
+  type: "driver" | "vehicle"
+  onUpgrade: () => void
+}) {
   const limit = type === "driver" ? "chauffeurs" : "v\u00e9hicules"
   return (
     <div className="relative min-h-[320px] rounded-2xl bg-onyx-card/40 border border-onyx-border/30 overflow-hidden">
-      {/* Ghost content behind blur */}
       <div className="absolute inset-0 p-5 opacity-10">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-onyx-border/50" />
@@ -208,7 +164,6 @@ function LockedSlot({ type }: { type: "driver" | "vehicle" }) {
         </div>
       </div>
 
-      {/* Centered content overlay */}
       <div className="relative z-10 flex flex-col items-center justify-center gap-6 p-8 min-h-[320px]">
         <div className="w-14 h-14 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center">
           <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
@@ -227,7 +182,10 @@ function LockedSlot({ type }: { type: "driver" | "vehicle" }) {
           </p>
         </div>
 
-        <button className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
+        <button
+          onClick={onUpgrade}
+          className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold hover:bg-gold-light active:scale-[0.97] transition-all gold-glow"
+        >
           <Crown className="h-4 w-4" strokeWidth={1.5} />
           {"D\u00e9bloquer l\u2019offre GOLD"}
         </button>
@@ -235,6 +193,8 @@ function LockedSlot({ type }: { type: "driver" | "vehicle" }) {
     </div>
   )
 }
+
+// ── Sub Screen Header ─────────────────────────────────────────
 
 function SubScreenHeader({
   title,
@@ -259,10 +219,16 @@ function SubScreenHeader({
 // ── Team Screen ────────────────────────────────────────────────
 
 function TeamScreen({ onBack }: { onBack: () => void }) {
-  const visibleDrivers =
-    CURRENT_PLAN === "GOLD" ? allDrivers : allDrivers.slice(0, PRO_LIMIT)
-  const maxSlots = CURRENT_PLAN === "GOLD" ? GOLD_LIMIT : PRO_LIMIT
-  const showLock = CURRENT_PLAN === "PRO"
+  const { plan, upgrade } = usePlan()
+  const isGold = plan === "GOLD"
+  const visibleDrivers = isGold ? allDrivers : allDrivers.slice(0, PRO_LIMIT)
+  const maxSlots = isGold ? GOLD_LIMIT : PRO_LIMIT
+  const [showConfetti, setShowConfetti] = useState(false)
+
+  function handleUpgrade() {
+    setShowConfetti(true)
+    setTimeout(() => upgrade(), 300)
+  }
 
   return (
     <motion.div
@@ -274,62 +240,62 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
       transition={{ duration: 0.25, ease: "easeInOut" }}
       className="flex flex-col h-full"
     >
+      <GoldConfetti trigger={showConfetti} />
       <SubScreenHeader
         title={"Gestion de l\u2019\u00c9quipe"}
         onBack={onBack}
       />
 
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-24">
-        <p className="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">
-          Chauffeurs actifs ({visibleDrivers.length}/{maxSlots})
-        </p>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider">
+            Chauffeurs actifs ({visibleDrivers.length}/{maxSlots})
+          </p>
+          {isGold && (
+            <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-gold/15 border border-gold/30 gold-gradient-text">
+              GOLD
+            </span>
+          )}
+        </div>
 
-        {visibleDrivers.map((driver) => (
-          <div
-            key={driver.id}
-            className="flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50"
-          >
-            <div className="w-10 h-10 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
-              <span className="text-sm font-bold text-gold">
-                {driver.initials}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground">
-                {driver.name}
-              </p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                {driver.online ? (
-                  <Wifi
-                    className="h-3 w-3 text-emerald-400"
-                    strokeWidth={1.5}
-                  />
-                ) : (
-                  <WifiOff
-                    className="h-3 w-3 text-muted-foreground"
-                    strokeWidth={1.5}
-                  />
-                )}
-                <span
-                  className={cn(
-                    "text-[11px] font-medium",
-                    driver.online
-                      ? "text-emerald-400"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {driver.online ? "En ligne" : "Hors ligne"}
+        <AnimatePresence mode="popLayout">
+          {visibleDrivers.map((driver, index) => (
+            <motion.div
+              key={driver.id}
+              initial={isGold && index >= PRO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.3, delay: index >= PRO_LIMIT ? (index - PRO_LIMIT) * 0.06 : 0 }}
+              className="flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50"
+            >
+              <div className="w-10 h-10 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
+                <span className="text-sm font-bold text-gold">
+                  {driver.initials}
                 </span>
               </div>
-            </div>
-            <ChevronRight
-              className="h-4 w-4 text-muted-foreground shrink-0"
-              strokeWidth={1.5}
-            />
-          </div>
-        ))}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground">
+                  {driver.name}
+                </p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {driver.online ? (
+                    <Wifi className="h-3 w-3 text-emerald-400" strokeWidth={1.5} />
+                  ) : (
+                    <WifiOff className="h-3 w-3 text-muted-foreground" strokeWidth={1.5} />
+                  )}
+                  <span className={cn(
+                    "text-[11px] font-medium",
+                    driver.online ? "text-emerald-400" : "text-muted-foreground"
+                  )}>
+                    {driver.online ? "En ligne" : "Hors ligne"}
+                  </span>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
 
-        {showLock && <LockedSlot type="driver" />}
+        {!isGold && <LockedSlot type="driver" onUpgrade={handleUpgrade} />}
       </div>
     </motion.div>
   )
@@ -338,10 +304,16 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
 // ── Fleet Screen ───────────────────────────────────────────────
 
 function FleetScreen({ onBack }: { onBack: () => void }) {
-  const visibleVehicles =
-    CURRENT_PLAN === "GOLD" ? allVehicles : allVehicles.slice(0, PRO_LIMIT)
-  const maxSlots = CURRENT_PLAN === "GOLD" ? GOLD_LIMIT : PRO_LIMIT
-  const showLock = CURRENT_PLAN === "PRO"
+  const { plan, upgrade } = usePlan()
+  const isGold = plan === "GOLD"
+  const visibleVehicles = isGold ? allVehicles : allVehicles.slice(0, PRO_LIMIT)
+  const maxSlots = isGold ? GOLD_LIMIT : PRO_LIMIT
+  const [showConfetti, setShowConfetti] = useState(false)
+
+  function handleUpgrade() {
+    setShowConfetti(true)
+    setTimeout(() => upgrade(), 300)
+  }
 
   return (
     <motion.div
@@ -353,61 +325,128 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
       transition={{ duration: 0.25, ease: "easeInOut" }}
       className="flex flex-col h-full"
     >
+      <GoldConfetti trigger={showConfetti} />
       <SubScreenHeader title="Gestion du Parc" onBack={onBack} />
 
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-24">
-        <p className="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">
-          {"V\u00e9hicules en service"} ({visibleVehicles.length}/{maxSlots})
-        </p>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider">
+            {"V\u00e9hicules en service"} ({visibleVehicles.length}/{maxSlots})
+          </p>
+          {isGold && (
+            <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-gold/15 border border-gold/30 gold-gradient-text">
+              GOLD
+            </span>
+          )}
+        </div>
 
-        {visibleVehicles.map((vehicle) => (
-          <div
-            key={vehicle.id}
-            className="flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50"
-          >
-            <div className="w-10 h-10 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
-              <Car className="h-4 w-4 text-gold" strokeWidth={1.5} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground">
-                {vehicle.model}
-              </p>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[11px] font-mono text-muted-foreground">
-                  {vehicle.plate}
-                </span>
-                <span
-                  className={cn(
+        <AnimatePresence mode="popLayout">
+          {visibleVehicles.map((vehicle, index) => (
+            <motion.div
+              key={vehicle.id}
+              initial={isGold && index >= PRO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.3, delay: index >= PRO_LIMIT ? (index - PRO_LIMIT) * 0.06 : 0 }}
+              className="flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50"
+            >
+              <div className="w-10 h-10 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
+                <Car className="h-4 w-4 text-gold" strokeWidth={1.5} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground">
+                  {vehicle.model}
+                </p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[11px] font-mono text-muted-foreground">
+                    {vehicle.plate}
+                  </span>
+                  <span className={cn(
                     "px-1.5 py-0.5 text-[9px] font-medium rounded-full border",
                     vehicle.inService
                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                      : "bg-red-500/10 text-red-400 border-red-500/20",
-                  )}
-                >
-                  {vehicle.inService ? "En service" : "Indisponible"}
-                </span>
+                      : "bg-red-500/10 text-red-400 border-red-500/20"
+                  )}>
+                    {vehicle.inService ? "En service" : "Indisponible"}
+                  </span>
+                </div>
               </div>
-            </div>
-            <ChevronRight
-              className="h-4 w-4 text-muted-foreground shrink-0"
-              strokeWidth={1.5}
-            />
-          </div>
-        ))}
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
 
-        {showLock && <LockedSlot type="vehicle" />}
+        {!isGold && <LockedSlot type="vehicle" onUpgrade={handleUpgrade} />}
       </div>
     </motion.div>
   )
 }
 
-// ── Main Settings Screen ───────────────────────────────────────
+// ── Main Settings ─────────────────────────────────────────────
 
 function MainSettings({
   onNavigate,
 }: {
   onNavigate: (screen: SettingsScreen) => void
 }) {
+  const { plan } = usePlan()
+  const isGold = plan === "GOLD"
+
+  const profileSettings: SettingItem[] = [
+    {
+      icon: <User className="h-4 w-4" strokeWidth={1.5} />,
+      label: "Mon Profil",
+      description: "Jean Dupont",
+    },
+    {
+      icon: <Building2 className="h-4 w-4" strokeWidth={1.5} />,
+      label: "Profil Entreprise",
+      description: "NoX VTC SAS",
+    },
+    {
+      icon: <FileText className="h-4 w-4" strokeWidth={1.5} />,
+      label: "SIRET / RIB",
+      description: "Documents l\u00e9gaux",
+    },
+  ]
+
+  const managementSettings: SettingItem[] = [
+    {
+      icon: <Users className="h-4 w-4" strokeWidth={1.5} />,
+      label: "Gestion de l\u2019\u00c9quipe",
+      description: isGold
+        ? `${allDrivers.length} chauffeurs actifs`
+        : "2 chauffeurs actifs",
+      screen: "team",
+    },
+    {
+      icon: <Car className="h-4 w-4" strokeWidth={1.5} />,
+      label: "Gestion du Parc",
+      description: isGold
+        ? `${allVehicles.length} v\u00e9hicules en service`
+        : "2 v\u00e9hicules en service",
+      screen: "fleet",
+    },
+  ]
+
+  const appSettings: SettingItem[] = [
+    {
+      icon: <Bell className="h-4 w-4" strokeWidth={1.5} />,
+      label: "Notifications",
+      description: "Push, Email, SMS",
+    },
+    {
+      icon: <CreditCard className="h-4 w-4" strokeWidth={1.5} />,
+      label: "Moyen de Paiement",
+      description: "Visa **** 4242",
+    },
+    {
+      icon: <Shield className="h-4 w-4" strokeWidth={1.5} />,
+      label: "S\u00e9curit\u00e9",
+      badge: "AES-256",
+      description: "Chiffrement de bout en bout",
+    },
+  ]
+
   return (
     <motion.div
       key="main"
@@ -422,15 +461,23 @@ function MainSettings({
         <h1 className="text-lg font-bold text-foreground">
           {"R\u00e9glages"}
         </h1>
-        <div className="px-2.5 py-1 rounded-lg bg-gold/15 border border-gold/30">
-          <span className="text-[10px] font-bold text-gold tracking-wider">
-            {CURRENT_PLAN}
+        <div className={cn(
+          "px-2.5 py-1 rounded-lg border",
+          isGold
+            ? "bg-gradient-to-r from-gold/25 via-gold/15 to-gold/25 border-gold/50 gold-badge-glow"
+            : "bg-gold/15 border-gold/30"
+        )}>
+          <span className={cn(
+            "text-[10px] font-bold tracking-wider",
+            isGold ? "gold-gradient-text" : "text-gold"
+          )}>
+            {plan}
           </span>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto pb-20">
-        {/* NoX Wallet - Greyed out for PRO */}
+        {/* NoX Wallet */}
         <div className="mx-4 mb-5 p-5 rounded-2xl bg-onyx-card border border-onyx-border/30 opacity-40 pointer-events-none">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-gold/10 flex items-center justify-center">
@@ -446,10 +493,16 @@ function MainSettings({
               </p>
             </div>
           </div>
-          <div className="w-full py-2.5 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center">
+          <div className="w-full py-2 rounded-xl bg-gold/15 border border-gold/30 flex flex-col items-center justify-center gap-0.5">
             <span className="text-[11px] font-bold text-gold tracking-wider uppercase">
               {"Documents Illimit\u00e9s"}
             </span>
+            <div className="flex items-center gap-1">
+              <Headphones className="h-3 w-3 text-gold/70" strokeWidth={1.5} />
+              <span className="text-[9px] text-gold/70 font-medium">
+                {"Support Prioritaire 24/7"}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -495,7 +548,7 @@ function MainSettings({
           </div>
         </div>
 
-        {/* Déconnexion */}
+        {/* Deconnexion */}
         <div className="mx-4 mb-6">
           <button className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl border border-red-500/20 hover:bg-red-500/10 transition-colors">
             <LogOut className="h-4 w-4 text-red-400" strokeWidth={1.5} />

@@ -4,6 +4,7 @@ import React, { useState } from "react"
 import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AddClientModal } from "./add-client-modal"
+import { usePlan } from "./plan-context"
 
 interface QuickActionProps {
   icon: React.ReactNode
@@ -54,6 +55,8 @@ function QuickActionTile({ icon, label, disabled, onClick }: QuickActionProps) {
 
 export function QuickActions() {
   const [showClientModal, setShowClientModal] = useState(false)
+  const { plan } = usePlan()
+  const isPro = plan === "PRO"
 
   return (
     <section className="px-4">
@@ -77,12 +80,12 @@ export function QuickActions() {
         <QuickActionTile
           icon={<Car className="h-5 w-5" strokeWidth={1.5} />}
           label={`+ V\u00e9hicule`}
-          disabled
+          disabled={isPro}
         />
         <QuickActionTile
           icon={<UserPlus className="h-5 w-5" strokeWidth={1.5} />}
           label="+ Chauffeur"
-          disabled
+          disabled={isPro}
         />
       </div>
 

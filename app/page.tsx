@@ -9,6 +9,7 @@ import { CalendarTab } from "@/components/dashboard/tab-calendar"
 import { DocumentsTab } from "@/components/dashboard/tab-documents"
 import { ClientsTab } from "@/components/dashboard/tab-clients"
 import { SettingsTab } from "@/components/dashboard/tab-settings"
+import { PlanProvider } from "@/components/dashboard/plan-context"
 
 const tabComponents: Record<TabId, React.ComponentType> = {
   dashboard: DashboardTab,
@@ -37,30 +38,28 @@ export default function AppPage() {
   }
 
   return (
-    <main className="min-h-screen bg-background">
-      {/* Subtle gradient overlay */}
-      <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
+    <PlanProvider>
+      <main className="min-h-screen bg-background">
+        <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
 
-      <div className="relative max-w-md mx-auto h-screen flex flex-col pb-32">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.2, ease: "easeInOut" }}
-            className="flex-1 overflow-y-auto"
-          >
-            <ActiveComponent />
-          </motion.div>
-        </AnimatePresence>
-      </div>
+        <div className="relative max-w-md mx-auto h-screen flex flex-col pb-32">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="flex-1 overflow-y-auto"
+            >
+              <ActiveComponent />
+            </motion.div>
+          </AnimatePresence>
+        </div>
 
-      {/* Security Badge */}
-      <SecurityBadge />
-
-      {/* Bottom Navigation */}
-      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
-    </main>
+        <SecurityBadge />
+        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+      </main>
+    </PlanProvider>
   )
 }
