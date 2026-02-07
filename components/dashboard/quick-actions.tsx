@@ -1,8 +1,9 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
 import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { AddClientModal } from "./add-client-modal"
 
 interface QuickActionProps {
   icon: React.ReactNode
@@ -52,33 +53,7 @@ function QuickActionTile({ icon, label, disabled, onClick }: QuickActionProps) {
 }
 
 export function QuickActions() {
-  const actions = [
-    {
-      icon: <FileText className="h-5 w-5" strokeWidth={1.5} />,
-      label: "+ Bon de Commande",
-      disabled: false,
-    },
-    {
-      icon: <Receipt className="h-5 w-5" strokeWidth={1.5} />,
-      label: "+ Facture",
-      disabled: false,
-    },
-    {
-      icon: <UserRoundPlus className="h-5 w-5" strokeWidth={1.5} />,
-      label: "+ Client",
-      disabled: false,
-    },
-    {
-      icon: <Car className="h-5 w-5" strokeWidth={1.5} />,
-      label: "+ V\u00e9hicule",
-      disabled: true,
-    },
-    {
-      icon: <UserPlus className="h-5 w-5" strokeWidth={1.5} />,
-      label: "+ Chauffeur",
-      disabled: true,
-    },
-  ]
+  const [showClientModal, setShowClientModal] = useState(false)
 
   return (
     <section className="px-4">
@@ -86,15 +61,35 @@ export function QuickActions() {
         Actions Rapides
       </h2>
       <div className="grid grid-cols-3 gap-2.5">
-        {actions.map((action) => (
-          <QuickActionTile
-            key={action.label}
-            icon={action.icon}
-            label={action.label}
-            disabled={action.disabled}
-          />
-        ))}
+        <QuickActionTile
+          icon={<FileText className="h-5 w-5" strokeWidth={1.5} />}
+          label="+ Bon de Commande"
+        />
+        <QuickActionTile
+          icon={<Receipt className="h-5 w-5" strokeWidth={1.5} />}
+          label="+ Facture"
+        />
+        <QuickActionTile
+          icon={<UserRoundPlus className="h-5 w-5" strokeWidth={1.5} />}
+          label="+ Client"
+          onClick={() => setShowClientModal(true)}
+        />
+        <QuickActionTile
+          icon={<Car className="h-5 w-5" strokeWidth={1.5} />}
+          label={`+ V\u00e9hicule`}
+          disabled
+        />
+        <QuickActionTile
+          icon={<UserPlus className="h-5 w-5" strokeWidth={1.5} />}
+          label="+ Chauffeur"
+          disabled
+        />
       </div>
+
+      <AddClientModal
+        open={showClientModal}
+        onClose={() => setShowClientModal(false)}
+      />
     </section>
   )
 }

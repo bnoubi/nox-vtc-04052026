@@ -189,32 +189,46 @@ function SettingRow({
 function LockedSlot({ type }: { type: "driver" | "vehicle" }) {
   const limit = type === "driver" ? "chauffeurs" : "v\u00e9hicules"
   return (
-    <div className="relative rounded-2xl bg-onyx-card/40 border border-onyx-border/30 overflow-hidden">
-      {/* Ghost content */}
-      <div className="p-5 opacity-20">
-        <div className="flex items-center gap-3">
+    <div className="relative min-h-[320px] rounded-2xl bg-onyx-card/40 border border-onyx-border/30 overflow-hidden">
+      {/* Ghost content behind blur */}
+      <div className="absolute inset-0 p-5 opacity-10">
+        <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-onyx-border/50" />
           <div className="flex-1 space-y-1.5">
             <div className="h-3 w-28 bg-onyx-border/50 rounded" />
             <div className="h-2 w-20 bg-onyx-border/30 rounded" />
           </div>
         </div>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-onyx-border/50" />
+          <div className="flex-1 space-y-1.5">
+            <div className="h-3 w-24 bg-onyx-border/50 rounded" />
+            <div className="h-2 w-16 bg-onyx-border/30 rounded" />
+          </div>
+        </div>
       </div>
 
-      {/* Blur overlay */}
-      <div className="absolute inset-0 backdrop-blur-sm bg-background/60 z-10 flex flex-col items-center justify-center px-6 py-8 text-center">
-        <div className="w-10 h-10 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center mb-3">
-          <Lock className="h-4 w-4 text-gold" strokeWidth={1.5} />
+      {/* Centered content overlay */}
+      <div className="relative z-10 flex flex-col items-center justify-center gap-6 p-8 min-h-[320px]">
+        <div className="w-14 h-14 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center">
+          <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
         </div>
-        <p className="text-[11px] text-muted-foreground leading-relaxed mb-4">
-          Limite PRO atteinte ({PRO_LIMIT}/{PRO_LIMIT}).{" "}
-          <span className="text-foreground font-medium">
-            {"Passez \u00e0 l\u2019offre GOLD"}
-          </span>{" "}
-          {"pour g\u00e9rer jusqu\u2019\u00e0"} {GOLD_LIMIT} {limit}.
-        </p>
-        <button className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-semibold hover:bg-gold-light active:scale-[0.97] transition-all gold-glow-sm">
-          <Crown className="h-3.5 w-3.5" strokeWidth={1.5} />
+
+        <div className="text-center">
+          <p className="text-sm font-semibold text-foreground mb-1.5">
+            Limite PRO atteinte
+          </p>
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-[240px]">
+            Vous utilisez {PRO_LIMIT}/{PRO_LIMIT} {limit}.{" "}
+            <span className="text-gold font-medium">
+              {"Passez \u00e0 l\u2019offre GOLD"}
+            </span>{" "}
+            {"pour g\u00e9rer jusqu\u2019\u00e0"} {GOLD_LIMIT} {limit}.
+          </p>
+        </div>
+
+        <button className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
+          <Crown className="h-4 w-4" strokeWidth={1.5} />
           {"D\u00e9bloquer l\u2019offre GOLD"}
         </button>
       </div>

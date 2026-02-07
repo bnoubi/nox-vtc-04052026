@@ -16,6 +16,7 @@ import {
   StickyNote,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { AddClientModal } from "./add-client-modal"
 
 interface Client {
   id: string
@@ -314,6 +315,7 @@ function ClientDetail({
 export function ClientsTab() {
   const [search, setSearch] = useState("")
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
 
   const filtered = clients.filter(
     (c) =>
@@ -364,12 +366,21 @@ export function ClientsTab() {
       </div>
 
       {/* Floating add button */}
-      <button className="fixed bottom-28 right-5 z-30 w-12 h-12 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 transition-transform">
+      <button
+        onClick={() => setShowAddModal(true)}
+        className="fixed bottom-28 right-5 z-30 w-12 h-12 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 transition-transform"
+      >
         <Plus
           className="h-5 w-5 text-primary-foreground"
           strokeWidth={2}
         />
       </button>
+
+      {/* Add Client Modal */}
+      <AddClientModal
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+      />
 
       {/* Client Detail Slide-over */}
       <AnimatePresence>
