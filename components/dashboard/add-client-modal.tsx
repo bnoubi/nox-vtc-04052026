@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { X, UserRoundPlus } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface AddClientModalProps {
   open: boolean
@@ -11,17 +12,17 @@ interface AddClientModalProps {
 
 export function AddClientModal({ open, onClose }: AddClientModalProps) {
   const [form, setForm] = useState({
-    name: "",
+    civilite: "M.",
+    nom: "",
+    prenom: "",
     phone: "",
     email: "",
-    notes: "",
   })
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    // In a real app, this would save to the database
     onClose()
-    setForm({ name: "", phone: "", email: "", notes: "" })
+    setForm({ civilite: "M.", nom: "", prenom: "", phone: "", email: "" })
   }
 
   return (
@@ -57,10 +58,7 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
             <div className="flex items-center justify-between px-5 pt-4 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/30 flex items-center justify-center">
-                  <UserRoundPlus
-                    className="h-4 w-4 text-gold"
-                    strokeWidth={1.5}
-                  />
+                  <UserRoundPlus className="h-4 w-4 text-gold" strokeWidth={1.5} />
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-foreground">
@@ -84,24 +82,61 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
-              {/* Nom complet */}
+              {/* Civilité */}
               <div>
                 <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                  Nom complet
+                  Civilité
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={form.name}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, name: e.target.value }))
-                  }
-                  placeholder="Ex: Alexandre Laurent"
-                  className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
-                />
+                <div className="flex gap-2">
+                  {["M.", "Mme"].map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, civilite: c }))}
+                      className={cn(
+                        "flex-1 py-2.5 rounded-xl text-xs font-medium border transition-all",
+                        form.civilite === c
+                          ? "bg-gold/15 border-gold/40 text-gold"
+                          : "bg-onyx-card border-onyx-border/50 text-muted-foreground"
+                      )}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Telephone */}
+              {/* Nom & Prénom */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                    Nom
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={form.nom}
+                    onChange={(e) => setForm((prev) => ({ ...prev, nom: e.target.value }))}
+                    placeholder="Laurent"
+                    className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                    Prénom
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={form.prenom}
+                    onChange={(e) => setForm((prev) => ({ ...prev, prenom: e.target.value }))}
+                    placeholder="Alexandre"
+                    className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Téléphone */}
               <div>
                 <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
                   Téléphone
@@ -110,9 +145,7 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
                   type="tel"
                   required
                   value={form.phone}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, phone: e.target.value }))
-                  }
+                  onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
                   placeholder="+33 6 12 34 56 78"
                   className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
                 />
@@ -126,27 +159,9 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
                 <input
                   type="email"
                   value={form.email}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, email: e.target.value }))
-                  }
+                  onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
                   placeholder="client@example.com"
                   className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
-                />
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                  Notes / Préférences
-                </label>
-                <textarea
-                  value={form.notes}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, notes: e.target.value }))
-                  }
-                  rows={3}
-                  placeholder="Préférences de véhicule, habitudes, remarques..."
-                  className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors resize-none"
                 />
               </div>
 

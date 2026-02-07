@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AddClientModal } from "./add-client-modal"
+import { CreateBCFlow, type BCPrefillClient } from "./create-bc"
 
 interface Client {
   id: string
@@ -28,7 +29,7 @@ interface Client {
   email: string
   address: string
   notes: string
-  tag?: "VIP" | "R\u00e9gulier"
+  tag?: "VIP" | "Régulier"
 }
 
 const clients: Client[] = [
@@ -54,7 +55,7 @@ const clients: Client[] = [
     email: "s.beaumont@email.com",
     address: "Le Bristol Paris, Rue du Fbg St-Honoré",
     notes: "Demande souvent un siège enfant. Trajets aéroport fréquents.",
-    tag: "R\u00e9gulier",
+    tag: "Régulier",
   },
   {
     id: "3",
@@ -100,9 +101,11 @@ const clients: Client[] = [
     email: "i.garcia@design.fr",
     address: "7 Rue de Passy, Paris 16e",
     notes: "Paiement CB uniquement. Trajets réguliers week-end.",
-    tag: "R\u00e9gulier",
+    tag: "Régulier",
   },
 ]
+
+// ── Client Card ──────────────────────────────────────────────
 
 function ClientCard({
   client,
@@ -158,14 +161,30 @@ function ClientCard({
   )
 }
 
+// ── Client Detail Slide-over ─────────────────────────────────
+
 function ClientDetail({
   client,
   onClose,
+  onCreateBC,
 }: {
   client: Client
   onClose: () => void
+  onCreateBC: (prefill: BCPrefillClient) => void
 }) {
   const initials = `${client.firstName[0]}${client.lastName[0]}`
+
+  function handleCreateBC() {
+    const prefill: BCPrefillClient = {
+      civilite: "M.",
+      nom: client.lastName,
+      prenom: client.firstName,
+      tel: client.phone,
+    }
+    onClose()
+    // Small delay to let close animation finish before opening BC
+    setTimeout(() => onCreateBC(prefill), 350)
+  }
 
   return (
     <motion.div
@@ -232,26 +251,40 @@ function ClientDetail({
             {
               icon: <Phone className="h-4 w-4" strokeWidth={1.5} />,
               label: "Appeler",
+              onClick: () => {},
             },
             {
               icon: <MessageSquare className="h-4 w-4" strokeWidth={1.5} />,
               label: "SMS",
+              onClick: () => {},
             },
             {
               icon: <FileText className="h-4 w-4" strokeWidth={1.5} />,
-              label: "Cr\u00e9er BC",
+              label: "Créer BC",
+              onClick: handleCreateBC,
+              highlight: true,
             },
             {
               icon: <Pencil className="h-4 w-4" strokeWidth={1.5} />,
               label: "Modifier",
+              onClick: () => {},
             },
           ].map((action) => (
             <button
               key={action.label}
-              className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-onyx-card border border-gold/20 hover:border-gold/40 hover:gold-glow-sm active:scale-[0.97] transition-all"
+              onClick={action.onClick}
+              className={cn(
+                "flex flex-col items-center gap-1.5 py-3 rounded-2xl border active:scale-[0.97] transition-all",
+                action.highlight
+                  ? "bg-gold/10 border-gold/30 hover:border-gold/50 hover:gold-glow-sm"
+                  : "bg-onyx-card border-gold/20 hover:border-gold/40 hover:gold-glow-sm",
+              )}
             >
               <span className="text-gold">{action.icon}</span>
-              <span className="text-[10px] font-medium text-foreground">
+              <span className={cn(
+                "text-[10px] font-medium",
+                action.highlight ? "text-gold" : "text-foreground",
+              )}>
                 {action.label}
               </span>
             </button>
@@ -261,30 +294,21 @@ function ClientDetail({
         {/* Contact info */}
         <div className="px-4 mb-5">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Coordonn{"é"}es
+            Coordonnées
           </p>
           <div className="rounded-2xl bg-onyx-card border border-onyx-border/50 overflow-hidden divide-y divide-onyx-border/30">
             <div className="flex items-center gap-3 px-4 py-3">
-              <Phone
-                className="h-4 w-4 text-gold shrink-0"
-                strokeWidth={1.5}
-              />
+              <Phone className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
               <span className="text-xs text-foreground">{client.phone}</span>
             </div>
             <div className="flex items-center gap-3 px-4 py-3">
-              <Mail
-                className="h-4 w-4 text-gold shrink-0"
-                strokeWidth={1.5}
-              />
+              <Mail className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
               <span className="text-xs text-foreground truncate">
                 {client.email}
               </span>
             </div>
             <div className="flex items-center gap-3 px-4 py-3">
-              <MapPin
-                className="h-4 w-4 text-gold shrink-0"
-                strokeWidth={1.5}
-              />
+              <MapPin className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
               <span className="text-xs text-foreground">{client.address}</span>
             </div>
           </div>
@@ -312,10 +336,24 @@ function ClientDetail({
   )
 }
 
+// ── Clients Tab ──────────────────────────────────────────────
+
 export function ClientsTab() {
   const [search, setSearch] = useState("")
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [bcPrefill, setBcPrefill] = useState<BCPrefillClient | null>(null)
+  const [showBCFlow, setShowBCFlow] = useState(false)
+
+  function handleCreateBCFromClient(prefill: BCPrefillClient) {
+    setBcPrefill(prefill)
+    setShowBCFlow(true)
+  }
+
+  function handleCloseBCFlow() {
+    setShowBCFlow(false)
+    setBcPrefill(null)
+  }
 
   const filtered = clients.filter(
     (c) =>
@@ -359,7 +397,7 @@ export function ClientsTab() {
         ) : (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <p className="text-sm text-muted-foreground">
-              Aucun client trouv{"é"}
+              Aucun client trouvé
             </p>
           </div>
         )}
@@ -370,10 +408,7 @@ export function ClientsTab() {
         onClick={() => setShowAddModal(true)}
         className="fixed bottom-28 right-5 z-30 w-12 h-12 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 transition-transform"
       >
-        <Plus
-          className="h-5 w-5 text-primary-foreground"
-          strokeWidth={2}
-        />
+        <Plus className="h-5 w-5 text-primary-foreground" strokeWidth={2} />
       </button>
 
       {/* Add Client Modal */}
@@ -382,12 +417,20 @@ export function ClientsTab() {
         onClose={() => setShowAddModal(false)}
       />
 
+      {/* BC Flow (opened from client detail "Créer BC") */}
+      <CreateBCFlow
+        open={showBCFlow}
+        onClose={handleCloseBCFlow}
+        prefillClient={bcPrefill}
+      />
+
       {/* Client Detail Slide-over */}
       <AnimatePresence>
         {selectedClient && (
           <ClientDetail
             client={selectedClient}
             onClose={() => setSelectedClient(null)}
+            onCreateBC={handleCreateBCFromClient}
           />
         )}
       </AnimatePresence>

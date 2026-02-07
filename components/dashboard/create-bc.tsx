@@ -26,9 +26,17 @@ import { allDrivers, allVehicles, existingClients } from "./data"
 
 // ── Types ─────────────────────────────────────────────────────
 
+export interface BCPrefillClient {
+  civilite: string
+  nom: string
+  prenom: string
+  tel: string
+}
+
 interface CreateBCProps {
   open: boolean
   onClose: () => void
+  prefillClient?: BCPrefillClient | null
 }
 
 type BCStep = "choose" | "manual"
@@ -226,7 +234,7 @@ function SelectField({
 
 // ── Full-Screen Manual Form ───────────────────────────────────
 
-function ManualBCForm({ onBack, onClose }: { onBack: () => void; onClose: () => void }) {
+function ManualBCForm({ onBack, onClose, prefillClient }: { onBack: () => void; onClose: () => void; prefillClient?: BCPrefillClient | null }) {
   const { plan } = usePlan()
   const isGold = plan === "GOLD"
   const PRO_LIMIT = 2
@@ -246,12 +254,12 @@ function ManualBCForm({ onBack, onClose }: { onBack: () => void; onClose: () => 
   }))
 
   const [form, setForm] = useState({
-    clientMode: "existing" as "existing" | "new",
+    clientMode: (prefillClient ? "new" : "existing") as "existing" | "new",
     clientId: "",
-    civilite: "M.",
-    nom: "",
-    prenom: "",
-    tel: "",
+    civilite: prefillClient?.civilite || "M.",
+    nom: prefillClient?.nom || "",
+    prenom: prefillClient?.prenom || "",
+    tel: prefillClient?.tel || "",
     depart: "",
     arrivee: "",
     date: "",
@@ -351,7 +359,7 @@ function ManualBCForm({ onBack, onClose }: { onBack: () => void; onClose: () => 
             <div className="space-y-3">
               {/* Civilite */}
               <div className="flex gap-2">
-                {["M.", "Mme", "Société"].map((c) => (
+                {["M.", "Mme"].map((c) => (
                   <button
                     key={c}
                     type="button"
@@ -557,11 +565,11 @@ function ManualBCForm({ onBack, onClose }: { onBack: () => void; onClose: () => 
 
 // ── Export: Create BC Flow ─────────────────────────────────────
 
-export function CreateBCFlow({ open, onClose }: CreateBCProps) {
-  const [step, setStep] = useState<BCStep>("choose")
+export function CreateBCFlow({ open, onClose, prefillClient }: CreateBCProps) {
+  const [step, setStep] = useState<BCStep>(prefillClient ? "manual" : "choose")
 
   function handleClose() {
-    setStep("choose")
+    setStep(prefillClient ? "manual" : "choose")
     onClose()
   }
 
@@ -581,8 +589,9 @@ export function CreateBCFlow({ open, onClose }: CreateBCProps) {
       {open && step === "manual" && (
         <ManualBCForm
           key="manual"
-          onBack={() => setStep("choose")}
+          onBack={prefillClient ? handleClose : () => setStep("choose")}
           onClose={handleClose}
+          prefillClient={prefillClient}
         />
       )}
     </AnimatePresence>
