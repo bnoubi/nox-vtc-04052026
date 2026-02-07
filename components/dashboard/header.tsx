@@ -20,11 +20,17 @@ export function DashboardHeader() {
         </div>
       </div>
 
-      {/* Crédits NoX Badge */}
-      <div className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-onyx-card border border-gold/20 gold-glow-sm">
-        <Coins className="h-4 w-4 text-gold" strokeWidth={1.5} />
-        <span className="text-xs text-muted-foreground mr-1">Crédits</span>
-        <span className="text-sm font-semibold text-gold">5</span>
+      <div className="flex items-center gap-2">
+        {/* PRO Badge */}
+        <div className="px-2.5 py-1.5 rounded-xl bg-gold/15 border border-gold/30">
+          <span className="text-[10px] font-bold text-gold tracking-wider">PRO</span>
+        </div>
+
+        {/* Crédits NoX Badge */}
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-onyx-card border border-gold/20 gold-glow-sm">
+          <Coins className="h-3.5 w-3.5 text-gold" strokeWidth={1.5} />
+          <span className="text-sm font-semibold text-gold">5</span>
+        </div>
       </div>
     </header>
   )
