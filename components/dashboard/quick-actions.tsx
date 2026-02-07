@@ -5,6 +5,7 @@ import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock } from "lucide-re
 import { cn } from "@/lib/utils"
 import { AddClientModal } from "./add-client-modal"
 import { CreateBCFlow } from "./create-bc"
+import { CreateInvoiceFlow } from "./create-invoice"
 import { usePlan } from "./plan-context"
 
 interface QuickActionProps {
@@ -57,6 +58,7 @@ function QuickActionTile({ icon, label, disabled, onClick }: QuickActionProps) {
 export function QuickActions() {
   const [showClientModal, setShowClientModal] = useState(false)
   const [showBCFlow, setShowBCFlow] = useState(false)
+  const [showInvoiceFlow, setShowInvoiceFlow] = useState(false)
   const { plan } = usePlan()
   const isPro = plan === "PRO"
 
@@ -74,6 +76,7 @@ export function QuickActions() {
         <QuickActionTile
           icon={<Receipt className="h-5 w-5" strokeWidth={1.5} />}
           label="+ Facture"
+          onClick={() => setShowInvoiceFlow(true)}
         />
         <QuickActionTile
           icon={<UserRoundPlus className="h-5 w-5" strokeWidth={1.5} />}
@@ -99,6 +102,10 @@ export function QuickActions() {
       <CreateBCFlow
         open={showBCFlow}
         onClose={() => setShowBCFlow(false)}
+      />
+      <CreateInvoiceFlow
+        open={showInvoiceFlow}
+        onClose={() => setShowInvoiceFlow(false)}
       />
     </section>
   )
