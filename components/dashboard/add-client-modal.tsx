@@ -67,7 +67,7 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
                     Nouveau Client
                   </h2>
                   <p className="text-[10px] text-muted-foreground">
-                    Ajouter au r{"é"}pertoire CRM
+                    Ajouter au répertoire CRM
                   </p>
                 </div>
               </div>
@@ -104,7 +104,7 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
               {/* Telephone */}
               <div>
                 <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                  T{"é"}l{"é"}phone
+                  Téléphone
                 </label>
                 <input
                   type="tel"
@@ -137,7 +137,7 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
               {/* Notes */}
               <div>
                 <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                  {"Notes / Pr\u00e9f\u00e9rences"}
+                  Notes / Préférences
                 </label>
                 <textarea
                   value={form.notes}
@@ -145,7 +145,7 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
                     setForm((prev) => ({ ...prev, notes: e.target.value }))
                   }
                   rows={3}
-                  placeholder={"Pr\u00e9f\u00e9rences de v\u00e9hicule, habitudes, remarques..."}
+                  placeholder="Préférences de véhicule, habitudes, remarques..."
                   className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors resize-none"
                 />
               </div>

@@ -71,7 +71,7 @@ function ChooseMethodSheet({
             Nouveau Bon de Commande
           </h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Choisissez votre m{"é"}thode de cr{"é"}ation
+            Choisissez votre méthode de création
           </p>
         </div>
 
@@ -105,7 +105,7 @@ function ChooseMethodSheet({
             </div>
             <div className="text-left">
               <p className="text-sm font-semibold text-foreground">
-                Envoyer un lien de r{"é"}servation
+                Envoyer un lien de réservation
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Le client remplit ses informations
@@ -342,7 +342,7 @@ function ManualBCForm({ onBack, onClose }: { onBack: () => void; onClose: () => 
             <SelectField
               label=""
               icon={null}
-              placeholder="S\u00e9lectionner un client"
+              placeholder="Sélectionner un client"
               options={clientOptions}
               value={form.clientId}
               onChange={(v) => update("clientId", v)}
@@ -351,7 +351,7 @@ function ManualBCForm({ onBack, onClose }: { onBack: () => void; onClose: () => 
             <div className="space-y-3">
               {/* Civilite */}
               <div className="flex gap-2">
-                {["M.", "Mme", "Soci\u00e9t\u00e9"].map((c) => (
+                {["M.", "Mme", "Société"].map((c) => (
                   <button
                     key={c}
                     type="button"
@@ -377,7 +377,7 @@ function ManualBCForm({ onBack, onClose }: { onBack: () => void; onClose: () => 
                 />
                 <input
                   type="text"
-                  placeholder="Pr\u00e9nom"
+                  placeholder="Prénom"
                   value={form.prenom}
                   onChange={(e) => update("prenom", e.target.value)}
                   className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
@@ -385,7 +385,7 @@ function ManualBCForm({ onBack, onClose }: { onBack: () => void; onClose: () => 
               </div>
               <input
                 type="tel"
-                placeholder="T\u00e9l\u00e9phone"
+                placeholder="Téléphone"
                 value={form.tel}
                 onChange={(e) => update("tel", e.target.value)}
                 className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
@@ -416,7 +416,7 @@ function ManualBCForm({ onBack, onClose }: { onBack: () => void; onClose: () => 
                 </div>
                 <input
                   type="text"
-                  placeholder="Adresse de d\u00e9part"
+                  placeholder="Adresse de départ"
                   value={form.depart}
                   onChange={(e) => update("depart", e.target.value)}
                   className="flex-1 px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
@@ -433,7 +433,7 @@ function ManualBCForm({ onBack, onClose }: { onBack: () => void; onClose: () => 
                 </div>
                 <input
                   type="text"
-                  placeholder="Adresse d'arriv\u00e9e"
+                  placeholder="Adresse d'arrivée"
                   value={form.arrivee}
                   onChange={(e) => update("arrivee", e.target.value)}
                   className="flex-1 px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
@@ -487,9 +487,9 @@ function ManualBCForm({ onBack, onClose }: { onBack: () => void; onClose: () => 
               onChange={(v) => update("chauffeurId", v)}
             />
             <SelectField
-              label="V\u00e9hicule"
+              label="Véhicule"
               icon={<Car className="h-3 w-3" strokeWidth={1.5} />}
-              placeholder="Assigner un v\u00e9hicule"
+              placeholder="Assigner un véhicule"
               options={vehicleOptions}
               value={form.vehiculeId}
               onChange={(v) => update("vehiculeId", v)}
@@ -523,13 +523,13 @@ function ManualBCForm({ onBack, onClose }: { onBack: () => void; onClose: () => 
         <section>
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
             <StickyNote className="h-3.5 w-3.5" strokeWidth={1.5} />
-            Notes particuli{"è"}res
+            Notes particulières
           </p>
           <textarea
             rows={3}
             value={form.notes}
             onChange={(e) => update("notes", e.target.value)}
-            placeholder="Ex: Si\u00e8ge b\u00e9b\u00e9, boisson sp\u00e9cifique, accueil pancarte..."
+            placeholder="Ex: Siège bébé, boisson spécifique, accueil pancarte..."
             className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors resize-none"
           />
         </section>
@@ -540,10 +540,15 @@ function ManualBCForm({ onBack, onClose }: { onBack: () => void; onClose: () => 
         <button
           type="submit"
           onClick={handleSubmit}
-          className="w-full py-4 rounded-2xl bg-gold text-primary-foreground text-sm font-bold hover:bg-gold-light active:scale-[0.98] transition-all gold-glow flex items-center justify-center gap-2"
+          className="w-full py-4 rounded-2xl bg-gold text-primary-foreground font-bold hover:bg-gold-light active:scale-[0.98] transition-all gold-glow flex flex-col items-center justify-center gap-0.5"
         >
-          <FileText className="h-4 w-4" strokeWidth={1.5} />
-          G{"é"}n{"é"}rer le Bon de Commande (Conforme Factur-X)
+          <span className="flex items-center gap-2 text-sm">
+            <FileText className="h-4 w-4" strokeWidth={1.5} />
+            Générer le Bon de Commande
+          </span>
+          <span className="text-xs font-medium text-primary-foreground/70">
+            (Conforme Factur-X)
+          </span>
         </button>
       </div>
     </motion.div>

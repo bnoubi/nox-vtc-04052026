@@ -16,7 +16,7 @@ export const allDrivers: Driver[] = [
   { id: "1", name: "Karim Benzari", initials: "KB", online: true },
   { id: "2", name: "Sophie Martin", initials: "SM", online: false },
   { id: "3", name: "Lucas Fernandez", initials: "LF", online: true },
-  { id: "4", name: "Am\u00e9lie Rousseau", initials: "AR", online: true },
+  { id: "4", name: "Amélie Rousseau", initials: "AR", online: true },
   { id: "5", name: "Thomas Nguyen", initials: "TN", online: false },
   { id: "6", name: "Fatima El Amrani", initials: "FA", online: true },
   { id: "7", name: "Pierre Leclerc", initials: "PL", online: false },
@@ -27,7 +27,7 @@ export const allDrivers: Driver[] = [
 
 export const allVehicles: Vehicle[] = [
   { id: "1", model: "Mercedes Classe S", plate: "AB-123-CD", inService: true },
-  { id: "2", model: "BMW S\u00e9rie 7", plate: "EF-456-GH", inService: true },
+  { id: "2", model: "BMW Série 7", plate: "EF-456-GH", inService: true },
   { id: "3", model: "Audi A8 L", plate: "IJ-789-KL", inService: true },
   { id: "4", model: "Mercedes Classe V", plate: "MN-012-OP", inService: true },
   { id: "5", model: "Van Mercedes Sprinter", plate: "QR-345-ST", inService: false },

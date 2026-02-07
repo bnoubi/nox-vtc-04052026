@@ -82,7 +82,7 @@ export function QuickActions() {
         />
         <QuickActionTile
           icon={<Car className="h-5 w-5" strokeWidth={1.5} />}
-          label={`+ V\u00e9hicule`}
+          label="+ Véhicule"
           disabled={isPro}
         />
         <QuickActionTile
