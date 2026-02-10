@@ -20,17 +20,26 @@ import {
   WifiOff,
   Crown,
   Headphones,
+  Mail,
+  Phone,
+  MapPin,
+  BadgeCheck,
+  Eye,
+  EyeOff,
+  Landmark,
+  Hash,
+  Sparkles,
+  Globe,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePlan } from "./plan-context"
 import { GoldConfetti } from "./gold-confetti"
 import { allDrivers, allVehicles } from "./data"
 
-// ── Constants ──────────────────────────────────────────────────
 const PRO_LIMIT = 2
 const GOLD_LIMIT = 10
 
-type SettingsScreen = "main" | "team" | "fleet"
+type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription"
 
 // ── Animation variants ────────────────────────────────────────
 
@@ -46,7 +55,62 @@ const slideBack = {
   exit: { opacity: 0, x: 60 },
 }
 
-// ── Setting Row ───────────────────────────────────────────────
+// ── Reusable Components ───────────────────────────────────────
+
+function SubScreenHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <div className="flex items-center gap-3 px-4 pt-2 pb-4">
+      <button
+        onClick={onBack}
+        className="w-9 h-9 rounded-xl bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 active:scale-95 transition-all"
+      >
+        <ChevronLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+      </button>
+      <h1 className="text-lg font-bold font-heading text-foreground">{title}</h1>
+    </div>
+  )
+}
+
+function InfoCard({ icon, label, value, masked }: { icon: React.ReactNode; label: string; value: string; masked?: boolean }) {
+  const [visible, setVisible] = useState(!masked)
+  return (
+    <div className="flex items-center gap-3 p-4">
+      <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">{label}</p>
+        <p className="text-sm font-medium text-foreground truncate">
+          {visible ? value : value.replace(/./g, "\u2022")}
+        </p>
+      </div>
+      {masked && (
+        <button onClick={() => setVisible(!visible)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-secondary/40 transition-colors">
+          {visible ? <EyeOff className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} /> : <Eye className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} />}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function GlassCard({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn(
+      "mx-4 rounded-2xl bg-onyx-card/80 backdrop-blur-sm border border-onyx-border/40 overflow-hidden divide-y divide-onyx-border/20",
+      className
+    )}>
+      {children}
+    </div>
+  )
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="px-4 text-[10px] font-semibold font-heading text-muted-foreground uppercase tracking-[0.15em] mb-2">
+      {children}
+    </p>
+  )
+}
 
 interface SettingItem {
   icon: React.ReactNode
@@ -56,19 +120,13 @@ interface SettingItem {
   screen?: SettingsScreen
 }
 
-function SettingRow({
-  item,
-  onPress,
-}: {
-  item: SettingItem
-  onPress?: () => void
-}) {
+function SettingRow({ item, onPress }: { item: SettingItem; onPress?: () => void }) {
   return (
     <button
       onClick={onPress}
-      className="flex items-center gap-3 w-full px-4 py-3 hover:bg-secondary/30 transition-colors"
+      className="flex items-center gap-3 w-full px-4 py-3.5 hover:bg-secondary/20 active:bg-secondary/30 transition-colors"
     >
-      <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0 text-muted-foreground">
+      <div className="w-9 h-9 rounded-xl bg-secondary/60 flex items-center justify-center shrink-0 text-muted-foreground">
         {item.icon}
       </div>
       <div className="flex-1 text-left min-w-0">
@@ -81,29 +139,261 @@ function SettingRow({
           )}
         </div>
         {item.description && (
-          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-            {item.description}
-          </p>
+          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{item.description}</p>
         )}
       </div>
-      <ChevronRight
-        className="h-4 w-4 text-muted-foreground shrink-0"
-        strokeWidth={1.5}
-      />
+      <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0" strokeWidth={1.5} />
     </button>
+  )
+}
+
+// ── Mon Profil Screen ──────────────────────────────────────────
+
+function ProfileScreen({ onBack }: { onBack: () => void }) {
+  return (
+    <motion.div key="profile" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
+      <SubScreenHeader title="Mon Profil" onBack={onBack} />
+      <div className="flex-1 overflow-y-auto pb-24">
+        {/* Avatar + Identity */}
+        <div className="flex flex-col items-center px-4 mb-6">
+          <div className="relative mb-3">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-gold/30 via-gold/15 to-gold/5 border-2 border-gold/40 flex items-center justify-center">
+              <span className="text-2xl font-bold font-heading text-gold">JD</span>
+            </div>
+            <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-gold flex items-center justify-center border-2 border-background">
+              <BadgeCheck className="h-3.5 w-3.5 text-primary-foreground" strokeWidth={2} />
+            </div>
+          </div>
+          <h2 className="text-lg font-bold font-heading text-foreground">Jean Dupont</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Chauffeur VTC Professionnel</p>
+        </div>
+
+        {/* Contact Info */}
+        <SectionLabel>Coordonnées</SectionLabel>
+        <GlassCard className="mb-5">
+          <InfoCard icon={<Mail className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Email" value="jean.dupont@nox-vtc.fr" />
+          <InfoCard icon={<Phone className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Téléphone" value="+33 6 12 34 56 78" />
+        </GlassCard>
+
+        {/* Social Login Badges */}
+        <SectionLabel>Connexion sociale</SectionLabel>
+        <div className="flex gap-3 px-4 mb-5">
+          {[
+            { name: "Google", connected: true, color: "bg-red-500/10 border-red-500/20 text-red-400" },
+            { name: "Apple", connected: true, color: "bg-white/5 border-white/10 text-foreground" },
+            { name: "LinkedIn", connected: false, color: "bg-blue-500/10 border-blue-500/20 text-blue-400" },
+          ].map((social) => (
+            <div key={social.name} className={cn(
+              "flex-1 py-3 rounded-2xl border flex flex-col items-center gap-1.5",
+              social.connected ? social.color : "bg-secondary/20 border-onyx-border/30 opacity-40"
+            )}>
+              <Globe className="h-4 w-4" strokeWidth={1.5} />
+              <span className="text-[10px] font-semibold">{social.name}</span>
+              {social.connected && <span className="text-[8px] opacity-70">Connecté</span>}
+            </div>
+          ))}
+        </div>
+
+        {/* Edit button */}
+        <div className="px-4">
+          <button className="w-full py-3 rounded-2xl bg-gold/10 border border-gold/30 text-sm font-semibold text-gold hover:bg-gold/20 active:scale-[0.98] transition-all">
+            Modifier mon profil
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Profil Entreprise Screen ───────────────────────────────────
+
+function EnterpriseScreen({ onBack }: { onBack: () => void }) {
+  return (
+    <motion.div key="enterprise" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
+      <SubScreenHeader title="Profil Entreprise" onBack={onBack} />
+      <div className="flex-1 overflow-y-auto pb-24">
+        <SectionLabel>Identité légale</SectionLabel>
+        <GlassCard className="mb-5">
+          <InfoCard icon={<Building2 className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Dénomination Sociale" value="NoX VTC SAS" />
+          <InfoCard icon={<Sparkles className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Nom Commercial" value="NoX VTC" />
+          <InfoCard icon={<Hash className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="SIRET" value="912 345 678 00015" />
+          <InfoCard icon={<FileText className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="N° EVTC" value="EVTC-2024-75-001234" />
+        </GlassCard>
+
+        <SectionLabel>Coordonnées professionnelles</SectionLabel>
+        <GlassCard className="mb-5">
+          <InfoCard icon={<MapPin className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Adresse Siège" value="42 Avenue des Champs-Élysées, 75008 Paris" />
+          <InfoCard icon={<Phone className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Téléphone Pro" value="+33 1 42 56 78 90" />
+        </GlassCard>
+
+        <div className="px-4">
+          <button className="w-full py-3 rounded-2xl bg-gold/10 border border-gold/30 text-sm font-semibold text-gold hover:bg-gold/20 active:scale-[0.98] transition-all">
+            Modifier les informations
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Infos Bancaires Screen ─────────────────────────────────────
+
+function BankingScreen({ onBack }: { onBack: () => void }) {
+  return (
+    <motion.div key="banking" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
+      <SubScreenHeader title="Infos Bancaires" onBack={onBack} />
+      <div className="flex-1 overflow-y-auto pb-24">
+        {/* Security Banner */}
+        <div className="mx-4 mb-5 px-4 py-3 rounded-2xl bg-gold/5 border border-gold/20 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
+            <Shield className="h-4 w-4 text-gold" strokeWidth={1.5} />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-foreground">Chiffrement AES-256</p>
+            <p className="text-[10px] text-muted-foreground">Vos données bancaires sont sécurisées</p>
+          </div>
+        </div>
+
+        <SectionLabel>Compte bancaire</SectionLabel>
+        <GlassCard className="mb-5">
+          <InfoCard icon={<Landmark className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Banque" value="BNP Paribas" />
+          <InfoCard icon={<CreditCard className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="IBAN" value="FR76 3000 4028 3700 0100 0466 854" masked />
+          <InfoCard icon={<Hash className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="BIC / SWIFT" value="BNPAFRPPXXX" masked />
+        </GlassCard>
+
+        <SectionLabel>Moyen de paiement</SectionLabel>
+        <GlassCard className="mb-5">
+          <div className="flex items-center gap-3 p-4">
+            <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
+              <CreditCard className="h-4 w-4 text-gold" strokeWidth={1.5} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Carte bancaire</p>
+              <p className="text-sm font-medium text-foreground">Visa **** **** **** 4242</p>
+            </div>
+            <span className="px-2 py-1 text-[9px] font-semibold rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Active</span>
+          </div>
+        </GlassCard>
+
+        <div className="px-4">
+          <button className="w-full py-3 rounded-2xl bg-gold/10 border border-gold/30 text-sm font-semibold text-gold hover:bg-gold/20 active:scale-[0.98] transition-all">
+            Modifier mes coordonnées bancaires
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Abonnement Screen ──────────────────────────────────────────
+
+function SubscriptionScreen({ onBack }: { onBack: () => void }) {
+  const { plan, upgrade } = usePlan()
+  const isGold = plan === "GOLD"
+  const [showConfetti, setShowConfetti] = useState(false)
+
+  function handleUpgrade() {
+    setShowConfetti(true)
+    setTimeout(() => upgrade(), 300)
+  }
+
+  const plans = [
+    { id: "SOLO", name: "Solo", price: "Gratuit", features: ["1 chauffeur", "1 véhicule", "5 documents/mois"], active: plan === "SOLO" as unknown as boolean },
+    { id: "PRO", name: "Pro", price: "29€/mois", features: ["2 chauffeurs", "2 véhicules", "Documents illimités"], active: plan === "PRO" },
+    { id: "GOLD", name: "Gold", price: "79€/mois", features: ["10 chauffeurs", "10 véhicules", "Support 24/7", "API & intégrations"], active: isGold },
+  ]
+
+  return (
+    <motion.div key="subscription" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
+      <GoldConfetti trigger={showConfetti} />
+      <SubScreenHeader title="Mon Abonnement" onBack={onBack} />
+      <div className="flex-1 overflow-y-auto pb-24">
+        {/* Current Plan Banner */}
+        <div className={cn(
+          "mx-4 mb-5 p-5 rounded-2xl border",
+          isGold
+            ? "bg-gradient-to-br from-gold/15 via-gold/5 to-transparent border-gold/40 gold-glow-sm"
+            : "bg-onyx-card border-gold/20"
+        )}>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Plan actuel</p>
+              <p className={cn(
+                "text-2xl font-bold font-heading mt-0.5",
+                isGold ? "gold-gradient-text" : "text-gold"
+              )}>
+                {plan}
+              </p>
+            </div>
+            <div className={cn(
+              "w-12 h-12 rounded-2xl flex items-center justify-center",
+              isGold ? "bg-gold/20 border border-gold/40" : "bg-gold/10 border border-gold/20"
+            )}>
+              <Crown className={cn("h-6 w-6", isGold ? "text-gold" : "text-gold/60")} strokeWidth={1.5} />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {isGold
+              ? "Vous profitez de toutes les fonctionnalités premium NoX VTC."
+              : "Passez à GOLD pour débloquer la gestion complète de votre flotte."
+            }
+          </p>
+        </div>
+
+        {/* Plan Cards */}
+        <SectionLabel>Offres disponibles</SectionLabel>
+        <div className="space-y-3 px-4 mb-5">
+          {plans.map((p) => (
+            <div key={p.id} className={cn(
+              "p-4 rounded-2xl border transition-all",
+              p.active
+                ? "bg-gold/10 border-gold/40"
+                : "bg-onyx-card/80 border-onyx-border/30"
+            )}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <h3 className={cn(
+                    "text-sm font-bold font-heading",
+                    p.active ? "text-gold" : "text-foreground"
+                  )}>{p.name}</h3>
+                  {p.active && (
+                    <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase">Actif</span>
+                  )}
+                </div>
+                <span className={cn(
+                  "text-sm font-bold",
+                  p.active ? "text-gold" : "text-muted-foreground"
+                )}>{p.price}</span>
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {p.features.map((f) => (
+                  <span key={f} className="text-[10px] text-muted-foreground">{f}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {!isGold && (
+          <div className="px-4">
+            <button
+              onClick={handleUpgrade}
+              className="w-full py-3.5 rounded-2xl bg-gold text-primary-foreground text-sm font-bold font-heading hover:bg-gold-light active:scale-[0.98] transition-all gold-glow flex items-center justify-center gap-2"
+            >
+              <Crown className="h-4 w-4" strokeWidth={1.5} />
+              Gérer mon offre
+            </button>
+          </div>
+        )}
+      </div>
+    </motion.div>
   )
 }
 
 // ── Locked Slot ───────────────────────────────────────────────
 
-function LockedSlot({
-  type,
-  onUpgrade,
-}: {
-  type: "driver" | "vehicle"
-  onUpgrade: () => void
-}) {
-  const limit = type === "driver" ? "chauffeurs" : "v\u00e9hicules"
+function LockedSlot({ type, onUpgrade }: { type: "driver" | "vehicle"; onUpgrade: () => void }) {
+  const limit = type === "driver" ? "chauffeurs" : "véhicules"
   return (
     <div className="relative min-h-[320px] rounded-2xl bg-onyx-card/40 border border-onyx-border/30 overflow-hidden">
       <div className="absolute inset-0 p-5 opacity-10">
@@ -122,55 +412,23 @@ function LockedSlot({
           </div>
         </div>
       </div>
-
       <div className="relative z-10 flex flex-col items-center justify-center gap-6 p-8 min-h-[320px]">
         <div className="w-14 h-14 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center">
           <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
         </div>
-
         <div className="text-center">
-          <p className="text-sm font-semibold text-foreground mb-1.5">
-            Limite PRO atteinte
-          </p>
+          <p className="text-sm font-semibold font-heading text-foreground mb-1.5">Limite PRO atteinte</p>
           <p className="text-xs text-muted-foreground leading-relaxed max-w-[240px]">
             Vous utilisez {PRO_LIMIT}/{PRO_LIMIT} {limit}.{" "}
-            <span className="text-gold font-medium">
-              {"Passez \u00e0 l\u2019offre GOLD"}
-            </span>{" "}
-            {"pour g\u00e9rer jusqu\u2019\u00e0"} {GOLD_LIMIT} {limit}.
+            <span className="text-gold font-medium">Passez à l&apos;offre GOLD</span>{" "}
+            pour gérer jusqu&apos;à {GOLD_LIMIT} {limit}.
           </p>
         </div>
-
-        <button
-          onClick={onUpgrade}
-          className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold hover:bg-gold-light active:scale-[0.97] transition-all gold-glow"
-        >
+        <button onClick={onUpgrade} className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold font-heading hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
           <Crown className="h-4 w-4" strokeWidth={1.5} />
-          {"D\u00e9bloquer l\u2019offre GOLD"}
+          Débloquer l&apos;offre GOLD
         </button>
       </div>
-    </div>
-  )
-}
-
-// ── Sub Screen Header ─────────────────────────────────────────
-
-function SubScreenHeader({
-  title,
-  onBack,
-}: {
-  title: string
-  onBack: () => void
-}) {
-  return (
-    <div className="flex items-center gap-3 px-4 pt-2 pb-4">
-      <button
-        onClick={onBack}
-        className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 transition-colors"
-      >
-        <ChevronLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
-      </button>
-      <h1 className="text-lg font-bold text-foreground">{title}</h1>
     </div>
   )
 }
@@ -190,33 +448,18 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <motion.div
-      key="team"
-      variants={slideIn}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      transition={{ duration: 0.25, ease: "easeInOut" }}
-      className="flex flex-col h-full"
-    >
+    <motion.div key="team" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
       <GoldConfetti trigger={showConfetti} />
-      <SubScreenHeader
-        title={"Gestion de l\u2019\u00c9quipe"}
-        onBack={onBack}
-      />
-
+      <SubScreenHeader title="Gestion de l'Équipe" onBack={onBack} />
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-24">
         <div className="flex items-center justify-between mb-1">
-          <p className="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider">
+          <p className="text-[10px] text-muted-foreground uppercase font-semibold font-heading tracking-[0.15em]">
             Chauffeurs actifs ({visibleDrivers.length}/{maxSlots})
           </p>
           {isGold && (
-            <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-gold/15 border border-gold/30 gold-gradient-text">
-              GOLD
-            </span>
+            <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-gold/15 border border-gold/30 gold-gradient-text">GOLD</span>
           )}
         </div>
-
         <AnimatePresence mode="popLayout">
           {visibleDrivers.map((driver, index) => (
             <motion.div
@@ -227,24 +470,16 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
               className="flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50"
             >
               <div className="w-10 h-10 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
-                <span className="text-sm font-bold text-gold">
-                  {driver.initials}
-                </span>
+                <span className="text-sm font-bold text-gold">{driver.initials}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground">
-                  {driver.name}
-                </p>
+                <p className="text-sm font-semibold text-foreground">{driver.name}</p>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  {driver.online ? (
-                    <Wifi className="h-3 w-3 text-emerald-400" strokeWidth={1.5} />
-                  ) : (
-                    <WifiOff className="h-3 w-3 text-muted-foreground" strokeWidth={1.5} />
-                  )}
-                  <span className={cn(
-                    "text-[11px] font-medium",
-                    driver.online ? "text-emerald-400" : "text-muted-foreground"
-                  )}>
+                  {driver.online
+                    ? <Wifi className="h-3 w-3 text-emerald-400" strokeWidth={1.5} />
+                    : <WifiOff className="h-3 w-3 text-muted-foreground" strokeWidth={1.5} />
+                  }
+                  <span className={cn("text-[11px] font-medium", driver.online ? "text-emerald-400" : "text-muted-foreground")}>
                     {driver.online ? "En ligne" : "Hors ligne"}
                   </span>
                 </div>
@@ -253,7 +488,6 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
             </motion.div>
           ))}
         </AnimatePresence>
-
         {!isGold && <LockedSlot type="driver" onUpgrade={handleUpgrade} />}
       </div>
     </motion.div>
@@ -275,30 +509,18 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <motion.div
-      key="fleet"
-      variants={slideIn}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      transition={{ duration: 0.25, ease: "easeInOut" }}
-      className="flex flex-col h-full"
-    >
+    <motion.div key="fleet" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
       <GoldConfetti trigger={showConfetti} />
       <SubScreenHeader title="Gestion du Parc" onBack={onBack} />
-
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-24">
         <div className="flex items-center justify-between mb-1">
-          <p className="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider">
-            {"V\u00e9hicules en service"} ({visibleVehicles.length}/{maxSlots})
+          <p className="text-[10px] text-muted-foreground uppercase font-semibold font-heading tracking-[0.15em]">
+            Véhicules en service ({visibleVehicles.length}/{maxSlots})
           </p>
           {isGold && (
-            <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-gold/15 border border-gold/30 gold-gradient-text">
-              GOLD
-            </span>
+            <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-gold/15 border border-gold/30 gold-gradient-text">GOLD</span>
           )}
         </div>
-
         <AnimatePresence mode="popLayout">
           {visibleVehicles.map((vehicle, index) => (
             <motion.div
@@ -312,13 +534,9 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
                 <Car className="h-4 w-4 text-gold" strokeWidth={1.5} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground">
-                  {vehicle.model}
-                </p>
+                <p className="text-sm font-semibold text-foreground">{vehicle.model}</p>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[11px] font-mono text-muted-foreground">
-                    {vehicle.plate}
-                  </span>
+                  <span className="text-[11px] font-mono text-muted-foreground">{vehicle.plate}</span>
                   <span className={cn(
                     "px-1.5 py-0.5 text-[9px] font-medium rounded-full border",
                     vehicle.inService
@@ -333,7 +551,6 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
             </motion.div>
           ))}
         </AnimatePresence>
-
         {!isGold && <LockedSlot type="vehicle" onUpgrade={handleUpgrade} />}
       </div>
     </motion.div>
@@ -342,184 +559,107 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
 
 // ── Main Settings ─────────────────────────────────────────────
 
-function MainSettings({
-  onNavigate,
-}: {
-  onNavigate: (screen: SettingsScreen) => void
-}) {
+function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => void }) {
   const { plan } = usePlan()
   const isGold = plan === "GOLD"
 
-  const profileSettings: SettingItem[] = [
-    {
-      icon: <User className="h-4 w-4" strokeWidth={1.5} />,
-      label: "Mon Profil",
-      description: "Jean Dupont",
-    },
-    {
-      icon: <Building2 className="h-4 w-4" strokeWidth={1.5} />,
-      label: "Profil Entreprise",
-      description: "NoX VTC SAS",
-    },
-    {
-      icon: <FileText className="h-4 w-4" strokeWidth={1.5} />,
-      label: "SIRET / RIB",
-      description: "Documents l\u00e9gaux",
-    },
+  const accountSettings: SettingItem[] = [
+    { icon: <User className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Profil", description: "Jean Dupont, jean.dupont@nox-vtc.fr", screen: "profile" },
+    { icon: <Building2 className="h-4 w-4" strokeWidth={1.5} />, label: "Profil Entreprise", description: "NoX VTC SAS \u2022 SIRET 912 345 678", screen: "enterprise" },
+    { icon: <Landmark className="h-4 w-4" strokeWidth={1.5} />, label: "Infos Bancaires", description: "IBAN \u2022\u2022\u2022\u2022 4668", badge: "AES-256", screen: "banking" },
+    { icon: <Crown className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Abonnement", description: isGold ? "Offre GOLD active" : "Offre PRO active", screen: "subscription" },
   ]
 
   const managementSettings: SettingItem[] = [
     {
       icon: <Users className="h-4 w-4" strokeWidth={1.5} />,
-      label: "Gestion de l\u2019\u00c9quipe",
-      description: isGold
-        ? `${allDrivers.length} chauffeurs actifs`
-        : "2 chauffeurs actifs",
+      label: "Gestion de l'\u00c9quipe",
+      description: isGold ? `${allDrivers.length} chauffeurs actifs` : "2 chauffeurs actifs",
       screen: "team",
     },
     {
       icon: <Car className="h-4 w-4" strokeWidth={1.5} />,
       label: "Gestion du Parc",
-      description: isGold
-        ? `${allVehicles.length} v\u00e9hicules en service`
-        : "2 v\u00e9hicules en service",
+      description: isGold ? `${allVehicles.length} véhicules en service` : "2 véhicules en service",
       screen: "fleet",
     },
   ]
 
   const appSettings: SettingItem[] = [
-    {
-      icon: <Bell className="h-4 w-4" strokeWidth={1.5} />,
-      label: "Notifications",
-      description: "Push, Email, SMS",
-    },
-    {
-      icon: <CreditCard className="h-4 w-4" strokeWidth={1.5} />,
-      label: "Moyen de Paiement",
-      description: "Visa **** 4242",
-    },
-    {
-      icon: <Shield className="h-4 w-4" strokeWidth={1.5} />,
-      label: "S\u00e9curit\u00e9",
-      badge: "AES-256",
-      description: "Chiffrement de bout en bout",
-    },
+    { icon: <Bell className="h-4 w-4" strokeWidth={1.5} />, label: "Notifications", description: "Push, Email, SMS" },
+    { icon: <Shield className="h-4 w-4" strokeWidth={1.5} />, label: "Sécurité", badge: "AES-256", description: "Chiffrement de bout en bout" },
   ]
 
   return (
-    <motion.div
-      key="main"
-      variants={slideBack}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      transition={{ duration: 0.25, ease: "easeInOut" }}
-      className="flex flex-col h-full"
-    >
-      <div className="px-4 pt-2 pb-2 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-foreground">
-          {"R\u00e9glages"}
-        </h1>
+    <motion.div key="main" variants={slideBack} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
+      <div className="px-4 pt-2 pb-3 flex items-center justify-between">
+        <h1 className="text-lg font-bold font-heading text-foreground">Réglages</h1>
         <div className={cn(
           "px-2.5 py-1 rounded-lg border",
           isGold
             ? "bg-gradient-to-r from-gold/25 via-gold/15 to-gold/25 border-gold/50 gold-badge-glow"
             : "bg-gold/15 border-gold/30"
         )}>
-          <span className={cn(
-            "text-[10px] font-bold tracking-wider",
-            isGold ? "gold-gradient-text" : "text-gold"
-          )}>
-            {plan}
-          </span>
+          <span className={cn("text-[10px] font-bold tracking-wider", isGold ? "gold-gradient-text" : "text-gold")}>{plan}</span>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto pb-20">
+      <div className="flex-1 overflow-y-auto pb-24">
         {/* NoX Wallet */}
-        <div className="mx-4 mb-5 p-5 rounded-2xl bg-onyx-card border border-onyx-border/30 opacity-40 pointer-events-none">
+        <div className="mx-4 mb-5 p-5 rounded-2xl bg-onyx-card/80 backdrop-blur-sm border border-onyx-border/30 opacity-40 pointer-events-none">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-gold/10 flex items-center justify-center">
               <Coins className="h-5 w-5 text-gold/60" strokeWidth={1.5} />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">NoX Wallet</p>
-              <p className="text-xl font-bold text-foreground/60">
-                5{" "}
-                <span className="text-gold/60 text-sm font-semibold">
-                  {"Cr\u00e9dits"}
-                </span>
+              <p className="text-xl font-bold font-heading text-foreground/60">
+                5 <span className="text-gold/60 text-sm font-semibold">Crédits</span>
               </p>
             </div>
           </div>
           <div className="w-full py-2 rounded-xl bg-gold/15 border border-gold/30 flex flex-col items-center justify-center gap-0.5">
-            <span className="text-[11px] font-bold text-gold tracking-wider uppercase">
-              {"Documents Illimit\u00e9s"}
-            </span>
+            <span className="text-[11px] font-bold text-gold tracking-wider uppercase">Documents Illimités</span>
             <div className="flex items-center gap-1">
               <Headphones className="h-3 w-3 text-gold/70" strokeWidth={1.5} />
-              <span className="text-[9px] text-gold/70 font-medium">
-                {"Support Prioritaire 24/7"}
-              </span>
+              <span className="text-[9px] text-gold/70 font-medium">Support Prioritaire 24/7</span>
             </div>
           </div>
         </div>
 
         {/* Compte */}
-        <div className="mb-5">
-          <p className="px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-            Compte
-          </p>
-          <div className="rounded-2xl mx-4 bg-onyx-card border border-onyx-border/50 overflow-hidden divide-y divide-onyx-border/30">
-            {profileSettings.map((item) => (
-              <SettingRow key={item.label} item={item} />
-            ))}
-          </div>
-        </div>
+        <SectionLabel>Compte</SectionLabel>
+        <GlassCard className="mb-5">
+          {accountSettings.map((item) => (
+            <SettingRow key={item.label} item={item} onPress={item.screen ? () => onNavigate(item.screen!) : undefined} />
+          ))}
+        </GlassCard>
 
         {/* Gestion */}
-        <div className="mb-5">
-          <p className="px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-            Gestion
-          </p>
-          <div className="rounded-2xl mx-4 bg-onyx-card border border-onyx-border/50 overflow-hidden divide-y divide-onyx-border/30">
-            {managementSettings.map((item) => (
-              <SettingRow
-                key={item.label}
-                item={item}
-                onPress={
-                  item.screen ? () => onNavigate(item.screen!) : undefined
-                }
-              />
-            ))}
-          </div>
-        </div>
+        <SectionLabel>Gestion</SectionLabel>
+        <GlassCard className="mb-5">
+          {managementSettings.map((item) => (
+            <SettingRow key={item.label} item={item} onPress={item.screen ? () => onNavigate(item.screen!) : undefined} />
+          ))}
+        </GlassCard>
 
         {/* Application */}
-        <div className="mb-5">
-          <p className="px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-            Application
-          </p>
-          <div className="rounded-2xl mx-4 bg-onyx-card border border-onyx-border/50 overflow-hidden divide-y divide-onyx-border/30">
-            {appSettings.map((item) => (
-              <SettingRow key={item.label} item={item} />
-            ))}
-          </div>
-        </div>
+        <SectionLabel>Application</SectionLabel>
+        <GlassCard className="mb-5">
+          {appSettings.map((item) => (
+            <SettingRow key={item.label} item={item} />
+          ))}
+        </GlassCard>
 
-        {/* Deconnexion */}
+        {/* Déconnexion */}
         <div className="mx-4 mb-6">
-          <button className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl border border-red-500/20 hover:bg-red-500/10 transition-colors">
+          <button className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl border border-red-500/20 hover:bg-red-500/10 active:scale-[0.98] transition-all">
             <LogOut className="h-4 w-4 text-red-400" strokeWidth={1.5} />
-            <span className="text-sm font-medium text-red-400">
-              {"D\u00e9connexion"}
-            </span>
+            <span className="text-sm font-medium text-red-400">Déconnexion</span>
           </button>
         </div>
 
-        <p className="text-center text-[10px] text-muted-foreground mb-4">
-          NoX VTC v1.0.0
-        </p>
+        <p className="text-center text-[10px] text-muted-foreground mb-4">NoX VTC v1.0.0</p>
       </div>
     </motion.div>
   )
@@ -533,15 +673,13 @@ export function SettingsTab() {
   return (
     <div className="h-full overflow-hidden">
       <AnimatePresence mode="wait">
-        {screen === "main" && (
-          <MainSettings key="main" onNavigate={setScreen} />
-        )}
-        {screen === "team" && (
-          <TeamScreen key="team" onBack={() => setScreen("main")} />
-        )}
-        {screen === "fleet" && (
-          <FleetScreen key="fleet" onBack={() => setScreen("main")} />
-        )}
+        {screen === "main" && <MainSettings key="main" onNavigate={setScreen} />}
+        {screen === "team" && <TeamScreen key="team" onBack={() => setScreen("main")} />}
+        {screen === "fleet" && <FleetScreen key="fleet" onBack={() => setScreen("main")} />}
+        {screen === "profile" && <ProfileScreen key="profile" onBack={() => setScreen("main")} />}
+        {screen === "enterprise" && <EnterpriseScreen key="enterprise" onBack={() => setScreen("main")} />}
+        {screen === "banking" && <BankingScreen key="banking" onBack={() => setScreen("main")} />}
+        {screen === "subscription" && <SubscriptionScreen key="subscription" onBack={() => setScreen("main")} />}
       </AnimatePresence>
     </div>
   )
