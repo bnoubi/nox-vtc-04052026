@@ -121,17 +121,32 @@ interface SettingItem {
 }
 
 function SettingRow({ item, onPress }: { item: SettingItem; onPress?: () => void }) {
+  const isClickable = !!onPress
   return (
     <button
       onClick={onPress}
-      className="flex items-center gap-3 w-full px-4 py-3.5 hover:bg-secondary/20 active:bg-secondary/30 transition-colors"
+      disabled={!isClickable}
+      className={cn(
+        "flex items-center gap-3 w-full px-4 py-3.5 transition-all duration-150 group",
+        isClickable
+          ? "hover:bg-gold/5 active:bg-gold/10 active:scale-[0.99] cursor-pointer"
+          : "cursor-default"
+      )}
     >
-      <div className="w-9 h-9 rounded-xl bg-secondary/60 flex items-center justify-center shrink-0 text-muted-foreground">
+      <div className={cn(
+        "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-150",
+        isClickable
+          ? "bg-secondary/60 text-muted-foreground group-hover:bg-gold/10 group-hover:text-gold group-active:bg-gold/15"
+          : "bg-secondary/60 text-muted-foreground"
+      )}>
         {item.icon}
       </div>
       <div className="flex-1 text-left min-w-0">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-medium text-foreground">{item.label}</p>
+          <p className={cn(
+            "text-sm font-medium transition-colors duration-150",
+            isClickable ? "text-foreground group-hover:text-gold" : "text-foreground"
+          )}>{item.label}</p>
           {item.badge && (
             <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-gold/10 text-gold border border-gold/20">
               {item.badge}
@@ -142,7 +157,9 @@ function SettingRow({ item, onPress }: { item: SettingItem; onPress?: () => void
           <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{item.description}</p>
         )}
       </div>
-      <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0" strokeWidth={1.5} />
+      {isClickable && (
+        <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-gold/50" strokeWidth={1.5} />
+      )}
     </button>
   )
 }
@@ -150,6 +167,19 @@ function SettingRow({ item, onPress }: { item: SettingItem; onPress?: () => void
 // ── Mon Profil Screen ──────────────────────────────────────────
 
 function ProfileScreen({ onBack }: { onBack: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [socials, setSocials] = useState([
+    { name: "Google", connected: true, color: "bg-red-500/10 border-red-500/20 text-red-400", hoverColor: "hover:bg-red-500/20 hover:border-red-500/30" },
+    { name: "Apple", connected: true, color: "bg-white/5 border-white/10 text-foreground", hoverColor: "hover:bg-white/10 hover:border-white/20" },
+    { name: "LinkedIn", connected: false, color: "bg-blue-500/10 border-blue-500/20 text-blue-400", hoverColor: "hover:bg-blue-500/20 hover:border-blue-500/30" },
+  ])
+
+  function toggleSocial(name: string) {
+    setSocials((prev) =>
+      prev.map((s) => (s.name === name ? { ...s, connected: !s.connected } : s))
+    )
+  }
+
   return (
     <motion.div key="profile" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
       <SubScreenHeader title="Mon Profil" onBack={onBack} />
@@ -157,9 +187,12 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
         {/* Avatar + Identity */}
         <div className="flex flex-col items-center px-4 mb-6">
           <div className="relative mb-3">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-gold/30 via-gold/15 to-gold/5 border-2 border-gold/40 flex items-center justify-center">
+            <button
+              onClick={() => setEditing(!editing)}
+              className="w-20 h-20 rounded-full bg-gradient-to-br from-gold/30 via-gold/15 to-gold/5 border-2 border-gold/40 flex items-center justify-center hover:border-gold/70 hover:from-gold/40 active:scale-95 transition-all"
+            >
               <span className="text-2xl font-bold font-heading text-gold">JD</span>
-            </div>
+            </button>
             <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-gold flex items-center justify-center border-2 border-background">
               <BadgeCheck className="h-3.5 w-3.5 text-primary-foreground" strokeWidth={2} />
             </div>
@@ -171,33 +204,60 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
         {/* Contact Info */}
         <SectionLabel>Coordonnées</SectionLabel>
         <GlassCard className="mb-5">
-          <InfoCard icon={<Mail className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Email" value="jean.dupont@nox-vtc.fr" />
-          <InfoCard icon={<Phone className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Téléphone" value="+33 6 12 34 56 78" />
+          {editing ? (
+            <div className="p-4 space-y-3">
+              <input
+                type="email"
+                defaultValue="jean.dupont@nox-vtc.fr"
+                className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
+              />
+              <input
+                type="tel"
+                defaultValue="+33 6 12 34 56 78"
+                className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
+              />
+            </div>
+          ) : (
+            <>
+              <InfoCard icon={<Mail className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Email" value="jean.dupont@nox-vtc.fr" />
+              <InfoCard icon={<Phone className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Téléphone" value="+33 6 12 34 56 78" />
+            </>
+          )}
         </GlassCard>
 
         {/* Social Login Badges */}
         <SectionLabel>Connexion sociale</SectionLabel>
         <div className="flex gap-3 px-4 mb-5">
-          {[
-            { name: "Google", connected: true, color: "bg-red-500/10 border-red-500/20 text-red-400" },
-            { name: "Apple", connected: true, color: "bg-white/5 border-white/10 text-foreground" },
-            { name: "LinkedIn", connected: false, color: "bg-blue-500/10 border-blue-500/20 text-blue-400" },
-          ].map((social) => (
-            <div key={social.name} className={cn(
-              "flex-1 py-3 rounded-2xl border flex flex-col items-center gap-1.5",
-              social.connected ? social.color : "bg-secondary/20 border-onyx-border/30 opacity-40"
-            )}>
+          {socials.map((social) => (
+            <button
+              key={social.name}
+              onClick={() => toggleSocial(social.name)}
+              className={cn(
+                "flex-1 py-3 rounded-2xl border flex flex-col items-center gap-1.5 transition-all duration-150 active:scale-95",
+                social.connected
+                  ? `${social.color} ${social.hoverColor}`
+                  : `bg-secondary/20 border-onyx-border/30 opacity-40 hover:opacity-70 hover:border-gold/20`
+              )}
+            >
               <Globe className="h-4 w-4" strokeWidth={1.5} />
               <span className="text-[10px] font-semibold">{social.name}</span>
-              {social.connected && <span className="text-[8px] opacity-70">Connecté</span>}
-            </div>
+              <span className="text-[8px] opacity-70">{social.connected ? "Connecté" : "Connecter"}</span>
+            </button>
           ))}
         </div>
 
-        {/* Edit button */}
+        {/* Edit / Save button */}
         <div className="px-4">
-          <button className="w-full py-3 rounded-2xl bg-gold/10 border border-gold/30 text-sm font-semibold text-gold hover:bg-gold/20 active:scale-[0.98] transition-all">
-            Modifier mon profil
+          <button
+            onClick={() => setEditing(!editing)}
+            className={cn(
+              "w-full py-3 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-all",
+              editing
+                ? "bg-gold text-primary-foreground hover:bg-gold-light gold-glow-sm"
+                : "bg-gold/10 border border-gold/30 text-gold hover:bg-gold/20"
+            )}
+          >
+            {editing ? "Enregistrer les modifications" : "Modifier mon profil"}
           </button>
         </div>
       </div>
@@ -208,27 +268,62 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
 // ── Profil Entreprise Screen ───────────────────────────────────
 
 function EnterpriseScreen({ onBack }: { onBack: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState({
+    denomination: "NoX VTC SAS",
+    nomCommercial: "NoX VTC",
+    siret: "912 345 678 00015",
+    evtc: "EVTC-2024-75-001234",
+    adresse: "42 Avenue des Champs-Élysées, 75008 Paris",
+    tel: "+33 1 42 56 78 90",
+  })
+
+  function EditableField({ label, icon, fieldKey }: { label: string; icon: React.ReactNode; fieldKey: keyof typeof form }) {
+    if (editing) {
+      return (
+        <div className="p-4">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">{label}</p>
+          <input
+            type="text"
+            value={form[fieldKey]}
+            onChange={(e) => setForm({ ...form, [fieldKey]: e.target.value })}
+            className="w-full px-3 py-2.5 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors"
+          />
+        </div>
+      )
+    }
+    return <InfoCard icon={icon} label={label} value={form[fieldKey]} />
+  }
+
   return (
     <motion.div key="enterprise" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
       <SubScreenHeader title="Profil Entreprise" onBack={onBack} />
       <div className="flex-1 overflow-y-auto pb-24">
         <SectionLabel>Identité légale</SectionLabel>
         <GlassCard className="mb-5">
-          <InfoCard icon={<Building2 className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Dénomination Sociale" value="NoX VTC SAS" />
-          <InfoCard icon={<Sparkles className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Nom Commercial" value="NoX VTC" />
-          <InfoCard icon={<Hash className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="SIRET" value="912 345 678 00015" />
-          <InfoCard icon={<FileText className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="N° EVTC" value="EVTC-2024-75-001234" />
+          <EditableField label="Dénomination Sociale" icon={<Building2 className="h-4 w-4 text-gold" strokeWidth={1.5} />} fieldKey="denomination" />
+          <EditableField label="Nom Commercial" icon={<Sparkles className="h-4 w-4 text-gold" strokeWidth={1.5} />} fieldKey="nomCommercial" />
+          <EditableField label="SIRET" icon={<Hash className="h-4 w-4 text-gold" strokeWidth={1.5} />} fieldKey="siret" />
+          <EditableField label="N° EVTC" icon={<FileText className="h-4 w-4 text-gold" strokeWidth={1.5} />} fieldKey="evtc" />
         </GlassCard>
 
         <SectionLabel>Coordonnées professionnelles</SectionLabel>
         <GlassCard className="mb-5">
-          <InfoCard icon={<MapPin className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Adresse Siège" value="42 Avenue des Champs-Élysées, 75008 Paris" />
-          <InfoCard icon={<Phone className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Téléphone Pro" value="+33 1 42 56 78 90" />
+          <EditableField label="Adresse Siège" icon={<MapPin className="h-4 w-4 text-gold" strokeWidth={1.5} />} fieldKey="adresse" />
+          <EditableField label="Téléphone Pro" icon={<Phone className="h-4 w-4 text-gold" strokeWidth={1.5} />} fieldKey="tel" />
         </GlassCard>
 
         <div className="px-4">
-          <button className="w-full py-3 rounded-2xl bg-gold/10 border border-gold/30 text-sm font-semibold text-gold hover:bg-gold/20 active:scale-[0.98] transition-all">
-            Modifier les informations
+          <button
+            onClick={() => setEditing(!editing)}
+            className={cn(
+              "w-full py-3 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-all",
+              editing
+                ? "bg-gold text-primary-foreground hover:bg-gold-light gold-glow-sm"
+                : "bg-gold/10 border border-gold/30 text-gold hover:bg-gold/20"
+            )}
+          >
+            {editing ? "Enregistrer les modifications" : "Modifier les informations"}
           </button>
         </div>
       </div>
@@ -239,6 +334,13 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
 // ── Infos Bancaires Screen ─────────────────────────────────────
 
 function BankingScreen({ onBack }: { onBack: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [bank, setBank] = useState({
+    banque: "BNP Paribas",
+    iban: "FR76 3000 4028 3700 0100 0466 854",
+    bic: "BNPAFRPPXXX",
+  })
+
   return (
     <motion.div key="banking" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
       <SubScreenHeader title="Infos Bancaires" onBack={onBack} />
@@ -256,15 +358,34 @@ function BankingScreen({ onBack }: { onBack: () => void }) {
 
         <SectionLabel>Compte bancaire</SectionLabel>
         <GlassCard className="mb-5">
-          <InfoCard icon={<Landmark className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Banque" value="BNP Paribas" />
-          <InfoCard icon={<CreditCard className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="IBAN" value="FR76 3000 4028 3700 0100 0466 854" masked />
-          <InfoCard icon={<Hash className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="BIC / SWIFT" value="BNPAFRPPXXX" masked />
+          {editing ? (
+            <div className="p-4 space-y-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Banque</p>
+                <input type="text" value={bank.banque} onChange={(e) => setBank({ ...bank, banque: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors" />
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">IBAN</p>
+                <input type="text" value={bank.iban} onChange={(e) => setBank({ ...bank, iban: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground font-mono focus:outline-none focus:border-gold/50 transition-colors" />
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">BIC / SWIFT</p>
+                <input type="text" value={bank.bic} onChange={(e) => setBank({ ...bank, bic: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground font-mono focus:outline-none focus:border-gold/50 transition-colors" />
+              </div>
+            </div>
+          ) : (
+            <>
+              <InfoCard icon={<Landmark className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Banque" value={bank.banque} />
+              <InfoCard icon={<CreditCard className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="IBAN" value={bank.iban} masked />
+              <InfoCard icon={<Hash className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="BIC / SWIFT" value={bank.bic} masked />
+            </>
+          )}
         </GlassCard>
 
         <SectionLabel>Moyen de paiement</SectionLabel>
         <GlassCard className="mb-5">
-          <div className="flex items-center gap-3 p-4">
-            <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
+          <div className="flex items-center gap-3 p-4 group hover:bg-gold/5 transition-colors rounded-2xl">
+            <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0 group-hover:bg-gold/15 transition-colors">
               <CreditCard className="h-4 w-4 text-gold" strokeWidth={1.5} />
             </div>
             <div className="flex-1 min-w-0">
@@ -276,8 +397,16 @@ function BankingScreen({ onBack }: { onBack: () => void }) {
         </GlassCard>
 
         <div className="px-4">
-          <button className="w-full py-3 rounded-2xl bg-gold/10 border border-gold/30 text-sm font-semibold text-gold hover:bg-gold/20 active:scale-[0.98] transition-all">
-            Modifier mes coordonnées bancaires
+          <button
+            onClick={() => setEditing(!editing)}
+            className={cn(
+              "w-full py-3 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-all",
+              editing
+                ? "bg-gold text-primary-foreground hover:bg-gold-light gold-glow-sm"
+                : "bg-gold/10 border border-gold/30 text-gold hover:bg-gold/20"
+            )}
+          >
+            {editing ? "Enregistrer les modifications" : "Modifier mes coordonnées bancaires"}
           </button>
         </div>
       </div>
@@ -467,13 +596,13 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
               initial={isGold && index >= PRO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.3, delay: index >= PRO_LIMIT ? (index - PRO_LIMIT) * 0.06 : 0 }}
-              className="flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50"
+              className="flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
             >
-              <div className="w-10 h-10 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0 group-hover:bg-gold/25 transition-colors">
                 <span className="text-sm font-bold text-gold">{driver.initials}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground">{driver.name}</p>
+                <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">{driver.name}</p>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   {driver.online
                     ? <Wifi className="h-3 w-3 text-emerald-400" strokeWidth={1.5} />
@@ -484,7 +613,7 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
                   </span>
                 </div>
               </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-gold/50" strokeWidth={1.5} />
             </motion.div>
           ))}
         </AnimatePresence>
@@ -528,13 +657,13 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
               initial={isGold && index >= PRO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.3, delay: index >= PRO_LIMIT ? (index - PRO_LIMIT) * 0.06 : 0 }}
-              className="flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50"
+              className="flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
             >
-              <div className="w-10 h-10 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0 group-hover:bg-gold/25 transition-colors">
                 <Car className="h-4 w-4 text-gold" strokeWidth={1.5} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground">{vehicle.model}</p>
+                <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">{vehicle.model}</p>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-[11px] font-mono text-muted-foreground">{vehicle.plate}</span>
                   <span className={cn(
@@ -547,7 +676,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
                   </span>
                 </div>
               </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-gold/50" strokeWidth={1.5} />
             </motion.div>
           ))}
         </AnimatePresence>
@@ -647,7 +776,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
         <SectionLabel>Application</SectionLabel>
         <GlassCard className="mb-5">
           {appSettings.map((item) => (
-            <SettingRow key={item.label} item={item} />
+            <SettingRow key={item.label} item={item} onPress={() => {/* TODO: link to sub-screen */}} />
           ))}
         </GlassCard>
 
@@ -665,7 +794,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
   )
 }
 
-// ── Export ──────────────────────────────────────────────────────
+// ── Export ─────────────────��────────────────────────────────────
 
 export function SettingsTab() {
   const [screen, setScreen] = useState<SettingsScreen>("main")
