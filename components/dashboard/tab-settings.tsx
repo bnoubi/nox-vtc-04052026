@@ -39,7 +39,7 @@ import { allDrivers, allVehicles } from "./data"
 const PRO_LIMIT = 2
 const GOLD_LIMIT = 10
 
-type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription"
+type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security"
 
 // ── Animation variants ────────────────────────────────────────
 
@@ -686,6 +686,247 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   )
 }
 
+// ── Notifications Screen ──────────────────────────────────────
+
+function NotificationsScreen({ onBack }: { onBack: () => void }) {
+  const [prefs, setPrefs] = useState({
+    pushReservations: true,
+    pushMessages: true,
+    pushPromotions: false,
+    emailRecap: true,
+    emailFactures: true,
+    smsConfirmation: true,
+    smsRappel: false,
+  })
+
+  function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+    return (
+      <button
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0",
+          checked ? "bg-gold" : "bg-secondary/80 border border-onyx-border/50"
+        )}
+      >
+        <motion.div
+          className={cn("absolute top-0.5 w-5 h-5 rounded-full shadow-sm", checked ? "bg-primary-foreground" : "bg-muted-foreground/60")}
+          animate={{ left: checked ? 22 : 2 }}
+          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        />
+      </button>
+    )
+  }
+
+  function NotifRow({ label, description, field }: { label: string; description: string; field: keyof typeof prefs }) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-3.5 group">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>
+        </div>
+        <Toggle checked={prefs[field]} onChange={(v) => setPrefs({ ...prefs, [field]: v })} />
+      </div>
+    )
+  }
+
+  return (
+    <motion.div key="notifications" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
+      <SubScreenHeader title="Notifications" onBack={onBack} />
+      <div className="flex-1 overflow-y-auto pb-24">
+        <SectionLabel>Notifications Push</SectionLabel>
+        <GlassCard className="mb-5">
+          <NotifRow label="Réservations" description="Nouvelles courses et modifications" field="pushReservations" />
+          <NotifRow label="Messages" description="Messages des clients et passagers" field="pushMessages" />
+          <NotifRow label="Promotions" description="Offres spéciales et nouveautés NoX" field="pushPromotions" />
+        </GlassCard>
+
+        <SectionLabel>Notifications Email</SectionLabel>
+        <GlassCard className="mb-5">
+          <NotifRow label="Récapitulatif journalier" description="Résumé quotidien de votre activité" field="emailRecap" />
+          <NotifRow label="Factures" description="Envoi automatique des factures générées" field="emailFactures" />
+        </GlassCard>
+
+        <SectionLabel>Notifications SMS</SectionLabel>
+        <GlassCard className="mb-5">
+          <NotifRow label="Confirmations" description="SMS de confirmation de réservation" field="smsConfirmation" />
+          <NotifRow label="Rappels" description="Rappel 1h avant chaque course" field="smsRappel" />
+        </GlassCard>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Security Screen ───────────────────────────────────────────
+
+function SecurityScreen({ onBack }: { onBack: () => void }) {
+  const [twoFA, setTwoFA] = useState(true)
+  const [biometric, setBiometric] = useState(false)
+  const [showChangePassword, setShowChangePassword] = useState(false)
+
+  return (
+    <motion.div key="security" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
+      <SubScreenHeader title="Sécurité" onBack={onBack} />
+      <div className="flex-1 overflow-y-auto pb-24">
+        {/* AES-256 Banner */}
+        <div className="mx-4 mb-5 p-4 rounded-2xl bg-gold/5 border border-gold/20 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
+            <Shield className="h-5 w-5 text-gold" strokeWidth={1.5} />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-semibold text-foreground">Chiffrement de bout en bout</p>
+              <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/15 text-gold border border-gold/25">AES-256</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Toutes vos données sont protégées par un chiffrement de grade militaire.</p>
+          </div>
+        </div>
+
+        <SectionLabel>Authentification</SectionLabel>
+        <GlassCard className="mb-5">
+          {/* 2FA */}
+          <div className="flex items-center gap-3 px-4 py-3.5">
+            <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
+              <Shield className="h-4 w-4 text-gold" strokeWidth={1.5} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">Double authentification (2FA)</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Code SMS ou application Authenticator</p>
+            </div>
+            <button
+              onClick={() => setTwoFA(!twoFA)}
+              className={cn(
+                "relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0",
+                twoFA ? "bg-gold" : "bg-secondary/80 border border-onyx-border/50"
+              )}
+            >
+              <motion.div
+                className={cn("absolute top-0.5 w-5 h-5 rounded-full shadow-sm", twoFA ? "bg-primary-foreground" : "bg-muted-foreground/60")}
+                animate={{ left: twoFA ? 22 : 2 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              />
+            </button>
+          </div>
+
+          {/* Biometric */}
+          <div className="flex items-center gap-3 px-4 py-3.5">
+            <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
+              <BadgeCheck className="h-4 w-4 text-gold" strokeWidth={1.5} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">Connexion biométrique</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Face ID / Empreinte digitale</p>
+            </div>
+            <button
+              onClick={() => setBiometric(!biometric)}
+              className={cn(
+                "relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0",
+                biometric ? "bg-gold" : "bg-secondary/80 border border-onyx-border/50"
+              )}
+            >
+              <motion.div
+                className={cn("absolute top-0.5 w-5 h-5 rounded-full shadow-sm", biometric ? "bg-primary-foreground" : "bg-muted-foreground/60")}
+                animate={{ left: biometric ? 22 : 2 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              />
+            </button>
+          </div>
+        </GlassCard>
+
+        <SectionLabel>Mot de passe</SectionLabel>
+        <GlassCard className="mb-5">
+          <AnimatePresence mode="wait">
+            {showChangePassword ? (
+              <motion.div
+                key="form"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="p-4 space-y-3 overflow-hidden"
+              >
+                <input
+                  type="password"
+                  placeholder="Mot de passe actuel"
+                  className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
+                />
+                <input
+                  type="password"
+                  placeholder="Nouveau mot de passe"
+                  className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
+                />
+                <input
+                  type="password"
+                  placeholder="Confirmer le nouveau mot de passe"
+                  className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
+                />
+                <div className="flex gap-3 pt-1">
+                  <button
+                    onClick={() => setShowChangePassword(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-secondary/40 border border-onyx-border/30 text-xs font-medium text-muted-foreground hover:bg-secondary/60 active:scale-[0.98] transition-all"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={() => setShowChangePassword(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-semibold hover:bg-gold-light active:scale-[0.98] transition-all gold-glow-sm"
+                  >
+                    Valider
+                  </button>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.button
+                key="btn"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                onClick={() => setShowChangePassword(true)}
+                className="flex items-center gap-3 w-full px-4 py-3.5 group hover:bg-gold/5 active:bg-gold/10 active:scale-[0.99] transition-all"
+              >
+                <div className="w-9 h-9 rounded-xl bg-secondary/60 flex items-center justify-center shrink-0 group-hover:bg-gold/10 group-hover:text-gold transition-colors text-muted-foreground">
+                  <Lock className="h-4 w-4" strokeWidth={1.5} />
+                </div>
+                <div className="flex-1 text-left min-w-0">
+                  <p className="text-sm font-medium text-foreground group-hover:text-gold transition-colors">Changer mon mot de passe</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Dernière modification il y a 45 jours</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0 group-hover:translate-x-0.5 group-hover:text-gold/50 transition-all" strokeWidth={1.5} />
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </GlassCard>
+
+        {/* Sessions */}
+        <SectionLabel>Sessions actives</SectionLabel>
+        <GlassCard className="mb-5">
+          {[
+            { device: "iPhone 15 Pro", location: "Paris, France", current: true },
+            { device: "MacBook Pro", location: "Paris, France", current: false },
+          ].map((session) => (
+            <div key={session.device} className="flex items-center gap-3 px-4 py-3.5">
+              <div className="w-9 h-9 rounded-xl bg-secondary/60 flex items-center justify-center shrink-0 text-muted-foreground">
+                <Globe className="h-4 w-4" strokeWidth={1.5} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-foreground">{session.device}</p>
+                  {session.current && (
+                    <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">Actuelle</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{session.location}</p>
+              </div>
+              {!session.current && (
+                <button className="px-2.5 py-1.5 rounded-lg text-[10px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 active:scale-95 transition-all">
+                  Révoquer
+                </button>
+              )}
+            </div>
+          ))}
+        </GlassCard>
+      </div>
+    </motion.div>
+  )
+}
+
 // ── Main Settings ─────────────────────────────────────────────
 
 function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => void }) {
@@ -715,8 +956,8 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
   ]
 
   const appSettings: SettingItem[] = [
-    { icon: <Bell className="h-4 w-4" strokeWidth={1.5} />, label: "Notifications", description: "Push, Email, SMS" },
-    { icon: <Shield className="h-4 w-4" strokeWidth={1.5} />, label: "Sécurité", badge: "AES-256", description: "Chiffrement de bout en bout" },
+    { icon: <Bell className="h-4 w-4" strokeWidth={1.5} />, label: "Notifications", description: "Push, Email, SMS", screen: "notifications" },
+    { icon: <Shield className="h-4 w-4" strokeWidth={1.5} />, label: "Sécurité", badge: "AES-256", description: "Chiffrement de bout en bout", screen: "security" },
   ]
 
   return (
@@ -776,19 +1017,26 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
         <SectionLabel>Application</SectionLabel>
         <GlassCard className="mb-5">
           {appSettings.map((item) => (
-            <SettingRow key={item.label} item={item} onPress={() => {/* TODO: link to sub-screen */}} />
+            <SettingRow key={item.label} item={item} onPress={item.screen ? () => onNavigate(item.screen!) : undefined} />
           ))}
         </GlassCard>
 
         {/* Déconnexion */}
         <div className="mx-4 mb-6">
-          <button className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl border border-red-500/20 hover:bg-red-500/10 active:scale-[0.98] transition-all">
-            <LogOut className="h-4 w-4 text-red-400" strokeWidth={1.5} />
-            <span className="text-sm font-medium text-red-400">Déconnexion</span>
+          <button className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-2xl bg-red-950/30 border border-red-900/40 hover:bg-red-950/50 hover:border-red-800/50 active:scale-[0.98] active:bg-red-950/60 transition-all group">
+            <LogOut className="h-4 w-4 text-red-400/80 group-hover:text-red-400 transition-colors" strokeWidth={1.5} />
+            <span className="text-sm font-medium text-red-400/80 group-hover:text-red-400 transition-colors">Déconnexion</span>
           </button>
         </div>
 
-        <p className="text-center text-[10px] text-muted-foreground mb-4">NoX VTC v1.0.0</p>
+        {/* Footer */}
+        <div className="flex flex-col items-center gap-2 mb-6">
+          <p className="text-[10px] text-muted-foreground/50 font-medium">NoX VTC v1.0.0</p>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gold/5 border border-gold/15">
+            <Shield className="h-3 w-3 text-gold/60" strokeWidth={1.5} />
+            <span className="text-[9px] font-semibold text-gold/60 tracking-wider">AES-256 Secured</span>
+          </div>
+        </div>
       </div>
     </motion.div>
   )
@@ -809,6 +1057,8 @@ export function SettingsTab() {
         {screen === "enterprise" && <EnterpriseScreen key="enterprise" onBack={() => setScreen("main")} />}
         {screen === "banking" && <BankingScreen key="banking" onBack={() => setScreen("main")} />}
         {screen === "subscription" && <SubscriptionScreen key="subscription" onBack={() => setScreen("main")} />}
+        {screen === "notifications" && <NotificationsScreen key="notifications" onBack={() => setScreen("main")} />}
+        {screen === "security" && <SecurityScreen key="security" onBack={() => setScreen("main")} />}
       </AnimatePresence>
     </div>
   )
