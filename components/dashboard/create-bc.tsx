@@ -19,6 +19,11 @@ import {
   StickyNote,
   CircleDot,
   Check,
+  MessageCircle,
+  Phone,
+  Link2,
+  Copy,
+  CheckCheck,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePlan } from "./plan-context"
@@ -39,7 +44,7 @@ interface CreateBCProps {
   prefillClient?: BCPrefillClient | null
 }
 
-type BCStep = "choose" | "manual"
+type BCStep = "choose" | "manual" | "link"
 
 // ── Bottom Sheet : Choose method ──────────────────────────────
 
@@ -229,6 +234,211 @@ function SelectField({
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+// ── Share Link Screen ──────────────────────────────────────────
+
+function ShareLinkScreen({ onBack, onClose }: { onBack: () => void; onClose: () => void }) {
+  const [selectedClientId, setSelectedClientId] = useState("")
+  const [freeContact, setFreeContact] = useState("")
+  const [copied, setCopied] = useState(false)
+  const [sent, setSent] = useState<"sms" | "whatsapp" | null>(null)
+
+  const clientOptions = existingClients.map((c) => ({
+    value: c.id,
+    label: `${c.title} ${c.name}`,
+    sub: c.phone,
+  }))
+
+  const selectedClient = existingClients.find((c) => c.id === selectedClientId)
+
+  const slug = selectedClient
+    ? selectedClient.name.toLowerCase().replace(/\s+/g, "-")
+    : freeContact
+      ? freeContact
+          .replace(/@.*/, "")
+          .replace(/[^a-zA-Z0-9]/g, "-")
+          .replace(/-+/g, "-")
+          .toLowerCase() || "client"
+      : "votre-client"
+
+  const generatedLink = `nox.vtc/book/${slug}`
+
+  function handleCopy() {
+    navigator.clipboard?.writeText(`https://${generatedLink}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  function handleSend(channel: "sms" | "whatsapp") {
+    setSent(channel)
+    setTimeout(() => {
+      onClose()
+    }, 1800)
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 40 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 40 }}
+      transition={{ duration: 0.25, ease: "easeInOut" }}
+      className="fixed inset-0 z-[70] bg-background flex flex-col"
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-onyx-border/30">
+        <button
+          onClick={onBack}
+          className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 active:scale-95 transition-all"
+        >
+          <ChevronLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+        </button>
+        <div className="flex-1">
+          <h1 className="text-base font-bold text-foreground">Partage du lien</h1>
+          <p className="text-[10px] text-muted-foreground">Envoyer un lien de réservation</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 active:scale-95 transition-all"
+        >
+          <X className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-6">
+        {/* Select existing client */}
+        <section>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <User className="h-3.5 w-3.5" strokeWidth={1.5} />
+            Destinataire
+          </p>
+          <SelectField
+            label="Client existant"
+            icon={<Search className="h-3 w-3" strokeWidth={1.5} />}
+            placeholder="Sélectionner un client existant"
+            options={clientOptions}
+            value={selectedClientId}
+            onChange={(v) => {
+              setSelectedClientId(v)
+              setFreeContact("")
+            }}
+          />
+        </section>
+
+        {/* Separator */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-onyx-border/30" />
+          <span className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider">ou</span>
+          <div className="flex-1 h-px bg-onyx-border/30" />
+        </div>
+
+        {/* Free contact input */}
+        <section>
+          <input
+            type="text"
+            placeholder="Saisir email ou téléphone"
+            value={freeContact}
+            onChange={(e) => {
+              setFreeContact(e.target.value)
+              setSelectedClientId("")
+            }}
+            className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
+          />
+        </section>
+
+        {/* Link Preview Bubble */}
+        <section>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <Link2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+            Lien de réservation
+          </p>
+          <div className="relative rounded-2xl bg-onyx-card border border-gold/20 p-4 mt-3">
+            {/* Bubble tail */}
+            <div className="absolute -top-2 left-6 w-4 h-4 bg-onyx-card border-l border-t border-gold/20 rotate-45" />
+            <div className="relative flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-muted-foreground mb-1">Lien personnalisé</p>
+                <p className="text-sm font-mono font-medium text-gold truncate">{generatedLink}</p>
+              </div>
+              <button
+                onClick={handleCopy}
+                className={cn(
+                  "w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 transition-all active:scale-95",
+                  copied
+                    ? "bg-emerald-500/15 border-emerald-500/30"
+                    : "bg-gold/10 border-gold/30 hover:bg-gold/20"
+                )}
+              >
+                {copied ? (
+                  <CheckCheck className="h-4 w-4 text-emerald-400" strokeWidth={1.5} />
+                ) : (
+                  <Copy className="h-4 w-4 text-gold" strokeWidth={1.5} />
+                )}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Success feedback */}
+        <AnimatePresence>
+          {sent && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20"
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
+                <CheckCheck className="h-5 w-5 text-emerald-400" strokeWidth={1.5} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-emerald-400">Lien envoyé avec succès</p>
+                <p className="text-[11px] text-emerald-400/70 mt-0.5">
+                  {sent === "sms" ? "Le client recevra un SMS sous quelques secondes." : "Le message WhatsApp a été envoyé."}
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Fixed bottom: Send buttons */}
+      <div className="px-4 py-4 border-t border-onyx-border/30 bg-background space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => handleSend("sms")}
+            disabled={!!sent || (!selectedClientId && !freeContact)}
+            className={cn(
+              "flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold transition-all active:scale-[0.98]",
+              sent === "sms"
+                ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400"
+                : "bg-onyx-card border border-gold/30 text-gold hover:bg-gold/10 hover:border-gold/50 disabled:opacity-40 disabled:hover:bg-onyx-card disabled:hover:border-gold/30"
+            )}
+          >
+            <Phone className="h-4 w-4" strokeWidth={1.5} />
+            {sent === "sms" ? "Envoyé" : "Par SMS"}
+          </button>
+          <button
+            onClick={() => handleSend("whatsapp")}
+            disabled={!!sent || (!selectedClientId && !freeContact)}
+            className={cn(
+              "flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold transition-all active:scale-[0.98]",
+              sent === "whatsapp"
+                ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400"
+                : "bg-gold text-primary-foreground hover:bg-gold-light gold-glow-sm disabled:opacity-40 disabled:hover:bg-gold"
+            )}
+          >
+            <MessageCircle className="h-4 w-4" strokeWidth={1.5} />
+            {sent === "whatsapp" ? "Envoyé" : "Par WhatsApp"}
+          </button>
+        </div>
+        <p className="text-[10px] text-center text-muted-foreground/50">
+          Le client recevra un lien sécurisé pour remplir ses informations de trajet.
+        </p>
+      </div>
+    </motion.div>
   )
 }
 
@@ -579,10 +789,7 @@ export function CreateBCFlow({ open, onClose, prefillClient }: CreateBCProps) {
         <ChooseMethodSheet
           key="choose"
           onManual={() => setStep("manual")}
-          onLink={() => {
-            // Link sharing would open a share modal in production
-            handleClose()
-          }}
+          onLink={() => setStep("link")}
           onClose={handleClose}
         />
       )}
@@ -592,6 +799,13 @@ export function CreateBCFlow({ open, onClose, prefillClient }: CreateBCProps) {
           onBack={prefillClient ? handleClose : () => setStep("choose")}
           onClose={handleClose}
           prefillClient={prefillClient}
+        />
+      )}
+      {open && step === "link" && (
+        <ShareLinkScreen
+          key="link"
+          onBack={() => setStep("choose")}
+          onClose={handleClose}
         />
       )}
     </AnimatePresence>
