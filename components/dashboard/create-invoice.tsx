@@ -14,13 +14,15 @@ import {
   ChevronDown,
   StickyNote,
   User,
+  FilePlus2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { existingClients } from "./data"
+import { CreateBCFlow } from "./create-bc"
 
 // ── Types ─────────────────────────────────────────────────────
 
-type InvoiceStep = "choose" | "fromBC" | "libre"
+type InvoiceStep = "choose" | "fromBC" | "newBC" | "libre"
 
 interface BCItem {
   id: string
@@ -109,10 +111,12 @@ function SuccessToast({ show, onDone }: { show: boolean; onDone: () => void }) {
 
 function ChooseInvoiceSheet({
   onFromBC,
+  onNewBC,
   onLibre,
   onClose,
 }: {
   onFromBC: () => void
+  onNewBC: () => void
   onLibre: () => void
   onClose: () => void
 }) {
@@ -143,34 +147,55 @@ function ChooseInvoiceSheet({
         </div>
 
         <div className="px-5 pb-6 space-y-2.5">
+          {/* Option 1: Facturer un trajet existant */}
           <button
             onClick={onFromBC}
-            className="flex items-center gap-3.5 w-full p-4 rounded-2xl bg-onyx-card border border-gold/20 hover:border-gold/40 hover:gold-glow-sm active:scale-[0.98] transition-all"
+            className="flex items-center gap-3.5 w-full p-4 rounded-2xl bg-onyx-card border border-gold/20 hover:border-gold/40 hover:bg-gold/5 active:scale-[0.98] transition-all group"
           >
-            <div className="w-11 h-11 rounded-xl bg-gold/10 border border-gold/30 flex items-center justify-center shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-gold/10 border border-gold/30 flex items-center justify-center shrink-0 group-hover:bg-gold/20 transition-colors">
               <Receipt className="h-5 w-5 text-gold" strokeWidth={1.5} />
             </div>
-            <div className="text-left">
-              <p className="text-sm font-semibold text-foreground">Facturer un trajet</p>
+            <div className="text-left flex-1">
+              <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">Facturer un trajet existant</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Convertir un Bon de Commande existant
+                Convertir un Bon de Commande terminé
               </p>
             </div>
+            <ArrowRight className="h-4 w-4 text-muted-foreground/40 shrink-0 group-hover:text-gold/50 group-hover:translate-x-0.5 transition-all" strokeWidth={1.5} />
           </button>
 
+          {/* Option 2: Facturer un nouveau trajet */}
+          <button
+            onClick={onNewBC}
+            className="flex items-center gap-3.5 w-full p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all group"
+          >
+            <div className="w-11 h-11 rounded-xl bg-gold/8 border border-gold/20 flex items-center justify-center shrink-0 group-hover:bg-gold/15 transition-colors">
+              <FilePlus2 className="h-5 w-5 text-gold/80 group-hover:text-gold transition-colors" strokeWidth={1.5} />
+            </div>
+            <div className="text-left flex-1">
+              <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">Facturer un nouveau trajet</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Créer un Bon de Commande puis facturer
+              </p>
+            </div>
+            <ArrowRight className="h-4 w-4 text-muted-foreground/40 shrink-0 group-hover:text-gold/50 group-hover:translate-x-0.5 transition-all" strokeWidth={1.5} />
+          </button>
+
+          {/* Option 3: Facture Libre */}
           <button
             onClick={onLibre}
-            className="flex items-center gap-3.5 w-full p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 hover:border-onyx-border active:scale-[0.98] transition-all"
+            className="flex items-center gap-3.5 w-full p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all group"
           >
-            <div className="w-11 h-11 rounded-xl bg-secondary flex items-center justify-center shrink-0">
-              <PlusCircle className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
+            <div className="w-11 h-11 rounded-xl bg-secondary/60 border border-onyx-border/40 flex items-center justify-center shrink-0 group-hover:bg-gold/10 group-hover:border-gold/20 transition-colors">
+              <PlusCircle className="h-5 w-5 text-muted-foreground group-hover:text-gold transition-colors" strokeWidth={1.5} />
             </div>
-            <div className="text-left">
-              <p className="text-sm font-semibold text-foreground">Facture Libre</p>
+            <div className="text-left flex-1">
+              <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">Facture Libre</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Frais annexes : attente, nettoyage, etc.
               </p>
             </div>
+            <ArrowRight className="h-4 w-4 text-muted-foreground/40 shrink-0 group-hover:text-gold/50 group-hover:translate-x-0.5 transition-all" strokeWidth={1.5} />
           </button>
         </div>
       </motion.div>
@@ -681,6 +706,7 @@ export function CreateInvoiceFlow({ open, onClose }: CreateInvoiceProps) {
           <ChooseInvoiceSheet
             key="choose-invoice"
             onFromBC={() => setStep("fromBC")}
+            onNewBC={() => setStep("newBC")}
             onLibre={() => setStep("libre")}
             onClose={handleClose}
           />
@@ -702,6 +728,14 @@ export function CreateInvoiceFlow({ open, onClose }: CreateInvoiceProps) {
           />
         )}
       </AnimatePresence>
+
+      <CreateBCFlow
+        open={open && step === "newBC"}
+        onClose={() => {
+          setStep("choose")
+          handleClose()
+        }}
+      />
 
       <SuccessToast show={showToast} onDone={() => setShowToast(false)} />
     </>
