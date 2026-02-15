@@ -290,17 +290,19 @@ const BRAND_COLORS = [
   { name: "Bleu Nuit", value: "#1E3A5F" },
   { name: "Bordeaux", value: "#6B1D2A" },
   { name: "Émeraude", value: "#1B6B4A" },
-  { name: "Argent", value: "#9CA3AF" },
+  { name: "Argent Chromé", value: "#9CA3AF" },
 ]
 
 function EnterpriseScreen({ onBack }: { onBack: () => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [saved, setSaved] = useState(false)
+  const [colorOpen, setColorOpen] = useState(false)
 
   // Identité visuelle
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [logoName, setLogoName] = useState("")
   const [brandColor, setBrandColor] = useState("#C5A059")
+  const selectedColorObj = BRAND_COLORS.find((c) => c.value === brandColor) || BRAND_COLORS[0]
 
   // Informations légales
   const [legal, setLegal] = useState({
@@ -336,14 +338,14 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
   return (
     <motion.div key="enterprise" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
       <SubScreenHeader title="Profil Entreprise" onBack={onBack} />
-      <div className="flex-1 overflow-y-auto pb-28">
+      <div className="flex-1 overflow-y-auto pb-20">
 
-        {/* ── Section 1: Identité Visuelle ── */}
-        <SectionLabel>Identité visuelle (Marque Blanche)</SectionLabel>
-        <GlassCard className="mb-5">
+        {/* ── Section 1: Identite Visuelle ── */}
+        <SectionLabel>Identite visuelle</SectionLabel>
+        <GlassCard className="mb-3">
           {/* Logo Upload */}
-          <div className="p-4">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-3">Logo de l&apos;entreprise</p>
+          <div className="p-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Logo de l&apos;entreprise</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -353,27 +355,27 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-dashed border-onyx-border/50 hover:border-gold/40 hover:bg-gold/5 active:scale-[0.99] transition-all group"
+              className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-onyx-border/50 hover:border-gold/40 hover:bg-gold/5 active:scale-[0.99] transition-all group"
             >
               {logoPreview ? (
-                <div className="w-14 h-14 rounded-xl border border-gold/30 overflow-hidden bg-onyx-card shrink-0 flex items-center justify-center">
+                <div className="w-11 h-11 rounded-lg border border-gold/30 overflow-hidden bg-onyx-card shrink-0 flex items-center justify-center">
                   <img src={logoPreview} alt="Logo" className="w-full h-full object-contain" />
                 </div>
               ) : (
-                <div className="w-14 h-14 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0 group-hover:bg-gold/15 transition-colors">
-                  <ImageIcon className="h-6 w-6 text-gold/60 group-hover:text-gold transition-colors" strokeWidth={1.5} />
+                <div className="w-11 h-11 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0 group-hover:bg-gold/15 transition-colors">
+                  <ImageIcon className="h-5 w-5 text-gold/60 group-hover:text-gold transition-colors" strokeWidth={1.5} />
                 </div>
               )}
               <div className="flex-1 text-left min-w-0">
                 {logoName ? (
                   <>
                     <p className="text-sm font-medium text-foreground truncate">{logoName}</p>
-                    <p className="text-[10px] text-emerald-400 mt-0.5">Logo importé avec succès</p>
+                    <p className="text-[10px] text-emerald-400">Importé</p>
                   </>
                 ) : (
                   <>
                     <p className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">Importer votre logo</p>
-                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">Format PNG, SVG, JPG (max 2 Mo)</p>
+                    <p className="text-[10px] text-muted-foreground/60">PNG, SVG, JPG (max 2 Mo)</p>
                   </>
                 )}
               </div>
@@ -381,175 +383,190 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
             </button>
           </div>
 
-          {/* Brand Color Picker */}
-          <div className="p-4">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-3 flex items-center gap-1.5">
+          {/* Brand Color Dropdown */}
+          <div className="px-3 pb-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2 flex items-center gap-1.5">
               <Palette className="h-3 w-3" strokeWidth={1.5} />
               Couleur de marque
             </p>
-            <div className="grid grid-cols-6 gap-2.5">
-              {BRAND_COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  onClick={() => setBrandColor(c.value)}
-                  className={cn(
-                    "relative flex flex-col items-center gap-1.5 py-2 rounded-xl transition-all active:scale-95",
-                    brandColor === c.value
-                      ? "bg-gold/10 border border-gold/40"
-                      : "border border-transparent hover:bg-secondary/30"
-                  )}
-                >
-                  <div
-                    className="w-8 h-8 rounded-full border-2 transition-all"
-                    style={{
-                      backgroundColor: c.value,
-                      borderColor: brandColor === c.value ? "#C5A059" : "rgba(255,255,255,0.1)",
-                    }}
-                  />
-                  {brandColor === c.value && (
-                    <motion.div
-                      layoutId="brand-check"
-                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-gold flex items-center justify-center"
-                    >
-                      <CheckCircle2 className="h-3 w-3 text-primary-foreground" strokeWidth={2} />
-                    </motion.div>
-                  )}
-                  <span className="text-[8px] text-muted-foreground/60 leading-none">{c.name}</span>
-                </button>
-              ))}
+            <div className="relative">
+              <button
+                onClick={() => setColorOpen(!colorOpen)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-secondary/60 border text-sm transition-all active:scale-[0.99]",
+                  colorOpen ? "border-gold/50 bg-gold/5" : "border-onyx-border/50 hover:border-gold/30"
+                )}
+              >
+                <div
+                  className="w-6 h-6 rounded-full border-2 shrink-0"
+                  style={{ backgroundColor: brandColor, borderColor: "#C5A059" }}
+                />
+                <span className="flex-1 text-left font-medium text-foreground">{selectedColorObj.name}</span>
+                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", colorOpen && "rotate-180")} strokeWidth={1.5} />
+              </button>
+
+              <AnimatePresence>
+                {colorOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute z-20 left-0 right-0 mt-1.5 rounded-xl bg-onyx-card border border-onyx-border/60 shadow-xl shadow-black/40 overflow-hidden"
+                  >
+                    {BRAND_COLORS.map((c) => (
+                      <button
+                        key={c.value}
+                        onClick={() => { setBrandColor(c.value); setColorOpen(false) }}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2.5 transition-all",
+                          brandColor === c.value
+                            ? "bg-gold/10"
+                            : "hover:bg-gold/5 active:bg-gold/10"
+                        )}
+                      >
+                        <div
+                          className="w-5 h-5 rounded-full border-2 shrink-0"
+                          style={{
+                            backgroundColor: c.value,
+                            borderColor: brandColor === c.value ? "#C5A059" : "rgba(255,255,255,0.1)",
+                          }}
+                        />
+                        <span className={cn(
+                          "flex-1 text-left text-sm",
+                          brandColor === c.value ? "font-semibold text-gold" : "text-foreground"
+                        )}>{c.name}</span>
+                        {brandColor === c.value && (
+                          <CheckCircle2 className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-            <p className="text-[10px] text-muted-foreground/50 mt-3 leading-relaxed">
-              Cette couleur sera appliquée aux liens de réservation clients, factures et bons de commande.
+            <p className="text-[9px] text-muted-foreground/50 mt-1.5">
+              Appliquée aux liens clients, factures et bons de commande.
             </p>
           </div>
         </GlassCard>
 
-        {/* ── Section 2: Informations Légales ── */}
-        <SectionLabel>Informations légales</SectionLabel>
-        <GlassCard className="mb-5">
-          <div className="p-4 space-y-3">
+        {/* ── Section 2: Informations Legales ── */}
+        <SectionLabel>Informations legales</SectionLabel>
+        <GlassCard className="mb-3">
+          <div className="p-3 space-y-2.5">
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Dénomination sociale</p>
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
-                  <Building2 className="h-4 w-4 text-gold" strokeWidth={1.5} />
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Denomination sociale</p>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
+                  <Building2 className="h-3.5 w-3.5 text-gold" strokeWidth={1.5} />
                 </div>
                 <input
                   type="text"
                   value={legal.denomination}
                   onChange={(e) => setLegal({ ...legal, denomination: e.target.value })}
-                  className="flex-1 px-3 py-2.5 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors"
+                  className="flex-1 px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors"
                 />
               </div>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Numéro SIREN / SIRET</p>
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
-                  <Hash className="h-4 w-4 text-gold" strokeWidth={1.5} />
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Numero SIREN / SIRET</p>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
+                  <Hash className="h-3.5 w-3.5 text-gold" strokeWidth={1.5} />
                 </div>
                 <input
                   type="text"
                   value={legal.siren}
                   onChange={(e) => setLegal({ ...legal, siren: e.target.value })}
-                  className="flex-1 px-3 py-2.5 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground font-mono focus:outline-none focus:border-gold/50 transition-colors"
+                  className="flex-1 px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground font-mono focus:outline-none focus:border-gold/50 transition-colors"
                 />
               </div>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Adresse du siège social</p>
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
-                  <MapPin className="h-4 w-4 text-gold" strokeWidth={1.5} />
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Adresse du siege social</p>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
+                  <MapPin className="h-3.5 w-3.5 text-gold" strokeWidth={1.5} />
                 </div>
                 <input
                   type="text"
                   value={legal.adresse}
                   onChange={(e) => setLegal({ ...legal, adresse: e.target.value })}
-                  className="flex-1 px-3 py-2.5 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors"
+                  className="flex-1 px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors"
                 />
               </div>
             </div>
           </div>
         </GlassCard>
 
-        {/* ── Section 3: Conformité VTC ── */}
-        <SectionLabel>Conformité VTC</SectionLabel>
-        <div className="mx-4 mb-3 px-4 py-3 rounded-2xl bg-gold/5 border border-gold/20 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
-            <Shield className="h-4 w-4 text-gold" strokeWidth={1.5} />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-foreground">Documents réglementaires</p>
-            <p className="text-[10px] text-muted-foreground">Surveillez la validité de vos inscriptions et assurances.</p>
-          </div>
-        </div>
-        <GlassCard className="mb-5">
-          {/* Registre VTC */}
-          <div className="p-4 space-y-3">
+        {/* ── Section 3: Conformite VTC ── */}
+        <SectionLabel>Conformite VTC</SectionLabel>
+        <GlassCard className="mb-3">
+          <div className="p-3 space-y-2.5">
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">N° inscription au registre VTC</p>
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
-                  <FileText className="h-4 w-4 text-gold" strokeWidth={1.5} />
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">N inscription au registre VTC</p>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
+                  <FileText className="h-3.5 w-3.5 text-gold" strokeWidth={1.5} />
                 </div>
                 <input
                   type="text"
                   value={compliance.registreVTC}
                   onChange={(e) => setCompliance({ ...compliance, registreVTC: e.target.value })}
-                  className="flex-1 px-3 py-2.5 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground font-mono focus:outline-none focus:border-gold/50 transition-colors"
+                  className="flex-1 px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground font-mono focus:outline-none focus:border-gold/50 transition-colors"
                 />
               </div>
             </div>
 
             {/* Date Registre VTC */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Validité du registre VTC</p>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Validite du registre VTC</p>
                 {registreStatus.label && (
-                  <span className={cn("px-2 py-0.5 text-[9px] font-semibold rounded-lg border", registreStatus.color)}>
+                  <span className={cn("px-1.5 py-0.5 text-[8px] font-semibold rounded border", registreStatus.color)}>
                     {registreStatus.label}
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
                 <div className={cn(
-                  "w-9 h-9 rounded-xl border flex items-center justify-center shrink-0",
+                  "w-8 h-8 rounded-lg border flex items-center justify-center shrink-0",
                   registreStatus.label === "Expiré" ? "bg-red-500/10 border-red-500/20" : "bg-gold/10 border-gold/20"
                 )}>
-                  <Calendar className={cn("h-4 w-4", registreStatus.label === "Expiré" ? "text-red-400" : "text-gold")} strokeWidth={1.5} />
+                  <Calendar className={cn("h-3.5 w-3.5", registreStatus.label === "Expiré" ? "text-red-400" : "text-gold")} strokeWidth={1.5} />
                 </div>
                 <input
                   type="date"
                   value={compliance.dateRegistre}
                   onChange={(e) => setCompliance({ ...compliance, dateRegistre: e.target.value })}
-                  className="flex-1 px-3 py-2.5 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors [color-scheme:dark]"
+                  className="flex-1 px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors [color-scheme:dark]"
                 />
               </div>
             </div>
 
             {/* Date Assurance RC Pro */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center justify-between mb-1">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Assurance RC Professionnelle</p>
                 {assuranceStatus.label && (
-                  <span className={cn("px-2 py-0.5 text-[9px] font-semibold rounded-lg border", assuranceStatus.color)}>
+                  <span className={cn("px-1.5 py-0.5 text-[8px] font-semibold rounded border", assuranceStatus.color)}>
                     {assuranceStatus.label}
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
                 <div className={cn(
-                  "w-9 h-9 rounded-xl border flex items-center justify-center shrink-0",
+                  "w-8 h-8 rounded-lg border flex items-center justify-center shrink-0",
                   assuranceStatus.label === "Expiré" ? "bg-red-500/10 border-red-500/20" : "bg-gold/10 border-gold/20"
                 )}>
-                  <Shield className={cn("h-4 w-4", assuranceStatus.label === "Expiré" ? "text-red-400" : "text-gold")} strokeWidth={1.5} />
+                  <Shield className={cn("h-3.5 w-3.5", assuranceStatus.label === "Expiré" ? "text-red-400" : "text-gold")} strokeWidth={1.5} />
                 </div>
                 <input
                   type="date"
                   value={compliance.dateAssurance}
                   onChange={(e) => setCompliance({ ...compliance, dateAssurance: e.target.value })}
-                  className="flex-1 px-3 py-2.5 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors [color-scheme:dark]"
+                  className="flex-1 px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors [color-scheme:dark]"
                 />
               </div>
             </div>
@@ -559,11 +576,11 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
               <motion.div
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-center gap-2.5 p-3 rounded-xl bg-red-500/10 border border-red-500/20"
+                className="flex items-center gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20"
               >
-                <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" strokeWidth={1.5} />
-                <p className="text-[11px] text-red-400 font-medium">
-                  Un ou plusieurs documents sont expirés. Mettez-les à jour pour rester en conformité.
+                <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0" strokeWidth={1.5} />
+                <p className="text-[10px] text-red-400 font-medium">
+                  Document(s) expiré(s). Mettez à jour pour rester en conformité.
                 </p>
               </motion.div>
             )}
@@ -571,10 +588,10 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
         </GlassCard>
 
         {/* ── Info Notice ── */}
-        <div className="mx-4 mb-5 px-4 py-3 rounded-2xl bg-gold/5 border border-gold/15 flex items-start gap-2.5">
-          <Sparkles className="h-3.5 w-3.5 text-gold/60 shrink-0 mt-0.5" strokeWidth={1.5} />
-          <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
-            Le logo et le nom commercial seront automatiquement injectés sur vos factures, bons de commande et liens de réservation clients.
+        <div className="mx-4 mb-3 px-3 py-2 rounded-xl bg-gold/5 border border-gold/15 flex items-start gap-2">
+          <Sparkles className="h-3 w-3 text-gold/60 shrink-0 mt-0.5" strokeWidth={1.5} />
+          <p className="text-[9px] text-muted-foreground/70 leading-relaxed">
+            Logo et nom commercial automatiquement injectés sur factures, BC et liens clients.
           </p>
         </div>
       </div>
