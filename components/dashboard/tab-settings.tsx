@@ -36,6 +36,7 @@ import {
   AlertTriangle,
   ImageIcon,
   CheckCircle2,
+  ChevronDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePlan } from "./plan-context"
@@ -1333,7 +1334,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
   )
 }
 
-// ── Export ─────────────────��────────────────────────────────────
+// ── Export ────────���────────��────────────────────────────────────
 
 export function SettingsTab() {
   const [screen, setScreen] = useState<SettingsScreen>("main")
