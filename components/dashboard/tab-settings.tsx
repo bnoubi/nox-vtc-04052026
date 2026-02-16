@@ -385,7 +385,7 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
           </div>
 
           {/* Brand Color Dropdown */}
-          <div className="px-3 pb-3">
+          <div className="relative z-50 px-3 pb-3">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2 flex items-center gap-1.5">
               <Palette className="h-3 w-3" strokeWidth={1.5} />
               Couleur de marque
@@ -413,7 +413,7 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute z-50 left-0 right-0 mt-1.5 rounded-xl bg-onyx-card border border-gold/20 shadow-2xl shadow-black/60 overflow-hidden backdrop-blur-xl"
+                    className="absolute z-[100] top-full left-0 w-full mt-1.5 rounded-xl bg-onyx-card border border-gold/20 shadow-2xl shadow-black/60 overflow-hidden backdrop-blur-xl"
                   >
                     {BRAND_COLORS.map((c, i) => (
                       <button
@@ -980,7 +980,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   )
 }
 
-// ── Notifications Screen ──────────────────────────────────────
+// ── Notifications Screen ───��──────────────────────────────────
 
 function NotificationsScreen({ onBack }: { onBack: () => void }) {
   const [prefs, setPrefs] = useState({
