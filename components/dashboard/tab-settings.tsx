@@ -413,29 +413,31 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute z-20 left-0 right-0 mt-1.5 rounded-xl bg-onyx-card border border-onyx-border/60 shadow-xl shadow-black/40 overflow-hidden"
+                    className="absolute z-50 left-0 right-0 mt-1.5 rounded-xl bg-onyx-card border border-gold/20 shadow-2xl shadow-black/60 overflow-hidden backdrop-blur-xl"
                   >
-                    {BRAND_COLORS.map((c) => (
+                    {BRAND_COLORS.map((c, i) => (
                       <button
                         key={c.value}
                         onClick={() => { setBrandColor(c.value); setColorOpen(false) }}
                         className={cn(
-                          "w-full flex items-center gap-3 px-3 py-2.5 transition-all",
+                          "w-full flex items-center gap-3 px-3.5 py-2.5 transition-all",
                           brandColor === c.value
                             ? "bg-gold/10"
-                            : "hover:bg-gold/5 active:bg-gold/10"
+                            : "hover:bg-white/[0.03] active:bg-gold/10",
+                          i > 0 && "border-t border-white/[0.04]"
                         )}
                       >
                         <div
-                          className="w-5 h-5 rounded-full border-2 shrink-0"
+                          className="w-5 h-5 rounded-full shrink-0 ring-2 ring-offset-1 ring-offset-transparent"
                           style={{
                             backgroundColor: c.value,
-                            borderColor: brandColor === c.value ? "#C5A059" : "rgba(255,255,255,0.1)",
+                            boxShadow: brandColor === c.value ? `0 0 8px ${c.value}60` : "none",
+                            ["--tw-ring-color" as string]: brandColor === c.value ? "#C5A059" : "rgba(255,255,255,0.08)",
                           }}
                         />
                         <span className={cn(
                           "flex-1 text-left text-sm",
-                          brandColor === c.value ? "font-semibold text-gold" : "text-foreground"
+                          brandColor === c.value ? "font-semibold text-gold" : "text-foreground/80"
                         )}>{c.name}</span>
                         {brandColor === c.value && (
                           <CheckCircle2 className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
@@ -1334,7 +1336,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
   )
 }
 
-// ── Export ────────���────────��────────────────────────────────────
+// ── Export ───���────���────────��────────────────────────────────────
 
 export function SettingsTab() {
   const [screen, setScreen] = useState<SettingsScreen>("main")
