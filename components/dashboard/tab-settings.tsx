@@ -297,13 +297,11 @@ const BRAND_COLORS = [
 function EnterpriseScreen({ onBack }: { onBack: () => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [saved, setSaved] = useState(false)
-  const [colorOpen, setColorOpen] = useState(false)
 
   // Identité visuelle
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [logoName, setLogoName] = useState("")
   const [brandColor, setBrandColor] = useState("#C5A059")
-  const selectedColorObj = BRAND_COLORS.find((c) => c.value === brandColor) || BRAND_COLORS[0]
 
   // Informations légales
   const [legal, setLegal] = useState({
@@ -343,7 +341,7 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
 
         {/* ── Section 1: Identite Visuelle ── */}
         <SectionLabel>Identite visuelle</SectionLabel>
-        <GlassCard className="mb-3 overflow-visible">
+        <GlassCard className="mb-3">
           {/* Logo Upload */}
           <div className="p-3">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Logo de l&apos;entreprise</p>
@@ -384,71 +382,51 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
             </button>
           </div>
 
-          {/* Brand Color Dropdown */}
-          <div className="relative z-50 px-3 pb-3">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2 flex items-center gap-1.5">
+          {/* Brand Color Pastilles */}
+          <div className="px-3 pb-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2.5 flex items-center gap-1.5">
               <Palette className="h-3 w-3" strokeWidth={1.5} />
               Couleur de marque
             </p>
-            <div className="relative">
-              <button
-                onClick={() => setColorOpen(!colorOpen)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-secondary/60 border text-sm transition-all active:scale-[0.99]",
-                  colorOpen ? "border-gold/50 bg-gold/5" : "border-onyx-border/50 hover:border-gold/30"
-                )}
-              >
-                <div
-                  className="w-6 h-6 rounded-full border-2 shrink-0"
-                  style={{ backgroundColor: brandColor, borderColor: "#C5A059" }}
-                />
-                <span className="flex-1 text-left font-medium text-foreground">{selectedColorObj.name}</span>
-                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", colorOpen && "rotate-180")} strokeWidth={1.5} />
-              </button>
-
-              <AnimatePresence>
-                {colorOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute z-[100] top-full left-0 w-full mt-1.5 rounded-xl bg-onyx-card border border-gold/20 shadow-2xl shadow-black/60 overflow-hidden backdrop-blur-xl"
+            <div className="flex items-start justify-between gap-1">
+              {BRAND_COLORS.map((c) => {
+                const isActive = brandColor === c.value
+                return (
+                  <button
+                    key={c.value}
+                    onClick={() => setBrandColor(c.value)}
+                    className="flex flex-col items-center gap-1.5 flex-1 min-w-0 active:scale-95 transition-transform"
                   >
-                    {BRAND_COLORS.map((c, i) => (
-                      <button
-                        key={c.value}
-                        onClick={() => { setBrandColor(c.value); setColorOpen(false) }}
+                    <div className="relative">
+                      <div
                         className={cn(
-                          "w-full flex items-center gap-3 px-3.5 py-2.5 transition-all",
-                          brandColor === c.value
-                            ? "bg-gold/10"
-                            : "hover:bg-white/[0.03] active:bg-gold/10",
-                          i > 0 && "border-t border-white/[0.04]"
+                          "w-9 h-9 rounded-full transition-all duration-200",
+                          isActive && "ring-2 ring-gold ring-offset-2 ring-offset-background"
                         )}
-                      >
-                        <div
-                          className="w-5 h-5 rounded-full shrink-0 ring-2 ring-offset-1 ring-offset-transparent"
-                          style={{
-                            backgroundColor: c.value,
-                            boxShadow: brandColor === c.value ? `0 0 8px ${c.value}60` : "none",
-                            ["--tw-ring-color" as string]: brandColor === c.value ? "#C5A059" : "rgba(255,255,255,0.08)",
-                          }}
-                        />
-                        <span className={cn(
-                          "flex-1 text-left text-sm",
-                          brandColor === c.value ? "font-semibold text-gold" : "text-foreground/80"
-                        )}>{c.name}</span>
-                        {brandColor === c.value && (
-                          <CheckCircle2 className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
-                        )}
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                        style={{
+                          backgroundColor: c.value,
+                          boxShadow: isActive ? `0 0 12px ${c.value}50` : "none",
+                        }}
+                      />
+                      {isActive && (
+                        <motion.div
+                          layoutId="color-check"
+                          className="absolute inset-0 flex items-center justify-center"
+                          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                        >
+                          <CheckCircle2 className="h-4 w-4 text-white drop-shadow-md" strokeWidth={2} />
+                        </motion.div>
+                      )}
+                    </div>
+                    <span className={cn(
+                      "text-[8px] leading-tight text-center truncate w-full",
+                      isActive ? "font-semibold text-gold" : "text-muted-foreground/60"
+                    )}>{c.name}</span>
+                  </button>
+                )
+              })}
             </div>
-            <p className="text-[9px] text-muted-foreground/50 mt-1.5">
+            <p className="text-[9px] text-muted-foreground/50 mt-2">
               Appliquée aux liens clients, factures et bons de commande.
             </p>
           </div>
