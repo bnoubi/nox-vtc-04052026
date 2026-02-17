@@ -343,7 +343,7 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
 
         {/* ── Section 1: Identite Visuelle ── */}
         <SectionLabel>Identite visuelle</SectionLabel>
-        <GlassCard className="mb-3">
+        <GlassCard className="mb-3 overflow-visible">
           {/* Logo Upload */}
           <div className="p-3">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Logo de l&apos;entreprise</p>
