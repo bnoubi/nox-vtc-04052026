@@ -37,14 +37,16 @@ import {
   ImageIcon,
   CheckCircle2,
   ChevronDown,
+  Plus,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePlan } from "./plan-context"
 import { GoldConfetti } from "./gold-confetti"
 import { allDrivers, allVehicles } from "./data"
+import { AddDriverModal } from "./add-driver-modal"
 
-const PRO_LIMIT = 2
-const GOLD_LIMIT = 10
+const PRO_LIMIT = 1
+const GOLD_LIMIT = 5
 
 type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security"
 
@@ -700,8 +702,8 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
 
   const plans = [
     { id: "SOLO", name: "Solo", price: "Gratuit", features: ["1 chauffeur", "1 véhicule", "5 documents/mois"], active: plan === "SOLO" as unknown as boolean },
-    { id: "PRO", name: "Pro", price: "29€/mois", features: ["2 chauffeurs", "2 véhicules", "Documents illimités"], active: plan === "PRO" },
-    { id: "GOLD", name: "Gold", price: "79€/mois", features: ["10 chauffeurs", "10 véhicules", "Support 24/7", "API & intégrations"], active: isGold },
+    { id: "PRO", name: "Pro", price: "29€/mois", features: ["1 chauffeur", "1 véhicule", "Documents illimités"], active: plan === "PRO" },
+      { id: "GOLD", name: "Gold", price: "79€/mois", features: ["5 chauffeurs", "5 véhicules", "Support 24/7", "API & intégrations"], active: isGold },
   ]
 
   return (
@@ -842,6 +844,7 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
   const visibleDrivers = isGold ? allDrivers : allDrivers.slice(0, PRO_LIMIT)
   const maxSlots = isGold ? GOLD_LIMIT : PRO_LIMIT
   const [showConfetti, setShowConfetti] = useState(false)
+  const [showAddDriver, setShowAddDriver] = useState(false)
 
   function handleUpgrade() {
     setShowConfetti(true)
@@ -849,7 +852,7 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <motion.div key="team" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
+    <motion.div key="team" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full relative">
       <GoldConfetti trigger={showConfetti} />
       <SubScreenHeader title="Gestion de l'Équipe" onBack={onBack} />
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-24">
@@ -891,6 +894,19 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
         </AnimatePresence>
         {!isGold && <LockedSlot type="driver" onUpgrade={handleUpgrade} />}
       </div>
+
+      {/* FAB - Add Driver */}
+      <button
+        onClick={() => setShowAddDriver(true)}
+        className="absolute bottom-6 right-4 w-14 h-14 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 hover:bg-gold-light transition-all z-30"
+      >
+        <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2} />
+      </button>
+
+      <AddDriverModal
+        open={showAddDriver}
+        onClose={() => setShowAddDriver(false)}
+      />
     </motion.div>
   )
 }
@@ -1216,7 +1232,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
     {
       icon: <Users className="h-4 w-4" strokeWidth={1.5} />,
       label: "Gestion de l'\u00c9quipe",
-      description: isGold ? `${allDrivers.length} chauffeurs actifs` : "2 chauffeurs actifs",
+      description: isGold ? `${allDrivers.length} chauffeurs actifs` : "1 chauffeur actif",
       screen: "team",
     },
     {

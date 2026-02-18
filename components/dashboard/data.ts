@@ -18,11 +18,6 @@ export const allDrivers: Driver[] = [
   { id: "3", name: "Lucas Fernandez", initials: "LF", online: true },
   { id: "4", name: "Amélie Rousseau", initials: "AR", online: true },
   { id: "5", name: "Thomas Nguyen", initials: "TN", online: false },
-  { id: "6", name: "Fatima El Amrani", initials: "FA", online: true },
-  { id: "7", name: "Pierre Leclerc", initials: "PL", online: false },
-  { id: "8", name: "Nadia Bousquet", initials: "NB", online: true },
-  { id: "9", name: "Julien Morel", initials: "JM", online: true },
-  { id: "10", name: "Yasmine Khedira", initials: "YK", online: false },
 ]
 
 export const allVehicles: Vehicle[] = [

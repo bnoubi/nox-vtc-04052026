@@ -4,6 +4,7 @@ import React, { useState } from "react"
 import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AddClientModal } from "./add-client-modal"
+import { AddDriverModal } from "./add-driver-modal"
 import { CreateBCFlow } from "./create-bc"
 import { CreateInvoiceFlow } from "./create-invoice"
 import { usePlan } from "./plan-context"
@@ -57,6 +58,7 @@ function QuickActionTile({ icon, label, disabled, onClick }: QuickActionProps) {
 
 export function QuickActions() {
   const [showClientModal, setShowClientModal] = useState(false)
+  const [showDriverModal, setShowDriverModal] = useState(false)
   const [showBCFlow, setShowBCFlow] = useState(false)
   const [showInvoiceFlow, setShowInvoiceFlow] = useState(false)
   const { plan } = usePlan()
@@ -91,13 +93,17 @@ export function QuickActions() {
         <QuickActionTile
           icon={<UserPlus className="h-5 w-5" strokeWidth={1.5} />}
           label="+ Chauffeur"
-          disabled={isPro}
+          onClick={() => setShowDriverModal(true)}
         />
       </div>
 
       <AddClientModal
         open={showClientModal}
         onClose={() => setShowClientModal(false)}
+      />
+      <AddDriverModal
+        open={showDriverModal}
+        onClose={() => setShowDriverModal(false)}
       />
       <CreateBCFlow
         open={showBCFlow}
