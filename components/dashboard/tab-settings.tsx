@@ -44,6 +44,7 @@ import { usePlan } from "./plan-context"
 import { GoldConfetti } from "./gold-confetti"
 import { allDrivers, allVehicles } from "./data"
 import { AddDriverModal } from "./add-driver-modal"
+import { AddVehicleFlow } from "./add-vehicle-modal"
 
 const PRO_LIMIT = 1
 const GOLD_LIMIT = 5
@@ -919,6 +920,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   const visibleVehicles = isGold ? allVehicles : allVehicles.slice(0, PRO_LIMIT)
   const maxSlots = isGold ? GOLD_LIMIT : PRO_LIMIT
   const [showConfetti, setShowConfetti] = useState(false)
+  const [showAddVehicle, setShowAddVehicle] = useState(false)
 
   function handleUpgrade() {
     setShowConfetti(true)
@@ -926,7 +928,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <motion.div key="fleet" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
+    <motion.div key="fleet" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full relative">
       <GoldConfetti trigger={showConfetti} />
       <SubScreenHeader title="Gestion du Parc" onBack={onBack} />
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-24">
@@ -970,6 +972,19 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
         </AnimatePresence>
         {!isGold && <LockedSlot type="vehicle" onUpgrade={handleUpgrade} />}
       </div>
+
+      {/* FAB - Add Vehicle */}
+      <button
+        onClick={() => setShowAddVehicle(true)}
+        className="absolute bottom-6 right-4 w-14 h-14 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 hover:bg-gold-light transition-all z-30"
+      >
+        <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2} />
+      </button>
+
+      <AddVehicleFlow
+        open={showAddVehicle}
+        onClose={() => setShowAddVehicle(false)}
+      />
     </motion.div>
   )
 }
@@ -1238,7 +1253,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
     {
       icon: <Car className="h-4 w-4" strokeWidth={1.5} />,
       label: "Gestion du Parc",
-      description: isGold ? `${allVehicles.length} véhicules en service` : "2 véhicules en service",
+      description: isGold ? `${allVehicles.length} véhicules en service` : "1 véhicule en service",
       screen: "fleet",
     },
   ]

@@ -25,12 +25,7 @@ export const allVehicles: Vehicle[] = [
   { id: "2", model: "BMW Série 7", plate: "EF-456-GH", inService: true },
   { id: "3", model: "Audi A8 L", plate: "IJ-789-KL", inService: true },
   { id: "4", model: "Mercedes Classe V", plate: "MN-012-OP", inService: true },
-  { id: "5", model: "Van Mercedes Sprinter", plate: "QR-345-ST", inService: false },
-  { id: "6", model: "Tesla Model S", plate: "UV-678-WX", inService: true },
-  { id: "7", model: "Range Rover Autobiography", plate: "YZ-901-AB", inService: true },
-  { id: "8", model: "Porsche Panamera", plate: "CD-234-EF", inService: false },
-  { id: "9", model: "Lexus LS 500h", plate: "GH-567-IJ", inService: true },
-  { id: "10", model: "Bentley Flying Spur", plate: "KL-890-MN", inService: true },
+  { id: "5", model: "Tesla Model S", plate: "QR-345-ST", inService: false },
 ]
 
 export const existingClients = [
