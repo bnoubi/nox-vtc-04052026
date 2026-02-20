@@ -46,8 +46,9 @@ import { allDrivers, allVehicles } from "./data"
 import { AddDriverModal } from "./add-driver-modal"
 import { AddVehicleFlow } from "./add-vehicle-modal"
 
-const PRO_LIMIT = 1
-const GOLD_LIMIT = 5
+const SOLO_LIMIT = 1
+const PRO_LIMIT = 2
+const GOLD_LIMIT = 10
 
 type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security"
 
@@ -702,9 +703,9 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
   }
 
   const plans = [
-    { id: "SOLO", name: "Solo", price: "Gratuit", features: ["1 chauffeur", "1 véhicule", "5 documents/mois"], active: plan === "SOLO" as unknown as boolean },
-    { id: "PRO", name: "Pro", price: "29€/mois", features: ["1 chauffeur", "1 véhicule", "Documents illimités"], active: plan === "PRO" },
-      { id: "GOLD", name: "Gold", price: "79€/mois", features: ["5 chauffeurs", "5 véhicules", "Support 24/7", "API & intégrations"], active: isGold },
+    { id: "SOLO", name: "Solo", price: "Gratuit", features: ["1 chauffeur", "1 véhicule", "5 documents/mois"], active: plan === "SOLO" },
+    { id: "PRO", name: "Pro", price: "29€/mois", features: ["2 chauffeurs", "2 véhicules", "Documents illimités"], active: plan === "PRO" },
+    { id: "GOLD", name: "Gold", price: "79€/mois", features: ["10 chauffeurs", "10 véhicules", "Support 24/7", "API & intégrations"], active: isGold },
   ]
 
   return (
@@ -797,7 +798,11 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
 // ── Locked Slot ───────────────────────────────────────────────
 
 function LockedSlot({ type, onUpgrade }: { type: "driver" | "vehicle"; onUpgrade: () => void }) {
-  const limit = type === "driver" ? "chauffeurs" : "véhicules"
+  const { plan } = usePlan()
+  const limitLabel = type === "driver" ? "chauffeurs" : "véhicules"
+  const currentLimit = plan === "SOLO" ? SOLO_LIMIT : PRO_LIMIT
+  const nextPlan = plan === "SOLO" ? "PRO" : "GOLD"
+  const nextLimit = plan === "SOLO" ? PRO_LIMIT : GOLD_LIMIT
   return (
     <div className="relative min-h-[320px] rounded-2xl bg-onyx-card/40 border border-onyx-border/30 overflow-hidden">
       <div className="absolute inset-0 p-5 opacity-10">
@@ -821,16 +826,16 @@ function LockedSlot({ type, onUpgrade }: { type: "driver" | "vehicle"; onUpgrade
           <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
         </div>
         <div className="text-center">
-          <p className="text-sm font-semibold font-heading text-foreground mb-1.5">Limite PRO atteinte</p>
+          <p className="text-sm font-semibold font-heading text-foreground mb-1.5">Limite {plan} atteinte</p>
           <p className="text-xs text-muted-foreground leading-relaxed max-w-[240px]">
-            Vous utilisez {PRO_LIMIT}/{PRO_LIMIT} {limit}.{" "}
-            <span className="text-gold font-medium">Passez à l&apos;offre GOLD</span>{" "}
-            pour gérer jusqu&apos;à {GOLD_LIMIT} {limit}.
+            Vous utilisez {currentLimit}/{currentLimit} {limitLabel}.{" "}
+            <span className="text-gold font-medium">Passez à l&apos;offre {nextPlan}</span>{" "}
+            pour gérer jusqu&apos;à {nextLimit} {limitLabel}.
           </p>
         </div>
         <button onClick={onUpgrade} className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold font-heading hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
           <Crown className="h-4 w-4" strokeWidth={1.5} />
-          Débloquer l&apos;offre GOLD
+          Passer à l&apos;offre {nextPlan}
         </button>
       </div>
     </div>
@@ -842,8 +847,9 @@ function LockedSlot({ type, onUpgrade }: { type: "driver" | "vehicle"; onUpgrade
 function TeamScreen({ onBack }: { onBack: () => void }) {
   const { plan, upgrade } = usePlan()
   const isGold = plan === "GOLD"
-  const visibleDrivers = isGold ? allDrivers : allDrivers.slice(0, PRO_LIMIT)
-  const maxSlots = isGold ? GOLD_LIMIT : PRO_LIMIT
+  const limit = plan === "SOLO" ? SOLO_LIMIT : plan === "PRO" ? PRO_LIMIT : GOLD_LIMIT
+  const visibleDrivers = allDrivers.slice(0, limit)
+  const maxSlots = limit
   const [showConfetti, setShowConfetti] = useState(false)
   const [showAddDriver, setShowAddDriver] = useState(false)
 
@@ -893,7 +899,7 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
             </motion.div>
           ))}
         </AnimatePresence>
-        {!isGold && <LockedSlot type="driver" onUpgrade={handleUpgrade} />}
+        {plan !== "GOLD" && <LockedSlot type="driver" onUpgrade={handleUpgrade} />}
       </div>
 
       {/* FAB - Add Driver */}
@@ -917,8 +923,9 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
 function FleetScreen({ onBack }: { onBack: () => void }) {
   const { plan, upgrade } = usePlan()
   const isGold = plan === "GOLD"
-  const visibleVehicles = isGold ? allVehicles : allVehicles.slice(0, PRO_LIMIT)
-  const maxSlots = isGold ? GOLD_LIMIT : PRO_LIMIT
+  const limit = plan === "SOLO" ? SOLO_LIMIT : plan === "PRO" ? PRO_LIMIT : GOLD_LIMIT
+  const visibleVehicles = allVehicles.slice(0, limit)
+  const maxSlots = limit
   const [showConfetti, setShowConfetti] = useState(false)
   const [showAddVehicle, setShowAddVehicle] = useState(false)
 
@@ -970,7 +977,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
             </motion.div>
           ))}
         </AnimatePresence>
-        {!isGold && <LockedSlot type="vehicle" onUpgrade={handleUpgrade} />}
+        {plan !== "GOLD" && <LockedSlot type="vehicle" onUpgrade={handleUpgrade} />}
       </div>
 
       {/* FAB - Add Vehicle */}
@@ -1240,20 +1247,20 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
     { icon: <User className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Profil", description: "Jean Dupont, jean.dupont@nox-vtc.fr", screen: "profile" },
     { icon: <Building2 className="h-4 w-4" strokeWidth={1.5} />, label: "Profil Entreprise", description: "NoX VTC SAS \u2022 SIRET 912 345 678", screen: "enterprise" },
     { icon: <Landmark className="h-4 w-4" strokeWidth={1.5} />, label: "Infos Bancaires", description: "IBAN \u2022\u2022\u2022\u2022 4668", badge: "AES-256", screen: "banking" },
-    { icon: <Crown className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Abonnement", description: isGold ? "Offre GOLD active" : "Offre PRO active", screen: "subscription" },
+    { icon: <Crown className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Abonnement", description: isGold ? "Offre GOLD active" : plan === "PRO" ? "Offre PRO active" : "Offre SOLO active", screen: "subscription" },
   ]
 
   const managementSettings: SettingItem[] = [
     {
       icon: <Users className="h-4 w-4" strokeWidth={1.5} />,
       label: "Gestion de l'\u00c9quipe",
-      description: isGold ? `${allDrivers.length} chauffeurs actifs` : "1 chauffeur actif",
+      description: isGold ? `${allDrivers.length} chauffeurs actifs` : plan === "PRO" ? "2 chauffeurs max" : "0 chauffeur actif",
       screen: "team",
     },
     {
       icon: <Car className="h-4 w-4" strokeWidth={1.5} />,
       label: "Gestion du Parc",
-      description: isGold ? `${allVehicles.length} véhicules en service` : "1 véhicule en service",
+      description: isGold ? `${allVehicles.length} véhicules en service` : plan === "PRO" ? "2 véhicules max" : "0 véhicule actif",
       screen: "fleet",
     },
   ]

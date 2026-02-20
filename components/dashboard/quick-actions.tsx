@@ -8,7 +8,7 @@ import { AddDriverModal } from "./add-driver-modal"
 import { AddVehicleFlow } from "./add-vehicle-modal"
 import { CreateBCFlow } from "./create-bc"
 import { CreateInvoiceFlow } from "./create-invoice"
-import { usePlan } from "./plan-context"
+import { usePlan, PLAN_LIMITS } from "./plan-context"
 
 interface QuickActionProps {
   icon: React.ReactNode
@@ -63,8 +63,10 @@ export function QuickActions() {
   const [showVehicleFlow, setShowVehicleFlow] = useState(false)
   const [showBCFlow, setShowBCFlow] = useState(false)
   const [showInvoiceFlow, setShowInvoiceFlow] = useState(false)
-  const { plan } = usePlan()
-  const isPro = plan === "PRO"
+  const { plan, driverCount, vehicleCount } = usePlan()
+  const limits = PLAN_LIMITS[plan]
+  const driversFull = driverCount >= limits.drivers
+  const vehiclesFull = vehicleCount >= limits.vehicles
 
   return (
     <section className="px-4">
@@ -90,11 +92,13 @@ export function QuickActions() {
         <QuickActionTile
           icon={<Car className="h-5 w-5" strokeWidth={1.5} />}
           label="+ Véhicule"
+          disabled={vehiclesFull}
           onClick={() => setShowVehicleFlow(true)}
         />
         <QuickActionTile
           icon={<UserPlus className="h-5 w-5" strokeWidth={1.5} />}
           label="+ Chauffeur"
+          disabled={driversFull}
           onClick={() => setShowDriverModal(true)}
         />
       </div>
