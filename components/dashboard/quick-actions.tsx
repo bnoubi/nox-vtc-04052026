@@ -58,8 +58,8 @@ function QuickActionTile({ icon, label, locked, onClick, onLockedClick }: QuickA
   )
 }
 
-/* ── Upgrade Modal ── */
-function UpgradeModal({ open, onClose, onUpgrade }: { open: boolean; onClose: () => void; onUpgrade: () => void }) {
+/* ── Upgrade Modal (dual PRO / GOLD) ── */
+function UpgradeModal({ open, onClose, onUpgrade }: { open: boolean; onClose: () => void; onUpgrade: (target: "PRO" | "GOLD") => void }) {
   return (
     <AnimatePresence>
       {open && (
@@ -77,8 +77,8 @@ function UpgradeModal({ open, onClose, onUpgrade }: { open: boolean; onClose: ()
             transition={{ type: "spring", stiffness: 400, damping: 28 }}
             className="relative w-full max-w-xs rounded-3xl bg-onyx-card border border-gold/20 p-6 shadow-2xl shadow-black/50"
           >
-            <button onClick={onClose} className="absolute top-3 right-3 p-1 rounded-full hover:bg-white/5">
-              <X className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+            <button onClick={onClose} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
+              <X className="h-4 w-4 text-foreground" strokeWidth={2} />
             </button>
             <div className="flex flex-col items-center text-center gap-4">
               <div className="w-14 h-14 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center">
@@ -87,16 +87,27 @@ function UpgradeModal({ open, onClose, onUpgrade }: { open: boolean; onClose: ()
               <div>
                 <p className="text-sm font-semibold text-foreground mb-1">Limite SOLO atteinte</p>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Passez a l&apos;offre PRO pour gerer davantage de ressources.
+                  Choisissez une offre pour gerer davantage de ressources.
                 </p>
               </div>
-              <button
-                onClick={() => { onUpgrade(); onClose() }}
-                className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold hover:bg-gold-light active:scale-[0.97] transition-all gold-glow"
-              >
-                <Crown className="h-4 w-4" strokeWidth={1.5} />
-                Passer a l&apos;offre PRO
-              </button>
+              <div className="w-full flex gap-2">
+                <button
+                  onClick={() => { onUpgrade("PRO"); onClose() }}
+                  className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25 active:scale-[0.97] transition-all"
+                >
+                  <Crown className="h-4 w-4" strokeWidth={1.5} />
+                  <span className="text-[11px] font-bold">PRO</span>
+                  <span className="text-[10px] text-gold/70 font-medium">4,99&#8364;/mois</span>
+                </button>
+                <button
+                  onClick={() => { onUpgrade("GOLD"); onClose() }}
+                  className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold text-primary-foreground hover:bg-gold-light active:scale-[0.97] transition-all gold-glow"
+                >
+                  <Crown className="h-4 w-4" strokeWidth={1.5} />
+                  <span className="text-[11px] font-bold">GOLD</span>
+                  <span className="text-[10px] text-primary-foreground/70 font-medium">9,99&#8364;/mois</span>
+                </button>
+              </div>
             </div>
           </motion.div>
         </motion.div>
@@ -157,7 +168,7 @@ export function QuickActions() {
       <UpgradeModal
         open={showUpgrade}
         onClose={() => setShowUpgrade(false)}
-        onUpgrade={upgrade}
+        onUpgrade={(target) => upgrade(target)}
       />
       <AddClientModal
         open={showClientModal}

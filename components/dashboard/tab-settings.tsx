@@ -37,6 +37,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Plus,
+  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePlan } from "./plan-context"
@@ -796,14 +797,12 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
 
 // ── Locked Slot ───────────────────────────────────────────────
 
-function LockedSlot({ type, onUpgrade }: { type: "driver" | "vehicle"; onUpgrade: () => void }) {
-  const { plan } = usePlan()
+function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => void }) {
+  const { plan, upgrade } = usePlan()
   const limitLabel = type === "driver" ? "chauffeurs" : "véhicules"
   const currentLimit = plan === "SOLO" ? SOLO_LIMIT : PRO_LIMIT
-  const nextPlan = plan === "SOLO" ? "PRO" : "GOLD"
-  const nextLimit = plan === "SOLO" ? PRO_LIMIT : GOLD_LIMIT
   return (
-    <div className="relative min-h-[320px] rounded-2xl bg-onyx-card/40 border border-onyx-border/30 overflow-hidden">
+    <div className="relative min-h-[280px] rounded-2xl bg-onyx-card/40 border border-onyx-border/30 overflow-hidden">
       <div className="absolute inset-0 p-5 opacity-10">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-onyx-border/50" />
@@ -820,22 +819,28 @@ function LockedSlot({ type, onUpgrade }: { type: "driver" | "vehicle"; onUpgrade
           </div>
         </div>
       </div>
-      <div className="relative z-10 flex flex-col items-center justify-center gap-6 p-8 min-h-[320px]">
+      <div className="relative z-10 flex flex-col items-center justify-center gap-5 p-6 min-h-[280px]">
         <div className="w-14 h-14 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center">
           <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
         </div>
         <div className="text-center">
           <p className="text-sm font-semibold font-heading text-foreground mb-1.5">Limite {plan} atteinte</p>
           <p className="text-xs text-muted-foreground leading-relaxed max-w-[240px]">
-            Vous utilisez {currentLimit}/{currentLimit} {limitLabel}.{" "}
-            <span className="text-gold font-medium">Passez à l&apos;offre {nextPlan}</span>{" "}
-            pour gérer jusqu&apos;à {nextLimit} {limitLabel}.
+            Vous utilisez {currentLimit}/{currentLimit} {limitLabel}. Choisissez une offre pour en ajouter davantage.
           </p>
         </div>
-        <button onClick={onUpgrade} className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold font-heading hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
-          <Crown className="h-4 w-4" strokeWidth={1.5} />
-          Passer à l&apos;offre {nextPlan}
-        </button>
+        <div className="w-full flex gap-2 max-w-[260px]">
+          <button onClick={() => upgrade("PRO")} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25 active:scale-[0.97] transition-all">
+            <Crown className="h-4 w-4" strokeWidth={1.5} />
+            <span className="text-[11px] font-bold">PRO</span>
+            <span className="text-[10px] text-gold/70 font-medium">4,99&#8364;/mois</span>
+          </button>
+          <button onClick={() => upgrade("GOLD")} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold text-primary-foreground hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
+            <Crown className="h-4 w-4" strokeWidth={1.5} />
+            <span className="text-[11px] font-bold">GOLD</span>
+            <span className="text-[10px] text-primary-foreground/70 font-medium">9,99&#8364;/mois</span>
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -922,18 +927,29 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-6">
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowUpgradeModal(false)} />
             <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ type: "spring", stiffness: 400, damping: 28 }} className="relative w-full max-w-xs rounded-3xl bg-onyx-card border border-gold/20 p-6 shadow-2xl">
+              <button onClick={() => setShowUpgradeModal(false)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
+                <X className="h-4 w-4 text-foreground" strokeWidth={2} />
+              </button>
               <div className="flex flex-col items-center text-center gap-4">
                 <div className="w-14 h-14 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center">
                   <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground mb-1">Limite {plan} atteinte</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">Passez a l&apos;offre {plan === "SOLO" ? "PRO" : "GOLD"} pour ajouter plus de chauffeurs.</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">Choisissez une offre pour ajouter plus de chauffeurs.</p>
                 </div>
-                <button onClick={() => { handleUpgrade(); setShowUpgradeModal(false) }} className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold active:scale-[0.97] transition-all gold-glow">
-                  <Crown className="h-4 w-4" strokeWidth={1.5} />
-                  Passer a l&apos;offre {plan === "SOLO" ? "PRO" : "GOLD"}
-                </button>
+                <div className="w-full flex gap-2">
+                  <button onClick={() => { upgrade("PRO"); setShowUpgradeModal(false) }} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25 active:scale-[0.97] transition-all">
+                    <Crown className="h-4 w-4" strokeWidth={1.5} />
+                    <span className="text-[11px] font-bold">PRO</span>
+                    <span className="text-[10px] text-gold/70 font-medium">4,99&#8364;/mois</span>
+                  </button>
+                  <button onClick={() => { upgrade("GOLD"); setShowUpgradeModal(false) }} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold text-primary-foreground hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
+                    <Crown className="h-4 w-4" strokeWidth={1.5} />
+                    <span className="text-[11px] font-bold">GOLD</span>
+                    <span className="text-[10px] text-primary-foreground/70 font-medium">9,99&#8364;/mois</span>
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -1024,18 +1040,29 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-6">
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowUpgradeModal(false)} />
             <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ type: "spring", stiffness: 400, damping: 28 }} className="relative w-full max-w-xs rounded-3xl bg-onyx-card border border-gold/20 p-6 shadow-2xl">
+              <button onClick={() => setShowUpgradeModal(false)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
+                <X className="h-4 w-4 text-foreground" strokeWidth={2} />
+              </button>
               <div className="flex flex-col items-center text-center gap-4">
                 <div className="w-14 h-14 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center">
                   <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground mb-1">Limite {plan} atteinte</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">Passez a l&apos;offre {plan === "SOLO" ? "PRO" : "GOLD"} pour ajouter plus de vehicules.</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">Choisissez une offre pour ajouter plus de vehicules.</p>
                 </div>
-                <button onClick={() => { handleUpgrade(); setShowUpgradeModal(false) }} className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold active:scale-[0.97] transition-all gold-glow">
-                  <Crown className="h-4 w-4" strokeWidth={1.5} />
-                  Passer a l&apos;offre {plan === "SOLO" ? "PRO" : "GOLD"}
-                </button>
+                <div className="w-full flex gap-2">
+                  <button onClick={() => { upgrade("PRO"); setShowUpgradeModal(false) }} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25 active:scale-[0.97] transition-all">
+                    <Crown className="h-4 w-4" strokeWidth={1.5} />
+                    <span className="text-[11px] font-bold">PRO</span>
+                    <span className="text-[10px] text-gold/70 font-medium">4,99&#8364;/mois</span>
+                  </button>
+                  <button onClick={() => { upgrade("GOLD"); setShowUpgradeModal(false) }} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold text-primary-foreground hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
+                    <Crown className="h-4 w-4" strokeWidth={1.5} />
+                    <span className="text-[11px] font-bold">GOLD</span>
+                    <span className="text-[10px] text-primary-foreground/70 font-medium">9,99&#8364;/mois</span>
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -1289,7 +1316,7 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
 // ── Main Settings ─────────────────────────────────────────────
 
 function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => void }) {
-  const { plan } = usePlan()
+  const { plan, tokens } = usePlan()
   const isGold = plan === "GOLD"
 
   const accountSettings: SettingItem[] = [
@@ -1335,15 +1362,15 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
 
       <div className="flex-1 overflow-y-auto pb-24">
         {/* NoX Wallet */}
-        <div className="mx-4 mb-5 p-5 rounded-2xl bg-onyx-card/80 backdrop-blur-sm border border-onyx-border/30 opacity-40 pointer-events-none">
+        <div className="mx-4 mb-5 p-5 rounded-2xl bg-onyx-card/80 backdrop-blur-sm border border-onyx-border/30">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-gold/10 flex items-center justify-center">
-              <Coins className="h-5 w-5 text-gold/60" strokeWidth={1.5} />
+              <Coins className="h-5 w-5 text-gold" strokeWidth={1.5} />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">NoX Wallet</p>
-              <p className="text-xl font-bold font-heading text-foreground/60">
-                5 <span className="text-gold/60 text-sm font-semibold">Crédits</span>
+              <p className="text-xl font-bold font-heading text-foreground">
+                {tokens} <span className="text-gold text-sm font-semibold">Jetons</span>
               </p>
             </div>
           </div>
