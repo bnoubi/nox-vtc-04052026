@@ -1,7 +1,8 @@
 "use client"
 
 import React, { useState } from "react"
-import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock } from "lucide-react"
+import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock, Crown, X } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { AddClientModal } from "./add-client-modal"
 import { AddDriverModal } from "./add-driver-modal"
@@ -13,32 +14,32 @@ import { usePlan, PLAN_LIMITS } from "./plan-context"
 interface QuickActionProps {
   icon: React.ReactNode
   label: string
-  disabled?: boolean
+  locked?: boolean
   onClick?: () => void
+  onLockedClick?: () => void
 }
 
-function QuickActionTile({ icon, label, disabled, onClick }: QuickActionProps) {
+function QuickActionTile({ icon, label, locked, onClick, onLockedClick }: QuickActionProps) {
   return (
     <button
-      onClick={onClick}
-      disabled={disabled}
+      onClick={locked ? onLockedClick : onClick}
       className={cn(
         "relative flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-2xl border transition-all duration-200",
-        disabled
-          ? "bg-onyx-card/50 border-onyx-border/50 opacity-60 cursor-not-allowed"
+        locked
+          ? "bg-onyx-card/50 border-onyx-border/50 opacity-60"
           : "bg-onyx-card border-gold/20 hover:border-gold/40 hover:gold-glow-sm active:scale-[0.98]",
       )}
     >
-      {disabled && (
+      {locked && (
         <div className="absolute top-1.5 right-1.5">
           <Lock className="h-3 w-3 text-gold/70" strokeWidth={1.5} />
         </div>
       )}
 
       <div
-        className={cn("p-2 rounded-lg", disabled ? "bg-onyx-border/30" : "bg-gold/10")}
+        className={cn("p-2 rounded-lg", locked ? "bg-onyx-border/30" : "bg-gold/10")}
       >
-        <span className={cn(disabled ? "text-muted-foreground" : "text-gold")}>
+        <span className={cn(locked ? "text-muted-foreground" : "text-gold")}>
           {React.cloneElement(icon as React.ReactElement, {
             className: "h-4 w-4",
           })}
@@ -48,12 +49,59 @@ function QuickActionTile({ icon, label, disabled, onClick }: QuickActionProps) {
       <span
         className={cn(
           "text-[10px] font-medium leading-tight text-center px-1",
-          disabled ? "text-muted-foreground" : "text-foreground",
+          locked ? "text-muted-foreground" : "text-foreground",
         )}
       >
         {label}
       </span>
     </button>
+  )
+}
+
+/* ── Upgrade Modal ── */
+function UpgradeModal({ open, onClose, onUpgrade }: { open: boolean; onClose: () => void; onUpgrade: () => void }) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-6"
+        >
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+          <motion.div
+            initial={{ scale: 0.92, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.92, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 28 }}
+            className="relative w-full max-w-xs rounded-3xl bg-onyx-card border border-gold/20 p-6 shadow-2xl shadow-black/50"
+          >
+            <button onClick={onClose} className="absolute top-3 right-3 p-1 rounded-full hover:bg-white/5">
+              <X className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+            </button>
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center">
+                <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground mb-1">Limite SOLO atteinte</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Passez a l&apos;offre PRO pour gerer davantage de ressources.
+                </p>
+              </div>
+              <button
+                onClick={() => { onUpgrade(); onClose() }}
+                className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold hover:bg-gold-light active:scale-[0.97] transition-all gold-glow"
+              >
+                <Crown className="h-4 w-4" strokeWidth={1.5} />
+                Passer a l&apos;offre PRO
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 
@@ -63,7 +111,8 @@ export function QuickActions() {
   const [showVehicleFlow, setShowVehicleFlow] = useState(false)
   const [showBCFlow, setShowBCFlow] = useState(false)
   const [showInvoiceFlow, setShowInvoiceFlow] = useState(false)
-  const { plan, driverCount, vehicleCount } = usePlan()
+  const [showUpgrade, setShowUpgrade] = useState(false)
+  const { plan, driverCount, vehicleCount, upgrade } = usePlan()
   const limits = PLAN_LIMITS[plan]
   const driversFull = driverCount >= limits.drivers
   const vehiclesFull = vehicleCount >= limits.vehicles
@@ -92,17 +141,24 @@ export function QuickActions() {
         <QuickActionTile
           icon={<Car className="h-5 w-5" strokeWidth={1.5} />}
           label="+ Véhicule"
-          disabled={vehiclesFull}
+          locked={vehiclesFull}
           onClick={() => setShowVehicleFlow(true)}
+          onLockedClick={() => setShowUpgrade(true)}
         />
         <QuickActionTile
           icon={<UserPlus className="h-5 w-5" strokeWidth={1.5} />}
           label="+ Chauffeur"
-          disabled={driversFull}
+          locked={driversFull}
           onClick={() => setShowDriverModal(true)}
+          onLockedClick={() => setShowUpgrade(true)}
         />
       </div>
 
+      <UpgradeModal
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        onUpgrade={upgrade}
+      />
       <AddClientModal
         open={showClientModal}
         onClose={() => setShowClientModal(false)}

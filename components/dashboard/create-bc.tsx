@@ -450,11 +450,9 @@ function ManualBCForm({ onBack, onClose, prefillClient }: { onBack: () => void; 
   const PRO_LIMIT = 2
 
   const driverOptions = (isGold ? allDrivers : allDrivers.slice(0, PRO_LIMIT))
-    .filter((d) => d.online)
-    .map((d) => ({ value: d.id, label: d.name, sub: "En ligne" }))
+    .map((d) => ({ value: d.id, label: d.name, sub: "Chauffeur VTC" }))
 
   const vehicleOptions = (isGold ? allVehicles : allVehicles.slice(0, PRO_LIMIT))
-    .filter((v) => v.inService)
     .map((v) => ({ value: v.id, label: v.model, sub: v.plate }))
 
   const clientOptions = existingClients.map((c) => ({

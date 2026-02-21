@@ -16,8 +16,7 @@ import {
   Users,
   Car,
   Lock,
-  Wifi,
-  WifiOff,
+
   Crown,
   Headphones,
   Mail,
@@ -845,13 +844,15 @@ function LockedSlot({ type, onUpgrade }: { type: "driver" | "vehicle"; onUpgrade
 // ── Team Screen ────────────────────────────────────────────────
 
 function TeamScreen({ onBack }: { onBack: () => void }) {
-  const { plan, upgrade } = usePlan()
+  const { plan, upgrade, driverCount } = usePlan()
   const isGold = plan === "GOLD"
   const limit = plan === "SOLO" ? SOLO_LIMIT : plan === "PRO" ? PRO_LIMIT : GOLD_LIMIT
   const visibleDrivers = allDrivers.slice(0, limit)
   const maxSlots = limit
+  const isFull = driverCount >= limit
   const [showConfetti, setShowConfetti] = useState(false)
   const [showAddDriver, setShowAddDriver] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
   function handleUpgrade() {
     setShowConfetti(true)
@@ -865,7 +866,7 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-24">
         <div className="flex items-center justify-between mb-1">
           <p className="text-[10px] text-muted-foreground uppercase font-semibold font-heading tracking-[0.15em]">
-            Chauffeurs actifs ({visibleDrivers.length}/{maxSlots})
+            Chauffeurs ({visibleDrivers.length}/{maxSlots})
           </p>
           {isGold && (
             <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-gold/15 border border-gold/30 gold-gradient-text">GOLD</span>
@@ -885,15 +886,7 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">{driver.name}</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  {driver.online
-                    ? <Wifi className="h-3 w-3 text-emerald-400" strokeWidth={1.5} />
-                    : <WifiOff className="h-3 w-3 text-muted-foreground" strokeWidth={1.5} />
-                  }
-                  <span className={cn("text-[11px] font-medium", driver.online ? "text-emerald-400" : "text-muted-foreground")}>
-                    {driver.online ? "En ligne" : "Hors ligne"}
-                  </span>
-                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Chauffeur VTC</p>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-gold/50" strokeWidth={1.5} />
             </motion.div>
@@ -902,18 +895,50 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
         {plan !== "GOLD" && <LockedSlot type="driver" onUpgrade={handleUpgrade} />}
       </div>
 
-      {/* FAB - Add Driver */}
+      {/* FAB - Add Driver (locked if full) */}
       <button
-        onClick={() => setShowAddDriver(true)}
-        className="absolute bottom-6 right-4 w-14 h-14 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 hover:bg-gold-light transition-all z-30"
+        onClick={() => isFull ? setShowUpgradeModal(true) : setShowAddDriver(true)}
+        className={cn(
+          "absolute bottom-6 right-4 w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-all z-30",
+          isFull
+            ? "bg-onyx-card border border-gold/30"
+            : "bg-gold gold-glow hover:bg-gold-light"
+        )}
       >
-        <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2} />
+        {isFull
+          ? <Lock className="h-5 w-5 text-gold" strokeWidth={1.5} />
+          : <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2} />
+        }
       </button>
 
       <AddDriverModal
         open={showAddDriver}
         onClose={() => setShowAddDriver(false)}
       />
+
+      {/* Upgrade Modal */}
+      <AnimatePresence>
+        {showUpgradeModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-6">
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowUpgradeModal(false)} />
+            <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ type: "spring", stiffness: 400, damping: 28 }} className="relative w-full max-w-xs rounded-3xl bg-onyx-card border border-gold/20 p-6 shadow-2xl">
+              <div className="flex flex-col items-center text-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center">
+                  <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground mb-1">Limite {plan} atteinte</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">Passez a l&apos;offre {plan === "SOLO" ? "PRO" : "GOLD"} pour ajouter plus de chauffeurs.</p>
+                </div>
+                <button onClick={() => { handleUpgrade(); setShowUpgradeModal(false) }} className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold active:scale-[0.97] transition-all gold-glow">
+                  <Crown className="h-4 w-4" strokeWidth={1.5} />
+                  Passer a l&apos;offre {plan === "SOLO" ? "PRO" : "GOLD"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
@@ -921,13 +946,15 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
 // ── Fleet Screen ───────────────────────────────────────────────
 
 function FleetScreen({ onBack }: { onBack: () => void }) {
-  const { plan, upgrade } = usePlan()
+  const { plan, upgrade, vehicleCount } = usePlan()
   const isGold = plan === "GOLD"
   const limit = plan === "SOLO" ? SOLO_LIMIT : plan === "PRO" ? PRO_LIMIT : GOLD_LIMIT
   const visibleVehicles = allVehicles.slice(0, limit)
   const maxSlots = limit
+  const isFull = vehicleCount >= limit
   const [showConfetti, setShowConfetti] = useState(false)
   const [showAddVehicle, setShowAddVehicle] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
   function handleUpgrade() {
     setShowConfetti(true)
@@ -941,7 +968,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-24">
         <div className="flex items-center justify-between mb-1">
           <p className="text-[10px] text-muted-foreground uppercase font-semibold font-heading tracking-[0.15em]">
-            Véhicules en service ({visibleVehicles.length}/{maxSlots})
+            Véhicules ({visibleVehicles.length}/{maxSlots})
           </p>
           {isGold && (
             <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-gold/15 border border-gold/30 gold-gradient-text">GOLD</span>
@@ -961,17 +988,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">{vehicle.model}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[11px] font-mono text-muted-foreground">{vehicle.plate}</span>
-                  <span className={cn(
-                    "px-1.5 py-0.5 text-[9px] font-medium rounded-full border",
-                    vehicle.inService
-                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                      : "bg-red-500/10 text-red-400 border-red-500/20"
-                  )}>
-                    {vehicle.inService ? "En service" : "Indisponible"}
-                  </span>
-                </div>
+                <p className="text-[11px] font-mono text-muted-foreground mt-0.5">{vehicle.plate}</p>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-gold/50" strokeWidth={1.5} />
             </motion.div>
@@ -980,18 +997,50 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
         {plan !== "GOLD" && <LockedSlot type="vehicle" onUpgrade={handleUpgrade} />}
       </div>
 
-      {/* FAB - Add Vehicle */}
+      {/* FAB - Add Vehicle (locked if full) */}
       <button
-        onClick={() => setShowAddVehicle(true)}
-        className="absolute bottom-6 right-4 w-14 h-14 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 hover:bg-gold-light transition-all z-30"
+        onClick={() => isFull ? setShowUpgradeModal(true) : setShowAddVehicle(true)}
+        className={cn(
+          "absolute bottom-6 right-4 w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-all z-30",
+          isFull
+            ? "bg-onyx-card border border-gold/30"
+            : "bg-gold gold-glow hover:bg-gold-light"
+        )}
       >
-        <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2} />
+        {isFull
+          ? <Lock className="h-5 w-5 text-gold" strokeWidth={1.5} />
+          : <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2} />
+        }
       </button>
 
       <AddVehicleFlow
         open={showAddVehicle}
         onClose={() => setShowAddVehicle(false)}
       />
+
+      {/* Upgrade Modal */}
+      <AnimatePresence>
+        {showUpgradeModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-6">
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowUpgradeModal(false)} />
+            <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ type: "spring", stiffness: 400, damping: 28 }} className="relative w-full max-w-xs rounded-3xl bg-onyx-card border border-gold/20 p-6 shadow-2xl">
+              <div className="flex flex-col items-center text-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center">
+                  <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground mb-1">Limite {plan} atteinte</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">Passez a l&apos;offre {plan === "SOLO" ? "PRO" : "GOLD"} pour ajouter plus de vehicules.</p>
+                </div>
+                <button onClick={() => { handleUpgrade(); setShowUpgradeModal(false) }} className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold active:scale-[0.97] transition-all gold-glow">
+                  <Crown className="h-4 w-4" strokeWidth={1.5} />
+                  Passer a l&apos;offre {plan === "SOLO" ? "PRO" : "GOLD"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

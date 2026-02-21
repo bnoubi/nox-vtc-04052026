@@ -43,11 +43,11 @@ export function DashboardHeader() {
           </span>
         </div>
 
-        {/* Wallet Badge */}
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-onyx-card/80 backdrop-blur-sm border border-gold/20">
-          <Coins className="h-3.5 w-3.5 text-gold" strokeWidth={1.5} />
-          <span className="text-[11px] font-bold text-gold">{tokens}</span>
-          <span className="text-[9px] font-medium text-gold/60">Jetons</span>
+        {/* Wallet Pill - Glassmorphism */}
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-[#D4AF37]/30 shadow-[0_0_8px_rgba(212,175,55,0.1)]">
+          <Coins className="h-3.5 w-3.5 text-[#D4AF37]" strokeWidth={1.5} />
+          <span className="text-[11px] font-bold text-[#D4AF37]">{tokens}</span>
+          <span className="text-[9px] font-medium text-[#D4AF37]/50">Jetons</span>
         </div>
       </div>
     </header>

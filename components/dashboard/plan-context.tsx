@@ -36,8 +36,8 @@ export function usePlan() {
 
 export function PlanProvider({ children }: { children: ReactNode }) {
   const [plan, setPlan] = useState<Plan>("SOLO")
-  const [driverCount, setDriverCount] = useState(0)
-  const [vehicleCount, setVehicleCount] = useState(0)
+  const [driverCount, setDriverCount] = useState(1)
+  const [vehicleCount, setVehicleCount] = useState(1)
   const [tokens, setTokens] = useState(0)
 
   const upgrade = useCallback((target?: Plan) => {
