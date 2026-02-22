@@ -34,8 +34,11 @@ import {
   Calendar,
   AlertTriangle,
   ImageIcon,
+  Check,
   CheckCircle2,
   ChevronDown,
+  Zap,
+  BarChart3,
   Plus,
   X,
 } from "lucide-react"
@@ -695,18 +698,13 @@ function BankingScreen({ onBack }: { onBack: () => void }) {
 function SubscriptionScreen({ onBack }: { onBack: () => void }) {
   const { plan, upgrade } = usePlan()
   const isGold = plan === "GOLD"
+  const isPro = plan === "PRO"
   const [showConfetti, setShowConfetti] = useState(false)
 
-  function handleUpgrade() {
+  function handleChoose(target: "PRO" | "GOLD") {
     setShowConfetti(true)
-    setTimeout(() => upgrade(), 300)
+    setTimeout(() => upgrade(target), 300)
   }
-
-  const plans = [
-    { id: "SOLO", name: "Solo", price: "Gratuit", features: ["1 chauffeur", "1 véhicule", "5 documents/mois"], active: plan === "SOLO" },
-    { id: "PRO", name: "Pro", price: "29€/mois", features: ["2 chauffeurs", "2 véhicules", "Documents illimités"], active: plan === "PRO" },
-    { id: "GOLD", name: "Gold", price: "79€/mois", features: ["10 chauffeurs", "10 véhicules", "Support 24/7", "API & intégrations"], active: isGold },
-  ]
 
   return (
     <motion.div key="subscription" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
@@ -718,14 +716,16 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
           "mx-4 mb-5 p-5 rounded-2xl border",
           isGold
             ? "bg-gradient-to-br from-gold/15 via-gold/5 to-transparent border-gold/40 gold-glow-sm"
-            : "bg-onyx-card border-gold/20"
+            : isPro
+              ? "bg-gold/5 border-gold/30"
+              : "bg-onyx-card border-onyx-border/30"
         )}>
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Plan actuel</p>
               <p className={cn(
                 "text-2xl font-bold font-heading mt-0.5",
-                isGold ? "gold-gradient-text" : "text-gold"
+                isGold ? "gold-gradient-text" : isPro ? "text-gold" : "text-foreground"
               )}>
                 {plan}
               </p>
@@ -739,8 +739,10 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
           </div>
           <p className="text-xs text-muted-foreground">
             {isGold
-              ? "Vous profitez de toutes les fonctionnalités premium NoX VTC."
-              : "Passez à GOLD pour débloquer la gestion complète de votre flotte."
+              ? "Vous profitez de toutes les fonctionnalites premium NoX VTC."
+              : isPro
+                ? "Documents illimites inclus. Passez a GOLD pour gerer votre flotte complete."
+                : "Paiement a l'usage via jetons. Passez a PRO ou GOLD pour des documents illimites."
             }
           </p>
         </div>
@@ -748,50 +750,184 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
         {/* Plan Cards */}
         <SectionLabel>Offres disponibles</SectionLabel>
         <div className="space-y-3 px-4 mb-5">
-          {plans.map((p) => (
-            <div key={p.id} className={cn(
-              "p-4 rounded-2xl border transition-all",
-              p.active
-                ? "bg-gold/10 border-gold/40"
-                : "bg-onyx-card/80 border-onyx-border/30"
-            )}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <h3 className={cn(
-                    "text-sm font-bold font-heading",
-                    p.active ? "text-gold" : "text-foreground"
-                  )}>{p.name}</h3>
-                  {p.active && (
-                    <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase">Actif</span>
-                  )}
-                </div>
-                <span className={cn(
-                  "text-sm font-bold",
-                  p.active ? "text-gold" : "text-muted-foreground"
-                )}>{p.price}</span>
-              </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {p.features.map((f) => (
-                  <span key={f} className="text-[10px] text-muted-foreground">{f}</span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
 
-        {!isGold && (
-          <div className="px-4">
-            <button
-              onClick={handleUpgrade}
-              className="w-full py-3.5 rounded-2xl bg-gold text-primary-foreground text-sm font-bold font-heading hover:bg-gold-light active:scale-[0.98] transition-all gold-glow flex items-center justify-center gap-2"
-            >
-              <Crown className="h-4 w-4" strokeWidth={1.5} />
-              Gérer mon offre
-            </button>
+          {/* SOLO Card */}
+          <div className={cn(
+            "p-4 rounded-2xl border transition-all",
+            plan === "SOLO" ? "bg-onyx-card border-gold/30" : "bg-onyx-card/50 border-onyx-border/20"
+          )}>
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold font-heading text-foreground">Solo</h3>
+                {plan === "SOLO" && (
+                  <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase">Actif</span>
+                )}
+              </div>
+              <span className="text-sm font-bold text-foreground">0&#8364;</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground mb-2">Paiement a l&apos;usage via jetons</p>
+            <div className="space-y-1.5">
+              {["1 chauffeur", "1 vehicule", "Documents payants a l'unite"].map((f) => (
+                <div key={f} className="flex items-center gap-2">
+                  <Check className="h-3 w-3 text-muted-foreground shrink-0" strokeWidth={2} />
+                  <span className="text-[11px] text-muted-foreground">{f}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        )}
+
+          {/* PRO Card */}
+          <div className={cn(
+            "p-4 rounded-2xl border transition-all",
+            isPro ? "bg-gold/10 border-gold/40" : "bg-onyx-card/80 border-onyx-border/30"
+          )}>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <h3 className={cn("text-sm font-bold font-heading", isPro ? "text-gold" : "text-foreground")}>Pro</h3>
+                <span className="text-[9px] text-gold/70 font-medium italic">L&apos;offre Duo</span>
+                {isPro && (
+                  <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase">Actif</span>
+                )}
+              </div>
+              <span className={cn("text-sm font-bold", isPro ? "text-gold" : "text-foreground")}>4,99&#8364;<span className="text-[10px] font-normal text-muted-foreground">/mois</span></span>
+            </div>
+            <div className="space-y-1.5 mt-2.5">
+              {["2 chauffeurs", "2 vehicules", "Documents ILLIMITES"].map((f) => (
+                <div key={f} className="flex items-center gap-2">
+                  <Check className={cn("h-3 w-3 shrink-0", isPro ? "text-gold" : "text-gold/60")} strokeWidth={2} />
+                  <span className={cn("text-[11px]", f.includes("ILLIMITES") ? "font-semibold text-gold" : isPro ? "text-foreground" : "text-muted-foreground")}>{f}</span>
+                </div>
+              ))}
+            </div>
+            {!isPro && !isGold && (
+              <button
+                onClick={() => handleChoose("PRO")}
+                className="w-full mt-3 py-2.5 rounded-xl bg-gold/15 border border-gold/30 text-gold text-xs font-bold hover:bg-gold/25 active:scale-[0.98] transition-all"
+              >
+                Choisir cette offre
+              </button>
+            )}
+          </div>
+
+          {/* GOLD Card */}
+          <div className={cn(
+            "p-4 rounded-2xl border transition-all",
+            isGold ? "bg-gradient-to-br from-gold/15 via-gold/5 to-transparent border-gold/40 gold-glow-sm" : "bg-onyx-card/80 border-onyx-border/30"
+          )}>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <h3 className={cn("text-sm font-bold font-heading", isGold ? "gold-gradient-text" : "text-foreground")}>Gold</h3>
+                <span className="text-[9px] text-gold/70 font-medium italic">L&apos;offre Flotte</span>
+                {isGold && (
+                  <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase">Actif</span>
+                )}
+              </div>
+              <span className={cn("text-sm font-bold", isGold ? "text-gold" : "text-foreground")}>9,99&#8364;<span className="text-[10px] font-normal text-muted-foreground">/mois</span></span>
+            </div>
+            <div className="space-y-1.5 mt-2.5">
+              {[
+                { label: "10 chauffeurs", icon: false },
+                { label: "10 vehicules", icon: false },
+                { label: "Documents ILLIMITES", icon: false },
+                { label: "Signature Entreprise", icon: false },
+                { label: "API & Integrations", icon: false },
+                { label: "Statistiques avancees", icon: false },
+              ].map((f) => (
+                <div key={f.label} className="flex items-center gap-2">
+                  <Check className={cn("h-3 w-3 shrink-0", isGold ? "text-gold" : "text-gold/60")} strokeWidth={2} />
+                  <span className={cn("text-[11px]", f.label.includes("ILLIMITES") ? "font-semibold text-gold" : isGold ? "text-foreground" : "text-muted-foreground")}>{f.label}</span>
+                </div>
+              ))}
+            </div>
+            {!isGold && (
+              <button
+                onClick={() => handleChoose("GOLD")}
+                className="w-full mt-3 py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-bold hover:bg-gold-light active:scale-[0.98] transition-all gold-glow"
+              >
+                Choisir cette offre
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </motion.div>
+  )
+}
+
+// ── Shared Upgrade Comparatif Modal ──────────────────────────
+
+function UpgradeComparatifModal({ open, onClose, contextLabel }: { open: boolean; onClose: () => void; contextLabel?: string }) {
+  const { plan, upgrade } = usePlan()
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+          <motion.div initial={{ scale: 0.92, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.92, opacity: 0, y: 20 }} transition={{ type: "spring", stiffness: 400, damping: 28 }} className="relative w-full max-w-sm rounded-3xl bg-onyx-card border border-gold/20 p-5 shadow-2xl shadow-black/50 max-h-[85vh] overflow-y-auto">
+            <button onClick={onClose} className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
+              <X className="h-4 w-4 text-foreground" strokeWidth={2} />
+            </button>
+            <div className="text-center mb-4 pt-1">
+              <div className="w-12 h-12 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center mx-auto mb-3">
+                <Lock className="h-5 w-5 text-gold" strokeWidth={1.5} />
+              </div>
+              <p className="text-sm font-bold text-foreground">Limite {plan} atteinte</p>
+              {contextLabel && <p className="text-[11px] text-muted-foreground mt-1">{contextLabel}</p>}
+            </div>
+
+            {/* PRO Card */}
+            <div className="p-4 rounded-2xl bg-onyx-card/80 border border-gold/20 mb-3">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h4 className="text-sm font-bold text-gold">PRO</h4>
+                  <p className="text-[10px] text-gold/60 italic">L&apos;offre Duo</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-lg font-bold text-gold">4,99&#8364;</span>
+                  <span className="text-[10px] text-muted-foreground">/mois</span>
+                </div>
+              </div>
+              <div className="space-y-1.5 mb-3">
+                {["2 Chauffeurs / Vehicules", "Documents ILLIMITES"].map((f) => (
+                  <div key={f} className="flex items-center gap-2">
+                    <Check className={cn("h-3 w-3 shrink-0 text-gold")} strokeWidth={2} />
+                    <span className={cn("text-[11px]", f.includes("ILLIMITES") ? "font-semibold text-gold" : "text-muted-foreground")}>{f}</span>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => { upgrade("PRO"); onClose() }} className="w-full py-2.5 rounded-xl bg-gold/15 border border-gold/30 text-gold text-xs font-bold hover:bg-gold/25 active:scale-[0.97] transition-all">
+                Choisir cette offre
+              </button>
+            </div>
+
+            {/* GOLD Card */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-gold/10 via-gold/5 to-transparent border border-gold/40 gold-glow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h4 className="text-sm font-bold gold-gradient-text">GOLD</h4>
+                  <p className="text-[10px] text-gold/60 italic">L&apos;offre Flotte</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-lg font-bold text-gold">9,99&#8364;</span>
+                  <span className="text-[10px] text-muted-foreground">/mois</span>
+                </div>
+              </div>
+              <div className="space-y-1.5 mb-3">
+                {["10 Chauffeurs / Vehicules", "Documents ILLIMITES", "Signature Entreprise", "API & Integrations", "Statistiques avancees"].map((f) => (
+                  <div key={f} className="flex items-center gap-2">
+                    <Check className="h-3 w-3 text-gold shrink-0" strokeWidth={2} />
+                    <span className={cn("text-[11px]", f.includes("ILLIMITES") ? "font-semibold text-gold" : "text-foreground")}>{f}</span>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => { upgrade("GOLD"); onClose() }} className="w-full py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-bold hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
+                Choisir cette offre
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 
@@ -921,40 +1057,11 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
         onClose={() => setShowAddDriver(false)}
       />
 
-      {/* Upgrade Modal */}
-      <AnimatePresence>
-        {showUpgradeModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowUpgradeModal(false)} />
-            <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ type: "spring", stiffness: 400, damping: 28 }} className="relative w-full max-w-xs rounded-3xl bg-onyx-card border border-gold/20 p-6 shadow-2xl">
-              <button onClick={() => setShowUpgradeModal(false)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
-                <X className="h-4 w-4 text-foreground" strokeWidth={2} />
-              </button>
-              <div className="flex flex-col items-center text-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center">
-                  <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground mb-1">Limite {plan} atteinte</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">Choisissez une offre pour ajouter plus de chauffeurs.</p>
-                </div>
-                <div className="w-full flex gap-2">
-                  <button onClick={() => { upgrade("PRO"); setShowUpgradeModal(false) }} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25 active:scale-[0.97] transition-all">
-                    <Crown className="h-4 w-4" strokeWidth={1.5} />
-                    <span className="text-[11px] font-bold">PRO</span>
-                    <span className="text-[10px] text-gold/70 font-medium">4,99&#8364;/mois</span>
-                  </button>
-                  <button onClick={() => { upgrade("GOLD"); setShowUpgradeModal(false) }} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold text-primary-foreground hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
-                    <Crown className="h-4 w-4" strokeWidth={1.5} />
-                    <span className="text-[11px] font-bold">GOLD</span>
-                    <span className="text-[10px] text-primary-foreground/70 font-medium">9,99&#8364;/mois</span>
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <UpgradeComparatifModal
+        open={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        contextLabel="Choisissez une offre pour ajouter plus de chauffeurs."
+      />
     </motion.div>
   )
 }
@@ -1034,40 +1141,11 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
         onClose={() => setShowAddVehicle(false)}
       />
 
-      {/* Upgrade Modal */}
-      <AnimatePresence>
-        {showUpgradeModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowUpgradeModal(false)} />
-            <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ type: "spring", stiffness: 400, damping: 28 }} className="relative w-full max-w-xs rounded-3xl bg-onyx-card border border-gold/20 p-6 shadow-2xl">
-              <button onClick={() => setShowUpgradeModal(false)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
-                <X className="h-4 w-4 text-foreground" strokeWidth={2} />
-              </button>
-              <div className="flex flex-col items-center text-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center">
-                  <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground mb-1">Limite {plan} atteinte</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">Choisissez une offre pour ajouter plus de vehicules.</p>
-                </div>
-                <div className="w-full flex gap-2">
-                  <button onClick={() => { upgrade("PRO"); setShowUpgradeModal(false) }} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25 active:scale-[0.97] transition-all">
-                    <Crown className="h-4 w-4" strokeWidth={1.5} />
-                    <span className="text-[11px] font-bold">PRO</span>
-                    <span className="text-[10px] text-gold/70 font-medium">4,99&#8364;/mois</span>
-                  </button>
-                  <button onClick={() => { upgrade("GOLD"); setShowUpgradeModal(false) }} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold text-primary-foreground hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
-                    <Crown className="h-4 w-4" strokeWidth={1.5} />
-                    <span className="text-[11px] font-bold">GOLD</span>
-                    <span className="text-[10px] text-primary-foreground/70 font-medium">9,99&#8364;/mois</span>
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <UpgradeComparatifModal
+        open={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        contextLabel="Choisissez une offre pour ajouter plus de vehicules."
+      />
     </motion.div>
   )
 }
@@ -1369,9 +1447,15 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
             </div>
             <div>
               <p className="text-xs text-muted-foreground">NoX Wallet</p>
-              <p className="text-xl font-bold font-heading text-foreground">
-                {tokens} <span className="text-gold text-sm font-semibold">Jetons</span>
-              </p>
+              {plan === "SOLO" ? (
+                <p className="text-xl font-bold font-heading text-foreground">
+                  {tokens} <span className="text-gold text-sm font-semibold">Jetons</span>
+                </p>
+              ) : (
+                <p className="text-lg font-bold font-heading text-gold">
+                  Illimite
+                </p>
+              )}
             </div>
           </div>
           <div className="w-full py-2 rounded-xl bg-gold/15 border border-gold/30 flex flex-col items-center justify-center gap-0.5">
