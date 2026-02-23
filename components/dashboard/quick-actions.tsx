@@ -58,8 +58,35 @@ function QuickActionTile({ icon, label, locked, onClick, onLockedClick }: QuickA
   )
 }
 
-/* ── Upgrade Modal (detailed comparatif) ── */
-function UpgradeModal({ open, onClose, onUpgrade }: { open: boolean; onClose: () => void; onUpgrade: (target: "PRO" | "GOLD") => void }) {
+/* ── Upgrade Modal (3-column comparatif) ── */
+function UpgradeModal({ open, onClose, onUpgrade }: { open: boolean; onClose: () => void; onUpgrade: (target: "DUO" | "TEAM") => void }) {
+  const plans = [
+    {
+      id: "SOLO" as const,
+      name: "SOLO",
+      subtitle: "L'offre Independant",
+      price: "0",
+      features: ["1 Chauffeur", "1 Vehicule", "Signature Entreprise", "Paiement a l'usage"],
+      current: true,
+    },
+    {
+      id: "DUO" as const,
+      name: "DUO",
+      subtitle: "L'offre Binome",
+      price: "4,99",
+      features: ["2 Chauffeurs", "2 Vehicules", "Signature Entreprise", "Docs ILLIMITES"],
+      current: false,
+    },
+    {
+      id: "TEAM" as const,
+      name: "TEAM",
+      subtitle: "L'offre Flotte",
+      price: "9,99",
+      features: ["10 Chauffeurs", "10 Vehicules", "Signature Entreprise", "Docs ILLIMITES", "API & Stats"],
+      current: false,
+    },
+  ]
+
   return (
     <AnimatePresence>
       {open && (
@@ -67,83 +94,79 @@ function UpgradeModal({ open, onClose, onUpgrade }: { open: boolean; onClose: ()
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
         >
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
           <motion.div
-            initial={{ scale: 0.92, opacity: 0, y: 20 }}
+            initial={{ scale: 0.95, opacity: 0, y: 30 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.92, opacity: 0, y: 20 }}
-            transition={{ type: "spring", stiffness: 400, damping: 28 }}
-            className="relative w-full max-w-sm rounded-3xl bg-onyx-card border border-gold/20 p-5 shadow-2xl shadow-black/50 max-h-[85vh] overflow-y-auto"
+            exit={{ scale: 0.95, opacity: 0, y: 30 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            className="relative w-full max-w-md rounded-t-3xl sm:rounded-3xl bg-onyx-card border border-gold/20 px-3 pt-4 pb-5 shadow-2xl shadow-black/50"
           >
             <button onClick={onClose} className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
               <X className="h-4 w-4 text-foreground" strokeWidth={2} />
             </button>
 
-            {/* Header */}
-            <div className="text-center mb-4 pt-1">
-              <div className="w-12 h-12 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center mx-auto mb-3">
-                <Lock className="h-5 w-5 text-gold" strokeWidth={1.5} />
-              </div>
-              <p className="text-sm font-bold text-foreground">Limite SOLO atteinte</p>
-              <p className="text-[11px] text-muted-foreground mt-1">Choisissez une offre pour continuer.</p>
+            <div className="text-center mb-3">
+              <p className="text-sm font-bold text-foreground">Choisissez votre offre</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Toutes les offres incluent la Signature Entreprise</p>
             </div>
 
-            {/* PRO Card */}
-            <div className="p-4 rounded-2xl bg-onyx-card/80 border border-gold/20 mb-3">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <h4 className="text-sm font-bold text-gold">PRO</h4>
-                  <p className="text-[10px] text-gold/60 italic">L&apos;offre Duo</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-lg font-bold text-gold">4,99&#8364;</span>
-                  <span className="text-[10px] text-muted-foreground">/mois</span>
-                </div>
-              </div>
-              <div className="space-y-1.5 mb-3">
-                {["2 Chauffeurs / Vehicules", "Documents ILLIMITES"].map((f) => (
-                  <div key={f} className="flex items-center gap-2">
-                    <Check className="h-3 w-3 text-gold shrink-0" strokeWidth={2} />
-                    <span className={cn("text-[11px]", f.includes("ILLIMITES") ? "font-semibold text-gold" : "text-muted-foreground")}>{f}</span>
-                  </div>
-                ))}
-              </div>
-              <button
-                onClick={() => { onUpgrade("PRO"); onClose() }}
-                className="w-full py-2.5 rounded-xl bg-gold/15 border border-gold/30 text-gold text-xs font-bold hover:bg-gold/25 active:scale-[0.97] transition-all"
-              >
-                Choisir cette offre
-              </button>
-            </div>
+            <div className="flex gap-2">
+              {plans.map((p) => {
+                const isTeam = p.id === "TEAM"
+                return (
+                  <div
+                    key={p.id}
+                    className={cn(
+                      "flex-1 flex flex-col rounded-2xl border p-2.5",
+                      isTeam
+                        ? "bg-gradient-to-b from-gold/10 to-transparent border-gold/40"
+                        : p.current
+                          ? "bg-onyx-card/60 border-onyx-border/30"
+                          : "bg-onyx-card/80 border-gold/20"
+                    )}
+                  >
+                    <div className="text-center mb-2">
+                      <p className={cn("text-[11px] font-bold", isTeam ? "gold-gradient-text" : p.id === "DUO" ? "text-gold" : "text-foreground")}>{p.name}</p>
+                      <p className="text-[8px] text-muted-foreground leading-tight mt-0.5">{p.subtitle}</p>
+                    </div>
 
-            {/* GOLD Card */}
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-gold/10 via-gold/5 to-transparent border border-gold/40 gold-glow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <h4 className="text-sm font-bold gold-gradient-text">GOLD</h4>
-                  <p className="text-[10px] text-gold/60 italic">L&apos;offre Flotte</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-lg font-bold text-gold">9,99&#8364;</span>
-                  <span className="text-[10px] text-muted-foreground">/mois</span>
-                </div>
-              </div>
-              <div className="space-y-1.5 mb-3">
-                {["10 Chauffeurs / Vehicules", "Documents ILLIMITES", "Signature Entreprise", "API & Integrations", "Statistiques avancees"].map((f) => (
-                  <div key={f} className="flex items-center gap-2">
-                    <Check className="h-3 w-3 text-gold shrink-0" strokeWidth={2} />
-                    <span className={cn("text-[11px]", f.includes("ILLIMITES") ? "font-semibold text-gold" : "text-foreground")}>{f}</span>
+                    <div className="text-center mb-2">
+                      <span className={cn("text-base font-bold", isTeam ? "text-gold" : "text-foreground")}>{p.price}&#8364;</span>
+                      {p.price !== "0" && <span className="text-[8px] text-muted-foreground">/mois</span>}
+                    </div>
+
+                    <div className="space-y-1 mb-auto pb-2.5">
+                      {p.features.map((f) => (
+                        <div key={f} className="flex items-start gap-1">
+                          <Check className={cn("h-2.5 w-2.5 shrink-0 mt-0.5", isTeam ? "text-gold" : p.id === "DUO" ? "text-gold/70" : "text-muted-foreground")} strokeWidth={2.5} />
+                          <span className={cn("text-[9px] leading-tight", f.includes("ILLIMITES") ? "font-semibold text-gold" : "text-muted-foreground")}>{f}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {p.current ? (
+                      <div className="w-full py-2 rounded-lg bg-onyx-border/20 text-center">
+                        <span className="text-[9px] font-medium text-muted-foreground">Actuel</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { onUpgrade(p.id as "DUO" | "TEAM"); onClose() }}
+                        className={cn(
+                          "w-full py-2 rounded-lg text-[10px] font-bold active:scale-[0.97] transition-all",
+                          isTeam
+                            ? "bg-gold text-primary-foreground gold-glow"
+                            : "bg-gold/15 border border-gold/30 text-gold"
+                        )}
+                      >
+                        Choisir
+                      </button>
+                    )}
                   </div>
-                ))}
-              </div>
-              <button
-                onClick={() => { onUpgrade("GOLD"); onClose() }}
-                className="w-full py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-bold hover:bg-gold-light active:scale-[0.97] transition-all gold-glow"
-              >
-                Choisir cette offre
-              </button>
+                )
+              })}
             </div>
           </motion.div>
         </motion.div>
@@ -204,7 +227,7 @@ export function QuickActions() {
       <UpgradeModal
         open={showUpgrade}
         onClose={() => setShowUpgrade(false)}
-        onUpgrade={(target) => upgrade(target)}
+        onUpgrade={(target: "DUO" | "TEAM") => upgrade(target)}
       />
       <AddClientModal
         open={showClientModal}

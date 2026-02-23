@@ -50,8 +50,8 @@ import { AddDriverModal } from "./add-driver-modal"
 import { AddVehicleFlow } from "./add-vehicle-modal"
 
 const SOLO_LIMIT = 1
-const PRO_LIMIT = 2
-const GOLD_LIMIT = 10
+const DUO_LIMIT = 2
+const TEAM_LIMIT = 10
 
 type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security"
 
@@ -697,11 +697,11 @@ function BankingScreen({ onBack }: { onBack: () => void }) {
 
 function SubscriptionScreen({ onBack }: { onBack: () => void }) {
   const { plan, upgrade } = usePlan()
-  const isGold = plan === "GOLD"
-  const isPro = plan === "PRO"
+  const isTeam = plan === "TEAM"
+  const isDuo = plan === "DUO"
   const [showConfetti, setShowConfetti] = useState(false)
 
-  function handleChoose(target: "PRO" | "GOLD") {
+  function handleChoose(target: "DUO" | "TEAM") {
     setShowConfetti(true)
     setTimeout(() => upgrade(target), 300)
   }
@@ -714,9 +714,9 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
         {/* Current Plan Banner */}
         <div className={cn(
           "mx-4 mb-5 p-5 rounded-2xl border",
-          isGold
+          isTeam
             ? "bg-gradient-to-br from-gold/15 via-gold/5 to-transparent border-gold/40 gold-glow-sm"
-            : isPro
+            : isDuo
               ? "bg-gold/5 border-gold/30"
               : "bg-onyx-card border-onyx-border/30"
         )}>
@@ -725,24 +725,24 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Plan actuel</p>
               <p className={cn(
                 "text-2xl font-bold font-heading mt-0.5",
-                isGold ? "gold-gradient-text" : isPro ? "text-gold" : "text-foreground"
+                isTeam ? "gold-gradient-text" : isDuo ? "text-gold" : "text-foreground"
               )}>
                 {plan}
               </p>
             </div>
             <div className={cn(
               "w-12 h-12 rounded-2xl flex items-center justify-center",
-              isGold ? "bg-gold/20 border border-gold/40" : "bg-gold/10 border border-gold/20"
+              isTeam ? "bg-gold/20 border border-gold/40" : "bg-gold/10 border border-gold/20"
             )}>
-              <Crown className={cn("h-6 w-6", isGold ? "text-gold" : "text-gold/60")} strokeWidth={1.5} />
+              <Crown className={cn("h-6 w-6", isTeam ? "text-gold" : "text-gold/60")} strokeWidth={1.5} />
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            {isGold
+            {isTeam
               ? "Vous profitez de toutes les fonctionnalites premium NoX VTC."
-              : isPro
-                ? "Documents illimites inclus. Passez a GOLD pour gerer votre flotte complete."
-                : "Paiement a l'usage via jetons. Passez a PRO ou GOLD pour des documents illimites."
+              : isDuo
+                ? "Documents illimites inclus. Passez a TEAM pour gerer votre flotte complete."
+                : "Paiement a l'usage via jetons. Passez a DUO ou TEAM pour des documents illimites."
             }
           </p>
         </div>
@@ -756,9 +756,10 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
             "p-4 rounded-2xl border transition-all",
             plan === "SOLO" ? "bg-onyx-card border-gold/30" : "bg-onyx-card/50 border-onyx-border/20"
           )}>
-            <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold font-heading text-foreground">Solo</h3>
+                <h3 className="text-sm font-bold font-heading text-foreground">SOLO</h3>
+                <span className="text-[9px] text-muted-foreground font-medium italic">L&apos;offre Independant</span>
                 {plan === "SOLO" && (
                   <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase">Actif</span>
                 )}
@@ -767,7 +768,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
             </div>
             <p className="text-[10px] text-muted-foreground mb-2">Paiement a l&apos;usage via jetons</p>
             <div className="space-y-1.5">
-              {["1 chauffeur", "1 vehicule", "Documents payants a l'unite"].map((f) => (
+              {["1 Chauffeur", "1 Vehicule", "Signature Entreprise", "Documents payants a l'unite"].map((f) => (
                 <div key={f} className="flex items-center gap-2">
                   <Check className="h-3 w-3 text-muted-foreground shrink-0" strokeWidth={2} />
                   <span className="text-[11px] text-muted-foreground">{f}</span>
@@ -776,32 +777,32 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
             </div>
           </div>
 
-          {/* PRO Card */}
+          {/* DUO Card */}
           <div className={cn(
             "p-4 rounded-2xl border transition-all",
-            isPro ? "bg-gold/10 border-gold/40" : "bg-onyx-card/80 border-onyx-border/30"
+            isDuo ? "bg-gold/10 border-gold/40" : "bg-onyx-card/80 border-onyx-border/30"
           )}>
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
-                <h3 className={cn("text-sm font-bold font-heading", isPro ? "text-gold" : "text-foreground")}>Pro</h3>
-                <span className="text-[9px] text-gold/70 font-medium italic">L&apos;offre Duo</span>
-                {isPro && (
+                <h3 className={cn("text-sm font-bold font-heading", isDuo ? "text-gold" : "text-foreground")}>DUO</h3>
+                <span className="text-[9px] text-gold/70 font-medium italic">L&apos;offre Binome</span>
+                {isDuo && (
                   <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase">Actif</span>
                 )}
               </div>
-              <span className={cn("text-sm font-bold", isPro ? "text-gold" : "text-foreground")}>4,99&#8364;<span className="text-[10px] font-normal text-muted-foreground">/mois</span></span>
+              <span className={cn("text-sm font-bold", isDuo ? "text-gold" : "text-foreground")}>4,99&#8364;<span className="text-[10px] font-normal text-muted-foreground">/mois</span></span>
             </div>
             <div className="space-y-1.5 mt-2.5">
-              {["2 chauffeurs", "2 vehicules", "Documents ILLIMITES"].map((f) => (
+              {["2 Chauffeurs", "2 Vehicules", "Signature Entreprise", "Documents ILLIMITES"].map((f) => (
                 <div key={f} className="flex items-center gap-2">
-                  <Check className={cn("h-3 w-3 shrink-0", isPro ? "text-gold" : "text-gold/60")} strokeWidth={2} />
-                  <span className={cn("text-[11px]", f.includes("ILLIMITES") ? "font-semibold text-gold" : isPro ? "text-foreground" : "text-muted-foreground")}>{f}</span>
+                  <Check className={cn("h-3 w-3 shrink-0", isDuo ? "text-gold" : "text-gold/60")} strokeWidth={2} />
+                  <span className={cn("text-[11px]", f.includes("ILLIMITES") ? "font-semibold text-gold" : isDuo ? "text-foreground" : "text-muted-foreground")}>{f}</span>
                 </div>
               ))}
             </div>
-            {!isPro && !isGold && (
+            {!isDuo && !isTeam && (
               <button
-                onClick={() => handleChoose("PRO")}
+                onClick={() => handleChoose("DUO")}
                 className="w-full mt-3 py-2.5 rounded-xl bg-gold/15 border border-gold/30 text-gold text-xs font-bold hover:bg-gold/25 active:scale-[0.98] transition-all"
               >
                 Choisir cette offre
@@ -809,39 +810,32 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
             )}
           </div>
 
-          {/* GOLD Card */}
+          {/* TEAM Card */}
           <div className={cn(
             "p-4 rounded-2xl border transition-all",
-            isGold ? "bg-gradient-to-br from-gold/15 via-gold/5 to-transparent border-gold/40 gold-glow-sm" : "bg-onyx-card/80 border-onyx-border/30"
+            isTeam ? "bg-gradient-to-br from-gold/15 via-gold/5 to-transparent border-gold/40 gold-glow-sm" : "bg-onyx-card/80 border-onyx-border/30"
           )}>
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
-                <h3 className={cn("text-sm font-bold font-heading", isGold ? "gold-gradient-text" : "text-foreground")}>Gold</h3>
+                <h3 className={cn("text-sm font-bold font-heading", isTeam ? "gold-gradient-text" : "text-foreground")}>TEAM</h3>
                 <span className="text-[9px] text-gold/70 font-medium italic">L&apos;offre Flotte</span>
-                {isGold && (
+                {isTeam && (
                   <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase">Actif</span>
                 )}
               </div>
-              <span className={cn("text-sm font-bold", isGold ? "text-gold" : "text-foreground")}>9,99&#8364;<span className="text-[10px] font-normal text-muted-foreground">/mois</span></span>
+              <span className={cn("text-sm font-bold", isTeam ? "text-gold" : "text-foreground")}>9,99&#8364;<span className="text-[10px] font-normal text-muted-foreground">/mois</span></span>
             </div>
             <div className="space-y-1.5 mt-2.5">
-              {[
-                { label: "10 chauffeurs", icon: false },
-                { label: "10 vehicules", icon: false },
-                { label: "Documents ILLIMITES", icon: false },
-                { label: "Signature Entreprise", icon: false },
-                { label: "API & Integrations", icon: false },
-                { label: "Statistiques avancees", icon: false },
-              ].map((f) => (
-                <div key={f.label} className="flex items-center gap-2">
-                  <Check className={cn("h-3 w-3 shrink-0", isGold ? "text-gold" : "text-gold/60")} strokeWidth={2} />
-                  <span className={cn("text-[11px]", f.label.includes("ILLIMITES") ? "font-semibold text-gold" : isGold ? "text-foreground" : "text-muted-foreground")}>{f.label}</span>
+              {["10 Chauffeurs", "10 Vehicules", "Signature Entreprise", "Documents ILLIMITES", "API & Integrations", "Statistiques avancees"].map((f) => (
+                <div key={f} className="flex items-center gap-2">
+                  <Check className={cn("h-3 w-3 shrink-0", isTeam ? "text-gold" : "text-gold/60")} strokeWidth={2} />
+                  <span className={cn("text-[11px]", f.includes("ILLIMITES") ? "font-semibold text-gold" : isTeam ? "text-foreground" : "text-muted-foreground")}>{f}</span>
                 </div>
               ))}
             </div>
-            {!isGold && (
+            {!isTeam && (
               <button
-                onClick={() => handleChoose("GOLD")}
+                onClick={() => handleChoose("TEAM")}
                 className="w-full mt-3 py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-bold hover:bg-gold-light active:scale-[0.98] transition-all gold-glow"
               >
                 Choisir cette offre
@@ -858,71 +852,107 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
 
 function UpgradeComparatifModal({ open, onClose, contextLabel }: { open: boolean; onClose: () => void; contextLabel?: string }) {
   const { plan, upgrade } = usePlan()
+
+  const plans = [
+    {
+      id: "SOLO" as const,
+      name: "SOLO",
+      subtitle: "L'offre Independant",
+      price: "0",
+      features: ["1 Chauffeur", "1 Vehicule", "Signature Entreprise", "Paiement a l'usage"],
+      current: plan === "SOLO",
+    },
+    {
+      id: "DUO" as const,
+      name: "DUO",
+      subtitle: "L'offre Binome",
+      price: "4,99",
+      features: ["2 Chauffeurs", "2 Vehicules", "Signature Entreprise", "Docs ILLIMITES"],
+      current: plan === "DUO",
+    },
+    {
+      id: "TEAM" as const,
+      name: "TEAM",
+      subtitle: "L'offre Flotte",
+      price: "9,99",
+      features: ["10 Chauffeurs", "10 Vehicules", "Signature Entreprise", "Docs ILLIMITES", "API & Stats"],
+      current: plan === "TEAM",
+    },
+  ]
+
   return (
     <AnimatePresence>
       {open && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-          <motion.div initial={{ scale: 0.92, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.92, opacity: 0, y: 20 }} transition={{ type: "spring", stiffness: 400, damping: 28 }} className="relative w-full max-w-sm rounded-3xl bg-onyx-card border border-gold/20 p-5 shadow-2xl shadow-black/50 max-h-[85vh] overflow-y-auto">
+          <motion.div initial={{ scale: 0.95, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 30 }} transition={{ type: "spring", stiffness: 400, damping: 30 }} className="relative w-full max-w-md rounded-t-3xl sm:rounded-3xl bg-onyx-card border border-gold/20 px-3 pt-4 pb-5 shadow-2xl shadow-black/50">
             <button onClick={onClose} className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
               <X className="h-4 w-4 text-foreground" strokeWidth={2} />
             </button>
-            <div className="text-center mb-4 pt-1">
-              <div className="w-12 h-12 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center mx-auto mb-3">
-                <Lock className="h-5 w-5 text-gold" strokeWidth={1.5} />
-              </div>
+
+            <div className="text-center mb-3">
               <p className="text-sm font-bold text-foreground">Limite {plan} atteinte</p>
-              {contextLabel && <p className="text-[11px] text-muted-foreground mt-1">{contextLabel}</p>}
+              {contextLabel && <p className="text-[10px] text-muted-foreground mt-0.5">{contextLabel}</p>}
             </div>
 
-            {/* PRO Card */}
-            <div className="p-4 rounded-2xl bg-onyx-card/80 border border-gold/20 mb-3">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <h4 className="text-sm font-bold text-gold">PRO</h4>
-                  <p className="text-[10px] text-gold/60 italic">L&apos;offre Duo</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-lg font-bold text-gold">4,99&#8364;</span>
-                  <span className="text-[10px] text-muted-foreground">/mois</span>
-                </div>
-              </div>
-              <div className="space-y-1.5 mb-3">
-                {["2 Chauffeurs / Vehicules", "Documents ILLIMITES"].map((f) => (
-                  <div key={f} className="flex items-center gap-2">
-                    <Check className={cn("h-3 w-3 shrink-0 text-gold")} strokeWidth={2} />
-                    <span className={cn("text-[11px]", f.includes("ILLIMITES") ? "font-semibold text-gold" : "text-muted-foreground")}>{f}</span>
-                  </div>
-                ))}
-              </div>
-              <button onClick={() => { upgrade("PRO"); onClose() }} className="w-full py-2.5 rounded-xl bg-gold/15 border border-gold/30 text-gold text-xs font-bold hover:bg-gold/25 active:scale-[0.97] transition-all">
-                Choisir cette offre
-              </button>
-            </div>
+            <div className="flex gap-2">
+              {plans.map((p) => {
+                const isHighlight = p.id === "TEAM"
+                return (
+                  <div
+                    key={p.id}
+                    className={cn(
+                      "flex-1 flex flex-col rounded-2xl border p-2.5",
+                      isHighlight
+                        ? "bg-gradient-to-b from-gold/10 to-transparent border-gold/40"
+                        : p.current
+                          ? "bg-onyx-card/60 border-onyx-border/30"
+                          : "bg-onyx-card/80 border-gold/20"
+                    )}
+                  >
+                    <div className="text-center mb-2">
+                      <p className={cn("text-[11px] font-bold", isHighlight ? "gold-gradient-text" : p.id === "DUO" ? "text-gold" : "text-foreground")}>{p.name}</p>
+                      <p className="text-[8px] text-muted-foreground leading-tight mt-0.5">{p.subtitle}</p>
+                    </div>
 
-            {/* GOLD Card */}
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-gold/10 via-gold/5 to-transparent border border-gold/40 gold-glow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <h4 className="text-sm font-bold gold-gradient-text">GOLD</h4>
-                  <p className="text-[10px] text-gold/60 italic">L&apos;offre Flotte</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-lg font-bold text-gold">9,99&#8364;</span>
-                  <span className="text-[10px] text-muted-foreground">/mois</span>
-                </div>
-              </div>
-              <div className="space-y-1.5 mb-3">
-                {["10 Chauffeurs / Vehicules", "Documents ILLIMITES", "Signature Entreprise", "API & Integrations", "Statistiques avancees"].map((f) => (
-                  <div key={f} className="flex items-center gap-2">
-                    <Check className="h-3 w-3 text-gold shrink-0" strokeWidth={2} />
-                    <span className={cn("text-[11px]", f.includes("ILLIMITES") ? "font-semibold text-gold" : "text-foreground")}>{f}</span>
+                    <div className="text-center mb-2">
+                      <span className={cn("text-base font-bold", isHighlight ? "text-gold" : "text-foreground")}>{p.price}&#8364;</span>
+                      {p.price !== "0" && <span className="text-[8px] text-muted-foreground">/mois</span>}
+                    </div>
+
+                    <div className="space-y-1 mb-auto pb-2.5">
+                      {p.features.map((f) => (
+                        <div key={f} className="flex items-start gap-1">
+                          <Check className={cn("h-2.5 w-2.5 shrink-0 mt-0.5", isHighlight ? "text-gold" : p.id === "DUO" ? "text-gold/70" : "text-muted-foreground")} strokeWidth={2.5} />
+                          <span className={cn("text-[9px] leading-tight", f.includes("ILLIMITES") ? "font-semibold text-gold" : "text-muted-foreground")}>{f}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {p.current ? (
+                      <div className="w-full py-2 rounded-lg bg-onyx-border/20 text-center">
+                        <span className="text-[9px] font-medium text-muted-foreground">Actuel</span>
+                      </div>
+                    ) : p.id === "SOLO" ? (
+                      <div className="w-full py-2 rounded-lg text-center">
+                        <span className="text-[9px] text-muted-foreground/40">--</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { upgrade(p.id as "DUO" | "TEAM"); onClose() }}
+                        className={cn(
+                          "w-full py-2 rounded-lg text-[10px] font-bold active:scale-[0.97] transition-all",
+                          isHighlight
+                            ? "bg-gold text-primary-foreground gold-glow"
+                            : "bg-gold/15 border border-gold/30 text-gold"
+                        )}
+                      >
+                        Choisir
+                      </button>
+                    )}
                   </div>
-                ))}
-              </div>
-              <button onClick={() => { upgrade("GOLD"); onClose() }} className="w-full py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-bold hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
-                Choisir cette offre
-              </button>
+                )
+              })}
             </div>
           </motion.div>
         </motion.div>
@@ -935,8 +965,8 @@ function UpgradeComparatifModal({ open, onClose, contextLabel }: { open: boolean
 
 function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => void }) {
   const { plan, upgrade } = usePlan()
-  const limitLabel = type === "driver" ? "chauffeurs" : "véhicules"
-  const currentLimit = plan === "SOLO" ? SOLO_LIMIT : PRO_LIMIT
+  const limitLabel = type === "driver" ? "chauffeurs" : "vehicules"
+  const currentLimit = plan === "SOLO" ? SOLO_LIMIT : DUO_LIMIT
   return (
     <div className="relative min-h-[280px] rounded-2xl bg-onyx-card/40 border border-onyx-border/30 overflow-hidden">
       <div className="absolute inset-0 p-5 opacity-10">
@@ -966,14 +996,14 @@ function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => voi
           </p>
         </div>
         <div className="w-full flex gap-2 max-w-[260px]">
-          <button onClick={() => upgrade("PRO")} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25 active:scale-[0.97] transition-all">
+          <button onClick={() => upgrade("DUO")} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25 active:scale-[0.97] transition-all">
             <Crown className="h-4 w-4" strokeWidth={1.5} />
-            <span className="text-[11px] font-bold">PRO</span>
+            <span className="text-[11px] font-bold">DUO</span>
             <span className="text-[10px] text-gold/70 font-medium">4,99&#8364;/mois</span>
           </button>
-          <button onClick={() => upgrade("GOLD")} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold text-primary-foreground hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
+          <button onClick={() => upgrade("TEAM")} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold text-primary-foreground hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
             <Crown className="h-4 w-4" strokeWidth={1.5} />
-            <span className="text-[11px] font-bold">GOLD</span>
+            <span className="text-[11px] font-bold">TEAM</span>
             <span className="text-[10px] text-primary-foreground/70 font-medium">9,99&#8364;/mois</span>
           </button>
         </div>
@@ -986,8 +1016,8 @@ function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => voi
 
 function TeamScreen({ onBack }: { onBack: () => void }) {
   const { plan, upgrade, driverCount } = usePlan()
-  const isGold = plan === "GOLD"
-  const limit = plan === "SOLO" ? SOLO_LIMIT : plan === "PRO" ? PRO_LIMIT : GOLD_LIMIT
+  const isTeam = plan === "TEAM"
+  const limit = plan === "SOLO" ? SOLO_LIMIT : plan === "DUO" ? DUO_LIMIT : TEAM_LIMIT
   const visibleDrivers = allDrivers.slice(0, limit)
   const maxSlots = limit
   const isFull = driverCount >= limit
@@ -1009,17 +1039,17 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
           <p className="text-[10px] text-muted-foreground uppercase font-semibold font-heading tracking-[0.15em]">
             Chauffeurs ({visibleDrivers.length}/{maxSlots})
           </p>
-          {isGold && (
-            <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-gold/15 border border-gold/30 gold-gradient-text">GOLD</span>
+          {isTeam && (
+            <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-gold/15 border border-gold/30 gold-gradient-text">TEAM</span>
           )}
         </div>
         <AnimatePresence mode="popLayout">
           {visibleDrivers.map((driver, index) => (
             <motion.div
               key={driver.id}
-              initial={isGold && index >= PRO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
+              initial={isTeam && index >= DUO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.3, delay: index >= PRO_LIMIT ? (index - PRO_LIMIT) * 0.06 : 0 }}
+              transition={{ duration: 0.3, delay: index >= DUO_LIMIT ? (index - DUO_LIMIT) * 0.06 : 0 }}
               className="flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
             >
               <div className="w-10 h-10 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0 group-hover:bg-gold/25 transition-colors">
@@ -1033,7 +1063,7 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
             </motion.div>
           ))}
         </AnimatePresence>
-        {plan !== "GOLD" && <LockedSlot type="driver" onUpgrade={handleUpgrade} />}
+        {plan !== "TEAM" && <LockedSlot type="driver" onUpgrade={handleUpgrade} />}
       </div>
 
       {/* FAB - Add Driver (locked if full) */}
@@ -1070,8 +1100,8 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
 
 function FleetScreen({ onBack }: { onBack: () => void }) {
   const { plan, upgrade, vehicleCount } = usePlan()
-  const isGold = plan === "GOLD"
-  const limit = plan === "SOLO" ? SOLO_LIMIT : plan === "PRO" ? PRO_LIMIT : GOLD_LIMIT
+  const isTeam = plan === "TEAM"
+  const limit = plan === "SOLO" ? SOLO_LIMIT : plan === "DUO" ? DUO_LIMIT : TEAM_LIMIT
   const visibleVehicles = allVehicles.slice(0, limit)
   const maxSlots = limit
   const isFull = vehicleCount >= limit
@@ -1093,17 +1123,17 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
           <p className="text-[10px] text-muted-foreground uppercase font-semibold font-heading tracking-[0.15em]">
             Véhicules ({visibleVehicles.length}/{maxSlots})
           </p>
-          {isGold && (
-            <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-gold/15 border border-gold/30 gold-gradient-text">GOLD</span>
+          {isTeam && (
+            <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-gold/15 border border-gold/30 gold-gradient-text">TEAM</span>
           )}
         </div>
         <AnimatePresence mode="popLayout">
           {visibleVehicles.map((vehicle, index) => (
             <motion.div
               key={vehicle.id}
-              initial={isGold && index >= PRO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
+              initial={isTeam && index >= DUO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.3, delay: index >= PRO_LIMIT ? (index - PRO_LIMIT) * 0.06 : 0 }}
+              transition={{ duration: 0.3, delay: index >= DUO_LIMIT ? (index - DUO_LIMIT) * 0.06 : 0 }}
               className="flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
             >
               <div className="w-10 h-10 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0 group-hover:bg-gold/25 transition-colors">
@@ -1117,7 +1147,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
             </motion.div>
           ))}
         </AnimatePresence>
-        {plan !== "GOLD" && <LockedSlot type="vehicle" onUpgrade={handleUpgrade} />}
+        {plan !== "TEAM" && <LockedSlot type="vehicle" onUpgrade={handleUpgrade} />}
       </div>
 
       {/* FAB - Add Vehicle (locked if full) */}
@@ -1395,26 +1425,26 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
 
 function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => void }) {
   const { plan, tokens } = usePlan()
-  const isGold = plan === "GOLD"
+  const isTeam = plan === "TEAM"
 
   const accountSettings: SettingItem[] = [
     { icon: <User className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Profil", description: "Jean Dupont, jean.dupont@nox-vtc.fr", screen: "profile" },
     { icon: <Building2 className="h-4 w-4" strokeWidth={1.5} />, label: "Profil Entreprise", description: "NoX VTC SAS \u2022 SIRET 912 345 678", screen: "enterprise" },
     { icon: <Landmark className="h-4 w-4" strokeWidth={1.5} />, label: "Infos Bancaires", description: "IBAN \u2022\u2022\u2022\u2022 4668", badge: "AES-256", screen: "banking" },
-    { icon: <Crown className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Abonnement", description: isGold ? "Offre GOLD active" : plan === "PRO" ? "Offre PRO active" : "Offre SOLO active", screen: "subscription" },
+    { icon: <Crown className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Abonnement", description: isTeam ? "Offre TEAM active" : plan === "DUO" ? "Offre DUO active" : "Offre SOLO active", screen: "subscription" },
   ]
 
   const managementSettings: SettingItem[] = [
     {
       icon: <Users className="h-4 w-4" strokeWidth={1.5} />,
       label: "Gestion de l'\u00c9quipe",
-      description: isGold ? `${allDrivers.length} chauffeurs actifs` : plan === "PRO" ? "2 chauffeurs max" : "0 chauffeur actif",
+      description: isTeam ? `${allDrivers.length} chauffeurs actifs` : plan === "DUO" ? "2 chauffeurs max" : "0 chauffeur actif",
       screen: "team",
     },
     {
       icon: <Car className="h-4 w-4" strokeWidth={1.5} />,
       label: "Gestion du Parc",
-      description: isGold ? `${allVehicles.length} véhicules en service` : plan === "PRO" ? "2 véhicules max" : "0 véhicule actif",
+      description: isTeam ? `${allVehicles.length} vehicules en service` : plan === "DUO" ? "2 vehicules max" : "0 vehicule actif",
       screen: "fleet",
     },
   ]
@@ -1430,11 +1460,11 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
         <h1 className="text-lg font-bold font-heading text-foreground">Réglages</h1>
         <div className={cn(
           "px-2.5 py-1 rounded-lg border",
-          isGold
+          isTeam
             ? "bg-gradient-to-r from-gold/25 via-gold/15 to-gold/25 border-gold/50 gold-badge-glow"
             : "bg-gold/15 border-gold/30"
         )}>
-          <span className={cn("text-[10px] font-bold tracking-wider", isGold ? "gold-gradient-text" : "text-gold")}>{plan}</span>
+          <span className={cn("text-[10px] font-bold tracking-wider", isTeam ? "gold-gradient-text" : "text-gold")}>{plan}</span>
         </div>
       </div>
 

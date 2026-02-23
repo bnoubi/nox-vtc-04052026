@@ -2,12 +2,12 @@
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react"
 
-export type Plan = "SOLO" | "PRO" | "GOLD"
+export type Plan = "SOLO" | "DUO" | "TEAM"
 
 export const PLAN_LIMITS: Record<Plan, { drivers: number; vehicles: number }> = {
   SOLO: { drivers: 1, vehicles: 1 },
-  PRO: { drivers: 2, vehicles: 2 },
-  GOLD: { drivers: 10, vehicles: 10 },
+  DUO: { drivers: 2, vehicles: 2 },
+  TEAM: { drivers: 10, vehicles: 10 },
 }
 
 interface PlanContextValue {
@@ -44,7 +44,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     if (target) {
       setPlan(target)
     } else {
-      setPlan((prev) => (prev === "SOLO" ? "PRO" : "GOLD"))
+      setPlan((prev) => (prev === "SOLO" ? "DUO" : "TEAM"))
     }
   }, [])
 

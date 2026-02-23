@@ -7,13 +7,13 @@ import { cn } from "@/lib/utils"
 
 export function DashboardHeader() {
   const { plan, tokens } = usePlan()
-  const isGold = plan === "GOLD"
+  const isTeam = plan === "TEAM"
 
   return (
     <header className="flex items-center justify-between px-4 py-4">
       {/* User Profile */}
       <div className="flex items-center gap-3">
-        <Avatar className={cn("h-11 w-11 border", isGold ? "border-gold/50" : "border-gold/30")}>
+        <Avatar className={cn("h-11 w-11 border", isTeam ? "border-gold/50" : "border-gold/30")}>
           <AvatarImage src="/placeholder-avatar.jpg" alt="User" />
           <AvatarFallback className="bg-onyx-card text-foreground text-sm font-medium">
             JD
@@ -29,15 +29,15 @@ export function DashboardHeader() {
         {/* Plan Badge */}
         <div className={cn(
           "px-3 py-1.5 rounded-xl border",
-          isGold
+          isTeam
             ? "bg-gradient-to-r from-gold/25 via-gold/15 to-gold/25 border-gold/50 gold-badge-glow"
-            : plan === "PRO"
+            : plan === "DUO"
               ? "bg-gold/15 border-gold/30"
               : "bg-onyx-card/80 border-onyx-border/40"
         )}>
           <span className={cn(
             "text-[10px] font-bold tracking-wider",
-            isGold ? "gold-gradient-text" : plan === "PRO" ? "text-gold" : "text-muted-foreground"
+            isTeam ? "gold-gradient-text" : plan === "DUO" ? "text-gold" : "text-muted-foreground"
           )}>
             {plan}
           </span>

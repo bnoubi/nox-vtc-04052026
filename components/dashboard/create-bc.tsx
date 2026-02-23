@@ -237,7 +237,7 @@ function SelectField({
   )
 }
 
-// ── Share Link Screen ──────────────────────────────────────────
+// ── Share Link Screen ───────────���──────────────────────────────
 
 function ShareLinkScreen({ onBack, onClose }: { onBack: () => void; onClose: () => void }) {
   const [selectedClientId, setSelectedClientId] = useState("")
@@ -446,13 +446,13 @@ function ShareLinkScreen({ onBack, onClose }: { onBack: () => void; onClose: () 
 
 function ManualBCForm({ onBack, onClose, prefillClient }: { onBack: () => void; onClose: () => void; prefillClient?: BCPrefillClient | null }) {
   const { plan } = usePlan()
-  const isGold = plan === "GOLD"
-  const PRO_LIMIT = 2
+  const isTeam = plan === "TEAM"
+  const DUO_LIMIT = 2
 
-  const driverOptions = (isGold ? allDrivers : allDrivers.slice(0, PRO_LIMIT))
+  const driverOptions = (isTeam ? allDrivers : allDrivers.slice(0, DUO_LIMIT))
     .map((d) => ({ value: d.id, label: d.name, sub: "Chauffeur VTC" }))
 
-  const vehicleOptions = (isGold ? allVehicles : allVehicles.slice(0, PRO_LIMIT))
+  const vehicleOptions = (isTeam ? allVehicles : allVehicles.slice(0, DUO_LIMIT))
     .map((v) => ({ value: v.id, label: v.model, sub: v.plate }))
 
   const clientOptions = existingClients.map((c) => ({
