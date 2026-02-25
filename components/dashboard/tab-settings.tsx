@@ -44,6 +44,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePlan } from "./plan-context"
+import { UpgradeModal } from "./upgrade-modal"
 import { GoldConfetti } from "./gold-confetti"
 import { allDrivers, allVehicles } from "./data"
 import { AddDriverModal } from "./add-driver-modal"
@@ -706,6 +707,35 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
     setTimeout(() => upgrade(target), 300)
   }
 
+  const planCards = [
+    {
+      id: "SOLO" as const,
+      name: "SOLO",
+      subtitle: "L\u2019offre Ind\u00e9pendant",
+      price: "Gratuit",
+      capacity: "Max 1 Chauffeur / Max 1 V\u00e9hicule",
+      features: ["Signature Entreprise incluse", "Paiement \u00e0 l\u2019usage (jetons)"],
+    },
+    {
+      id: "DUO" as const,
+      name: "DUO",
+      subtitle: "L\u2019offre Bin\u00f4me",
+      price: "4,99\u20ac",
+      priceSuffix: "/mois",
+      capacity: "Max 2 Chauffeurs / Max 2 V\u00e9hicules",
+      features: ["Signature Entreprise incluse", "Documents ILLIMIT\u00c9S"],
+    },
+    {
+      id: "TEAM" as const,
+      name: "TEAM",
+      subtitle: "L\u2019offre Flotte",
+      price: "9,99\u20ac",
+      priceSuffix: "/mois",
+      capacity: "Max 10 Chauffeurs / Max 10 V\u00e9hicules",
+      features: ["Signature Entreprise incluse", "Documents ILLIMIT\u00c9S", "API & Int\u00e9grations", "Statistiques avanc\u00e9es"],
+    },
+  ]
+
   return (
     <motion.div key="subscription" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
       <GoldConfetti trigger={showConfetti} />
@@ -739,10 +769,10 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
           </div>
           <p className="text-xs text-muted-foreground">
             {isTeam
-              ? "Vous profitez de toutes les fonctionnalites premium NoX VTC."
+              ? "Vous profitez de toutes les fonctionnalit\u00e9s premium NoX VTC."
               : isDuo
-                ? "Documents illimites inclus. Passez a TEAM pour gerer votre flotte complete."
-                : "Paiement a l'usage via jetons. Passez a DUO ou TEAM pour des documents illimites."
+                ? "Documents illimit\u00e9s inclus. Passez \u00e0 TEAM pour g\u00e9rer votre flotte compl\u00e8te."
+                : "Paiement \u00e0 l\u2019usage via jetons. Passez \u00e0 DUO ou TEAM pour des documents illimit\u00e9s."
             }
           </p>
         </div>
@@ -750,232 +780,83 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
         {/* Plan Cards */}
         <SectionLabel>Offres disponibles</SectionLabel>
         <div className="space-y-3 px-4 mb-5">
+          {planCards.map((p) => {
+            const isCurrent = p.id === plan
+            const isPlanTeam = p.id === "TEAM"
+            const isPlanDuo = p.id === "DUO"
+            const isUpgrade = !isCurrent && (
+              (plan === "SOLO") ||
+              (plan === "DUO" && p.id === "TEAM")
+            )
 
-          {/* SOLO Card */}
-          <div className={cn(
-            "p-4 rounded-2xl border transition-all",
-            plan === "SOLO" ? "bg-onyx-card border-gold/30" : "bg-onyx-card/50 border-onyx-border/20"
-          )}>
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold font-heading text-foreground">SOLO</h3>
-                <span className="text-[9px] text-muted-foreground font-medium italic">L&apos;offre Independant</span>
-                {plan === "SOLO" && (
-                  <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase">Actif</span>
+            return (
+              <div key={p.id} className={cn(
+                "p-4 rounded-2xl border transition-all",
+                isCurrent
+                  ? isPlanTeam
+                    ? "bg-gradient-to-br from-gold/15 via-gold/5 to-transparent border-gold/40 gold-glow-sm"
+                    : isPlanDuo
+                      ? "bg-gold/10 border-gold/40"
+                      : "bg-onyx-card border-gold/30"
+                  : "bg-onyx-card/70 border-onyx-border/30"
+              )}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className={cn("text-sm font-bold font-heading", isPlanTeam ? (isCurrent ? "gold-gradient-text" : "text-foreground") : isPlanDuo ? (isCurrent ? "text-gold" : "text-foreground") : "text-foreground")}>{p.name}</h3>
+                    <span className="text-[9px] text-muted-foreground font-medium italic">{p.subtitle}</span>
+                    {isCurrent && (
+                      <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase">Actif</span>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <span className={cn("text-sm font-bold", (isPlanTeam || isPlanDuo) && isCurrent ? "text-gold" : "text-foreground")}>{p.price}</span>
+                    {"priceSuffix" in p && p.priceSuffix && (
+                      <span className="text-[10px] font-normal text-muted-foreground">{p.priceSuffix}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Capacity - single line */}
+                <p className={cn(
+                  "text-[10px] font-semibold mb-2",
+                  isPlanTeam ? "text-gold/80" : isPlanDuo ? "text-gold/70" : "text-muted-foreground"
+                )}>
+                  {p.capacity}
+                </p>
+
+                {/* Features */}
+                <div className="space-y-1.5">
+                  {p.features.map((f) => (
+                    <div key={f} className="flex items-center gap-2">
+                      <Check className={cn("h-3 w-3 shrink-0", isPlanTeam ? "text-gold" : isPlanDuo ? "text-gold/60" : "text-muted-foreground")} strokeWidth={2} />
+                      <span className={cn("text-[11px]", f.includes("ILLIMIT") ? "font-semibold text-gold" : isCurrent ? "text-foreground" : "text-muted-foreground")}>{f}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {isUpgrade && (
+                  <button
+                    onClick={() => handleChoose(p.id as "DUO" | "TEAM")}
+                    className={cn(
+                      "w-full mt-3 py-2.5 rounded-xl text-xs font-bold active:scale-[0.98] transition-all",
+                      isPlanTeam
+                        ? "bg-gold text-primary-foreground hover:bg-gold-light gold-glow"
+                        : "bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25"
+                    )}
+                  >
+                    Choisir cette offre
+                  </button>
                 )}
               </div>
-              <span className="text-sm font-bold text-foreground">0&#8364;</span>
-            </div>
-            <p className="text-[10px] text-muted-foreground mb-2">Paiement a l&apos;usage via jetons</p>
-            <div className="space-y-1.5">
-              {["1 Chauffeur", "1 Vehicule", "Signature Entreprise", "Documents payants a l'unite"].map((f) => (
-                <div key={f} className="flex items-center gap-2">
-                  <Check className="h-3 w-3 text-muted-foreground shrink-0" strokeWidth={2} />
-                  <span className="text-[11px] text-muted-foreground">{f}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* DUO Card */}
-          <div className={cn(
-            "p-4 rounded-2xl border transition-all",
-            isDuo ? "bg-gold/10 border-gold/40" : "bg-onyx-card/80 border-onyx-border/30"
-          )}>
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <h3 className={cn("text-sm font-bold font-heading", isDuo ? "text-gold" : "text-foreground")}>DUO</h3>
-                <span className="text-[9px] text-gold/70 font-medium italic">L&apos;offre Binome</span>
-                {isDuo && (
-                  <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase">Actif</span>
-                )}
-              </div>
-              <span className={cn("text-sm font-bold", isDuo ? "text-gold" : "text-foreground")}>4,99&#8364;<span className="text-[10px] font-normal text-muted-foreground">/mois</span></span>
-            </div>
-            <div className="space-y-1.5 mt-2.5">
-              {["2 Chauffeurs", "2 Vehicules", "Signature Entreprise", "Documents ILLIMITES"].map((f) => (
-                <div key={f} className="flex items-center gap-2">
-                  <Check className={cn("h-3 w-3 shrink-0", isDuo ? "text-gold" : "text-gold/60")} strokeWidth={2} />
-                  <span className={cn("text-[11px]", f.includes("ILLIMITES") ? "font-semibold text-gold" : isDuo ? "text-foreground" : "text-muted-foreground")}>{f}</span>
-                </div>
-              ))}
-            </div>
-            {!isDuo && !isTeam && (
-              <button
-                onClick={() => handleChoose("DUO")}
-                className="w-full mt-3 py-2.5 rounded-xl bg-gold/15 border border-gold/30 text-gold text-xs font-bold hover:bg-gold/25 active:scale-[0.98] transition-all"
-              >
-                Choisir cette offre
-              </button>
-            )}
-          </div>
-
-          {/* TEAM Card */}
-          <div className={cn(
-            "p-4 rounded-2xl border transition-all",
-            isTeam ? "bg-gradient-to-br from-gold/15 via-gold/5 to-transparent border-gold/40 gold-glow-sm" : "bg-onyx-card/80 border-onyx-border/30"
-          )}>
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <h3 className={cn("text-sm font-bold font-heading", isTeam ? "gold-gradient-text" : "text-foreground")}>TEAM</h3>
-                <span className="text-[9px] text-gold/70 font-medium italic">L&apos;offre Flotte</span>
-                {isTeam && (
-                  <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase">Actif</span>
-                )}
-              </div>
-              <span className={cn("text-sm font-bold", isTeam ? "text-gold" : "text-foreground")}>9,99&#8364;<span className="text-[10px] font-normal text-muted-foreground">/mois</span></span>
-            </div>
-            <div className="space-y-1.5 mt-2.5">
-              {["10 Chauffeurs", "10 Vehicules", "Signature Entreprise", "Documents ILLIMITES", "API & Integrations", "Statistiques avancees"].map((f) => (
-                <div key={f} className="flex items-center gap-2">
-                  <Check className={cn("h-3 w-3 shrink-0", isTeam ? "text-gold" : "text-gold/60")} strokeWidth={2} />
-                  <span className={cn("text-[11px]", f.includes("ILLIMITES") ? "font-semibold text-gold" : isTeam ? "text-foreground" : "text-muted-foreground")}>{f}</span>
-                </div>
-              ))}
-            </div>
-            {!isTeam && (
-              <button
-                onClick={() => handleChoose("TEAM")}
-                className="w-full mt-3 py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-bold hover:bg-gold-light active:scale-[0.98] transition-all gold-glow"
-              >
-                Choisir cette offre
-              </button>
-            )}
-          </div>
+            )
+          })}
         </div>
       </div>
     </motion.div>
   )
 }
 
-// ── Shared Upgrade Comparatif Modal ──────────────────────────
 
-function UpgradeComparatifModal({ open, onClose, contextLabel }: { open: boolean; onClose: () => void; contextLabel?: string }) {
-  const { plan, upgrade } = usePlan()
-
-  const plans = [
-    {
-      id: "SOLO" as const,
-      name: "SOLO",
-      subtitle: "L\u2019offre Ind\u00e9pendant",
-      price: "0",
-      features: ["1 Chauffeur", "1 V\u00e9hicule", "Signature Entreprise", "Paiement \u00e0 l\u2019usage"],
-      current: plan === "SOLO",
-    },
-    {
-      id: "DUO" as const,
-      name: "DUO",
-      subtitle: "L\u2019offre Bin\u00f4me",
-      price: "4,99",
-      features: ["2 Chauffeurs", "2 V\u00e9hicules", "Signature Entreprise", "Docs ILLIMIT\u00c9S"],
-      current: plan === "DUO",
-    },
-    {
-      id: "TEAM" as const,
-      name: "TEAM",
-      subtitle: "L\u2019offre Flotte",
-      price: "9,99",
-      features: ["10 Chauffeurs", "10 V\u00e9hicules", "Signature Entreprise", "Docs ILLIMIT\u00c9S", "API & Stats"],
-      current: plan === "TEAM",
-    },
-  ]
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 400, damping: 30 }}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-md max-h-[90vh] rounded-3xl bg-onyx-card border border-gold/20 shadow-2xl shadow-black/50 flex flex-col overflow-hidden"
-          >
-            {/* Header - fixed */}
-            <div className="shrink-0 px-4 pt-4 pb-2">
-              <button onClick={onClose} className="absolute top-3 right-3 z-10 w-7 h-7 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
-                <X className="h-3.5 w-3.5 text-foreground" strokeWidth={2} />
-              </button>
-              <p className="text-sm font-bold text-foreground text-center">Limite {plan} atteinte</p>
-              {contextLabel && <p className="text-[10px] text-muted-foreground text-center mt-0.5">{contextLabel}</p>}
-            </div>
-
-            {/* Cards - scrollable if needed */}
-            <div className="flex-1 overflow-y-auto px-3 pb-4">
-              <div className="flex gap-2 h-full">
-                {plans.map((p) => {
-                  const isHighlight = p.id === "TEAM"
-                  return (
-                    <div
-                      key={p.id}
-                      className={cn(
-                        "flex-1 flex flex-col rounded-2xl border p-2.5",
-                        isHighlight
-                          ? "bg-gradient-to-b from-gold/10 to-transparent border-gold/40"
-                          : p.current
-                            ? "bg-onyx-card/60 border-onyx-border/30"
-                            : "bg-onyx-card/80 border-gold/20"
-                      )}
-                    >
-                      {/* Top content */}
-                      <div className="flex-1">
-                        <div className="text-center mb-2">
-                          <p className={cn("text-xs font-bold", isHighlight ? "gold-gradient-text" : p.id === "DUO" ? "text-gold" : "text-foreground")}>{p.name}</p>
-                          <p className="text-[8px] text-muted-foreground leading-tight mt-0.5">{p.subtitle}</p>
-                        </div>
-
-                        <div className="text-center mb-2">
-                          <span className={cn("text-base font-bold", isHighlight ? "text-gold" : "text-foreground")}>{p.price}&#8364;</span>
-                          {p.price !== "0" && <span className="text-[8px] text-muted-foreground">/mois</span>}
-                        </div>
-
-                        <div className="space-y-1">
-                          {p.features.map((f) => (
-                            <div key={f} className="flex items-start gap-1">
-                              <Check className={cn("h-2.5 w-2.5 shrink-0 mt-0.5", isHighlight ? "text-gold" : p.id === "DUO" ? "text-gold/70" : "text-muted-foreground")} strokeWidth={2.5} />
-                              <span className={cn("text-[9px] leading-tight", f.includes("ILLIMIT") ? "font-semibold text-gold" : "text-muted-foreground")}>{f}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Button - always at bottom */}
-                      <div className="shrink-0 pt-3">
-                        {p.current ? (
-                          <div className="w-full py-2 rounded-xl bg-onyx-border/20 text-center">
-                            <span className="text-[10px] font-medium text-muted-foreground">Actuel</span>
-                          </div>
-                        ) : p.id === "SOLO" ? (
-                          <div className="w-full py-2 rounded-xl text-center">
-                            <span className="text-[10px] text-muted-foreground/40">--</span>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => { upgrade(p.id as "DUO" | "TEAM"); onClose() }}
-                            className={cn(
-                              "w-full py-2 rounded-xl text-[10px] font-bold active:scale-[0.97] transition-all",
-                              isHighlight
-                                ? "bg-gold text-primary-foreground gold-glow"
-                                : "bg-gold/15 border border-gold/30 text-gold"
-                            )}
-                          >
-                            Choisir
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
-}
 
 // ── Locked Slot ───────────────────────────────────────────────
 
