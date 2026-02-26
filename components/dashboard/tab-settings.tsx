@@ -984,10 +984,11 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
         onClose={() => setShowAddDriver(false)}
       />
 
-      <UpgradeComparatifModal
+      <UpgradeModal
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
-        contextLabel="Choisissez une offre pour ajouter plus de chauffeurs."
+        title="Limite atteinte"
+        subtitle="Choisissez une offre pour ajouter plus de chauffeurs."
       />
     </motion.div>
   )
@@ -1068,10 +1069,11 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
         onClose={() => setShowAddVehicle(false)}
       />
 
-      <UpgradeComparatifModal
+      <UpgradeModal
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
-        contextLabel="Choisissez une offre pour ajouter plus de vehicules."
+        title="Limite atteinte"
+        subtitle="Choisissez une offre pour ajouter plus de v\u00e9hicules."
       />
     </motion.div>
   )

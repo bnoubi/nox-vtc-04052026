@@ -66,36 +66,40 @@ export function UpgradeModal({ open, onClose, title, subtitle }: UpgradeModalPro
           className="fixed inset-0 z-50"
         >
           <GoldConfetti trigger={showConfetti} />
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
 
+          {/* Backdrop with blur */}
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />
+
+          {/* Modal - centered with fixed positioning */}
           <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 400, damping: 30 }}
-            style={{ top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
-            className="fixed z-50 w-[calc(100%-2rem)] max-w-[420px] max-h-[90vh] rounded-3xl bg-onyx-card border border-gold/20 shadow-2xl shadow-black/50 flex flex-col overflow-hidden"
+            initial={{ scale: 0.92, opacity: 0, y: 24 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.92, opacity: 0, y: 24 }}
+            transition={{ type: "spring", stiffness: 380, damping: 28 }}
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-[420px] max-h-[90vh] rounded-3xl bg-onyx-card/95 backdrop-blur-xl border border-gold/25 shadow-[0_0_60px_rgba(212,175,55,0.08)] flex flex-col overflow-hidden"
           >
-            {/* Close button */}
+            {/* Gold close button */}
             <button
               onClick={onClose}
-              className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center hover:bg-gold/20 active:scale-95 transition-all"
+              className="absolute top-3.5 right-3.5 z-20 w-8 h-8 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center hover:bg-gold/20 active:scale-90 transition-all"
+              aria-label="Fermer"
             >
-              <X className="h-4 w-4 text-gold" strokeWidth={2} />
+              <X className="h-4 w-4 text-gold" strokeWidth={2.5} />
             </button>
 
-            {/* Header */}
-            <div className="shrink-0 px-5 pt-5 pb-3 text-center">
-              <div className="w-11 h-11 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center mx-auto mb-2.5">
-                <Crown className="h-5 w-5 text-gold" strokeWidth={1.5} />
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-y-auto overscroll-contain">
+              {/* Header */}
+              <div className="px-5 pt-5 pb-3 text-center">
+                <div className="w-12 h-12 rounded-full bg-gold/10 border border-gold/25 flex items-center justify-center mx-auto mb-3">
+                  <Crown className="h-5.5 w-5.5 text-gold" strokeWidth={1.5} />
+                </div>
+                <p className="text-base font-bold text-foreground tracking-tight">{title || "Choisissez votre offre"}</p>
+                {subtitle && <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{subtitle}</p>}
               </div>
-              <p className="text-base font-bold text-foreground">{title || "Choisissez votre offre"}</p>
-              {subtitle && <p className="text-[11px] text-muted-foreground mt-1">{subtitle}</p>}
-            </div>
 
-            {/* Scrollable cards */}
-            <div className="flex-1 overflow-y-auto px-4 pb-5">
-              <div className="space-y-2.5">
+              {/* Plan Cards */}
+              <div className="px-4 space-y-2.5 pb-[50px]">
                 {PLANS.map((p) => {
                   const isCurrent = p.id === plan
                   const isTeam = p.id === "TEAM"
@@ -104,7 +108,6 @@ export function UpgradeModal({ open, onClose, title, subtitle }: UpgradeModalPro
                     (plan === "SOLO") ||
                     (plan === "DUO" && p.id === "TEAM")
                   )
-                  const isDowngrade = !isCurrent && !isUpgrade
 
                   return (
                     <div
@@ -112,42 +115,45 @@ export function UpgradeModal({ open, onClose, title, subtitle }: UpgradeModalPro
                       className={cn(
                         "rounded-2xl border p-4 transition-all",
                         isCurrent
-                          ? isTeam
-                            ? "bg-gradient-to-br from-gold/12 via-gold/5 to-transparent border-gold/40"
-                            : isDuo
-                              ? "bg-gold/8 border-gold/30"
-                              : "bg-onyx-card border-gold/25"
+                          ? "bg-gold/[0.06] border-gold/40"
                           : isTeam
-                            ? "bg-gradient-to-br from-gold/8 to-transparent border-gold/30"
-                            : "bg-onyx-card/70 border-onyx-border/30"
+                            ? "bg-gradient-to-br from-gold/[0.07] to-transparent border-gold/30"
+                            : "bg-onyx-card/60 border-gold/15"
                       )}
                     >
                       {/* Title row */}
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center justify-between mb-0.5">
                         <div className="flex items-center gap-2">
                           <h3 className={cn(
-                            "text-sm font-bold",
+                            "text-[13px] font-bold tracking-wide",
                             isTeam ? "gold-gradient-text" : isDuo ? "text-gold" : "text-foreground"
                           )}>
                             {p.name}
                           </h3>
-                          <span className="text-[9px] text-muted-foreground italic">{p.subtitle}</span>
                           {isCurrent && (
-                            <span className="px-1.5 py-0.5 text-[7px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase tracking-wide">Actif</span>
+                            <span className="px-1.5 py-px text-[7px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase tracking-wider">Actif</span>
                           )}
                         </div>
-                        <div className="text-right">
-                          <span className={cn("text-sm font-bold", isTeam ? "text-gold" : isDuo ? "text-gold" : "text-foreground")}>{p.price}</span>
-                          {"priceSuffix" in p && p.priceSuffix && (
+                        <div className="text-right shrink-0">
+                          <span className={cn(
+                            "text-[13px] font-bold",
+                            isTeam || isDuo ? "text-gold" : "text-foreground"
+                          )}>
+                            {p.price}
+                          </span>
+                          {p.priceSuffix && (
                             <span className="text-[9px] text-muted-foreground">{p.priceSuffix}</span>
                           )}
                         </div>
                       </div>
 
-                      {/* Capacity - single line */}
+                      {/* Subtitle */}
+                      <p className="text-[9px] text-muted-foreground/70 italic mb-1.5">{p.subtitle}</p>
+
+                      {/* Capacity - single compact line */}
                       <p className={cn(
-                        "text-[10px] font-semibold mb-2",
-                        isTeam ? "text-gold/80" : isDuo ? "text-gold/70" : "text-muted-foreground"
+                        "text-[9px] font-semibold mb-2",
+                        isTeam ? "text-gold/70" : isDuo ? "text-gold/60" : "text-muted-foreground/80"
                       )}>
                         {p.capacity}
                       </p>
@@ -157,9 +163,9 @@ export function UpgradeModal({ open, onClose, title, subtitle }: UpgradeModalPro
                         {p.features.map((f) => (
                           <div key={f} className="flex items-center gap-1.5">
                             <Check className={cn(
-                              "h-3 w-3 shrink-0",
-                              isTeam ? "text-gold" : isDuo ? "text-gold/70" : "text-muted-foreground/60"
-                            )} strokeWidth={2} />
+                              "h-2.5 w-2.5 shrink-0",
+                              isTeam ? "text-gold" : isDuo ? "text-gold/60" : "text-muted-foreground/50"
+                            )} strokeWidth={2.5} />
                             <span className={cn(
                               "text-[10px]",
                               f.includes("ILLIMIT") ? "font-semibold text-gold" : "text-muted-foreground"
@@ -170,12 +176,12 @@ export function UpgradeModal({ open, onClose, title, subtitle }: UpgradeModalPro
                         ))}
                       </div>
 
-                      {/* Action button */}
+                      {/* Action button - always visible for upgrades */}
                       {isUpgrade && (
                         <button
                           onClick={() => handleChoose(p.id)}
                           className={cn(
-                            "w-full mt-3 py-2.5 rounded-xl text-xs font-bold active:scale-[0.97] transition-all",
+                            "w-full mt-3 py-2.5 rounded-xl text-[11px] font-bold active:scale-[0.97] transition-all",
                             isTeam
                               ? "bg-gold text-primary-foreground gold-glow hover:bg-gold-light"
                               : "bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25"
@@ -183,11 +189,6 @@ export function UpgradeModal({ open, onClose, title, subtitle }: UpgradeModalPro
                         >
                           Choisir cette offre
                         </button>
-                      )}
-                      {isDowngrade && !isCurrent && (
-                        <div className="w-full mt-2 text-center">
-                          <span className="text-[9px] text-muted-foreground/40">--</span>
-                        </div>
                       )}
                     </div>
                   )
