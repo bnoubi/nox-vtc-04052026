@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import React, { useState, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Coins,
@@ -43,8 +43,9 @@ import {
   X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 import { usePlan } from "./plan-context"
-import { UpgradeModal } from "./upgrade-modal"
+import { useNav } from "./nav-context"
 import { GoldConfetti } from "./gold-confetti"
 import { allDrivers, allVehicles } from "./data"
 import { AddDriverModal } from "./add-driver-modal"
@@ -920,11 +921,20 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
   const isFull = driverCount >= limit
   const [showConfetti, setShowConfetti] = useState(false)
   const [showAddDriver, setShowAddDriver] = useState(false)
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const { navigateToSubscription } = useNav()
 
   function handleUpgrade() {
     setShowConfetti(true)
     setTimeout(() => upgrade(), 300)
+  }
+
+  function handleLockedFab() {
+    toast("Limite atteinte", {
+      description: "Limite d\u2019ajout de chauffeur atteinte. Redirection vers les offres...",
+      icon: <Crown className="h-5 w-5 text-[#D4AF37] shrink-0" strokeWidth={1.5} />,
+      duration: 2000,
+    })
+    setTimeout(() => navigateToSubscription(), 1500)
   }
 
   return (
@@ -965,7 +975,7 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
 
       {/* FAB - Add Driver (locked if full) */}
       <button
-        onClick={() => isFull ? setShowUpgradeModal(true) : setShowAddDriver(true)}
+        onClick={() => isFull ? handleLockedFab() : setShowAddDriver(true)}
         className={cn(
           "absolute bottom-6 right-4 w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-all z-30",
           isFull
@@ -983,13 +993,6 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
         open={showAddDriver}
         onClose={() => setShowAddDriver(false)}
       />
-
-      <UpgradeModal
-        open={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
-        title="Limite atteinte"
-        subtitle="Choisissez une offre pour ajouter plus de chauffeurs."
-      />
     </motion.div>
   )
 }
@@ -1005,11 +1008,20 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   const isFull = vehicleCount >= limit
   const [showConfetti, setShowConfetti] = useState(false)
   const [showAddVehicle, setShowAddVehicle] = useState(false)
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const { navigateToSubscription } = useNav()
 
   function handleUpgrade() {
     setShowConfetti(true)
     setTimeout(() => upgrade(), 300)
+  }
+
+  function handleLockedFab() {
+    toast("Limite atteinte", {
+      description: "Limite d\u2019ajout de v\u00e9hicule atteinte. Redirection vers les offres...",
+      icon: <Crown className="h-5 w-5 text-[#D4AF37] shrink-0" strokeWidth={1.5} />,
+      duration: 2000,
+    })
+    setTimeout(() => navigateToSubscription(), 1500)
   }
 
   return (
@@ -1050,7 +1062,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
 
       {/* FAB - Add Vehicle (locked if full) */}
       <button
-        onClick={() => isFull ? setShowUpgradeModal(true) : setShowAddVehicle(true)}
+        onClick={() => isFull ? handleLockedFab() : setShowAddVehicle(true)}
         className={cn(
           "absolute bottom-6 right-4 w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-all z-30",
           isFull
@@ -1067,13 +1079,6 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
       <AddVehicleFlow
         open={showAddVehicle}
         onClose={() => setShowAddVehicle(false)}
-      />
-
-      <UpgradeModal
-        open={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
-        title="Limite atteinte"
-        subtitle="Choisissez une offre pour ajouter plus de v\u00e9hicules."
       />
     </motion.div>
   )
@@ -1445,6 +1450,11 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
 
 export function SettingsTab() {
   const [screen, setScreen] = useState<SettingsScreen>("main")
+  const { registerSettingsNavigator } = useNav()
+
+  React.useEffect(() => {
+    registerSettingsNavigator(setScreen)
+  }, [registerSettingsNavigator])
 
   return (
     <div className="h-full overflow-hidden">

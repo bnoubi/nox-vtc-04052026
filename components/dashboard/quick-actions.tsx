@@ -1,15 +1,16 @@
 "use client"
 
-import React, { useState } from "react"
-import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock } from "lucide-react"
+import React, { useState, useCallback } from "react"
+import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock, Crown } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 import { AddClientModal } from "./add-client-modal"
 import { AddDriverModal } from "./add-driver-modal"
 import { AddVehicleFlow } from "./add-vehicle-modal"
 import { CreateBCFlow } from "./create-bc"
 import { CreateInvoiceFlow } from "./create-invoice"
 import { usePlan, PLAN_LIMITS } from "./plan-context"
-import { UpgradeModal } from "./upgrade-modal"
+import { useNav } from "./nav-context"
 
 interface QuickActionProps {
   icon: React.ReactNode
@@ -64,11 +65,22 @@ export function QuickActions() {
   const [showVehicleFlow, setShowVehicleFlow] = useState(false)
   const [showBCFlow, setShowBCFlow] = useState(false)
   const [showInvoiceFlow, setShowInvoiceFlow] = useState(false)
-  const [showUpgrade, setShowUpgrade] = useState(false)
-  const { plan, driverCount, vehicleCount, upgrade } = usePlan()
+  const { plan, driverCount, vehicleCount } = usePlan()
+  const { navigateToSubscription } = useNav()
   const limits = PLAN_LIMITS[plan]
   const driversFull = driverCount >= limits.drivers
   const vehiclesFull = vehicleCount >= limits.vehicles
+
+  const handleLocked = useCallback((type: "chauffeur" | "v\u00e9hicule") => {
+    toast("Limite atteinte", {
+      description: `Limite d\u2019ajout de ${type} atteinte. Redirection vers les offres...`,
+      icon: <Crown className="h-5 w-5 text-[#D4AF37] shrink-0" strokeWidth={1.5} />,
+      duration: 2000,
+    })
+    setTimeout(() => {
+      navigateToSubscription()
+    }, 1500)
+  }, [navigateToSubscription])
 
   return (
     <section className="px-4">
@@ -96,23 +108,17 @@ export function QuickActions() {
           label="+ Véhicule"
           locked={vehiclesFull}
           onClick={() => setShowVehicleFlow(true)}
-          onLockedClick={() => setShowUpgrade(true)}
+          onLockedClick={() => handleLocked("v\u00e9hicule")}
         />
         <QuickActionTile
           icon={<UserPlus className="h-5 w-5" strokeWidth={1.5} />}
           label="+ Chauffeur"
           locked={driversFull}
           onClick={() => setShowDriverModal(true)}
-          onLockedClick={() => setShowUpgrade(true)}
+          onLockedClick={() => handleLocked("chauffeur")}
         />
       </div>
 
-      <UpgradeModal
-        open={showUpgrade}
-        onClose={() => setShowUpgrade(false)}
-        title="Limite atteinte"
-        subtitle="Passez \u00e0 une offre sup\u00e9rieure pour d\u00e9bloquer plus de capacit\u00e9."
-      />
       <AddClientModal
         open={showClientModal}
         onClose={() => setShowClientModal(false)}
