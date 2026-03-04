@@ -18,6 +18,7 @@ interface PlanContextValue {
   setDriverCount: (n: number) => void
   setVehicleCount: (n: number) => void
   upgrade: (target?: Plan) => void
+  addTokens: (n: number) => void
 }
 
 const PlanContext = createContext<PlanContextValue>({
@@ -28,6 +29,7 @@ const PlanContext = createContext<PlanContextValue>({
   setDriverCount: () => {},
   setVehicleCount: () => {},
   upgrade: () => {},
+  addTokens: () => {},
 })
 
 export function usePlan() {
@@ -48,8 +50,12 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const addTokens = useCallback((n: number) => {
+    setTokens((prev) => prev + n)
+  }, [])
+
   return (
-    <PlanContext.Provider value={{ plan, driverCount, vehicleCount, tokens, setDriverCount, setVehicleCount, upgrade }}>
+    <PlanContext.Provider value={{ plan, driverCount, vehicleCount, tokens, setDriverCount, setVehicleCount, upgrade, addTokens }}>
       {children}
     </PlanContext.Provider>
   )

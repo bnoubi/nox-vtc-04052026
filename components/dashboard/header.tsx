@@ -1,13 +1,16 @@
 "use client"
 
+import { useState } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Coins } from "lucide-react"
 import { usePlan } from "./plan-context"
 import { cn } from "@/lib/utils"
+import { WalletDrawer } from "./wallet-drawer"
 
 export function DashboardHeader() {
   const { plan, tokens } = usePlan()
   const isTeam = plan === "TEAM"
+  const [walletOpen, setWalletOpen] = useState(false)
 
   return (
     <header className="flex items-center justify-between px-4 py-4">
@@ -43,20 +46,25 @@ export function DashboardHeader() {
           </span>
         </div>
 
-        {/* Wallet Pill - Glassmorphism */}
+        {/* Wallet Pill - Glassmorphism - Clickable */}
         {plan === "SOLO" ? (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-[#D4AF37]/30 shadow-[0_0_8px_rgba(212,175,55,0.1)]">
+          <button
+            onClick={() => setWalletOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-[#D4AF37]/30 shadow-[0_0_8px_rgba(212,175,55,0.1)] hover:border-[#D4AF37]/50 active:scale-95 transition-all"
+          >
             <Coins className="h-3.5 w-3.5 text-[#D4AF37]" strokeWidth={1.5} />
             <span className="text-[11px] font-bold text-[#D4AF37]">{tokens}</span>
             <span className="text-[9px] font-medium text-[#D4AF37]/50">Jetons</span>
-          </div>
+          </button>
         ) : (
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-[#D4AF37]/15 shadow-[0_0_8px_rgba(212,175,55,0.05)]">
             <Coins className="h-3.5 w-3.5 text-[#D4AF37]/50" strokeWidth={1.5} />
-            <span className="text-[9px] font-medium text-[#D4AF37]/40">Illimite</span>
+            <span className="text-[9px] font-medium text-[#D4AF37]/40">Illimit&#233;</span>
           </div>
         )}
       </div>
+
+      <WalletDrawer open={walletOpen} onClose={() => setWalletOpen(false)} />
     </header>
   )
 }
