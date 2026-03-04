@@ -35,12 +35,12 @@ export function DashboardHeader() {
           isTeam
             ? "bg-gradient-to-r from-gold/25 via-gold/15 to-gold/25 border-gold/50 gold-badge-glow"
             : plan === "DUO"
-              ? "bg-gold/15 border-gold/30"
-              : "bg-onyx-card/80 border-onyx-border/40"
+              ? "bg-gradient-to-r from-gold/20 via-gold/10 to-gold/20 border-gold/40"
+              : "bg-gradient-to-r from-[#D4AF37]/12 via-transparent to-[#D4AF37]/12 border-[#D4AF37]/35 shadow-[0_0_10px_rgba(212,175,55,0.08)]"
         )}>
           <span className={cn(
-            "text-[10px] font-bold tracking-wider",
-            isTeam ? "gold-gradient-text" : plan === "DUO" ? "text-gold" : "text-muted-foreground"
+            "text-[10px] font-bold tracking-[0.15em]",
+            isTeam ? "gold-gradient-text" : plan === "DUO" ? "text-gold" : "text-[#D4AF37]"
           )}>
             {plan}
           </span>
