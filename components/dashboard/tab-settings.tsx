@@ -780,7 +780,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
 
         {/* Plan Cards */}
         <SectionLabel>Offres disponibles</SectionLabel>
-        <div className="space-y-3 px-4 mb-5">
+        <div className="space-y-3 px-4 mb-4">
           {planCards.map((p) => {
             const isCurrent = p.id === plan
             const isPlanTeam = p.id === "TEAM"
@@ -851,6 +851,14 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
               </div>
             )
           })}
+        </div>
+
+        {/* Token conservation note */}
+        <div className="mx-4 mb-5 flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-onyx-card/50 border border-onyx-border/20">
+          <Coins className="h-3.5 w-3.5 text-gold/50 shrink-0 mt-0.5" strokeWidth={1.5} />
+          <p className="text-[10px] text-muted-foreground leading-relaxed">
+            {"Vos jetons acquis sont conserv\u00e9s pr\u00e9cieusement en cas de changement d\u2019offre."}
+          </p>
         </div>
       </div>
     </motion.div>

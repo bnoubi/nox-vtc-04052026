@@ -1,16 +1,24 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Coins } from "lucide-react"
 import { usePlan } from "./plan-context"
+import { useNav } from "./nav-context"
 import { cn } from "@/lib/utils"
 import { WalletDrawer } from "./wallet-drawer"
 
 export function DashboardHeader() {
   const { plan, tokens } = usePlan()
+  const { registerWalletOpener } = useNav()
   const isTeam = plan === "TEAM"
   const [walletOpen, setWalletOpen] = useState(false)
+
+  const openWallet = useCallback(() => setWalletOpen(true), [])
+
+  useEffect(() => {
+    registerWalletOpener(openWallet)
+  }, [registerWalletOpener, openWallet])
 
   return (
     <header className="flex items-center justify-between px-4 py-4">

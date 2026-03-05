@@ -9,6 +9,8 @@ interface NavContextValue {
   switchTab: (tab: TabId) => void
   navigateToSubscription: () => void
   registerSettingsNavigator: (fn: (screen: SettingsScreen) => void) => void
+  openWallet: () => void
+  registerWalletOpener: (fn: () => void) => void
 }
 
 const NavContext = createContext<NavContextValue | null>(null)
@@ -21,9 +23,18 @@ export function NavProvider({
   onTabChange: (tab: TabId) => void
 }) {
   const settingsNavigatorRef = useRef<((screen: SettingsScreen) => void) | null>(null)
+  const walletOpenerRef = useRef<(() => void) | null>(null)
 
   const registerSettingsNavigator = useCallback((fn: (screen: SettingsScreen) => void) => {
     settingsNavigatorRef.current = fn
+  }, [])
+
+  const registerWalletOpener = useCallback((fn: () => void) => {
+    walletOpenerRef.current = fn
+  }, [])
+
+  const openWallet = useCallback(() => {
+    walletOpenerRef.current?.()
   }, [])
 
   const switchTab = useCallback((tab: TabId) => {
@@ -39,7 +50,7 @@ export function NavProvider({
   }, [onTabChange])
 
   return (
-    <NavContext.Provider value={{ switchTab, navigateToSubscription, registerSettingsNavigator }}>
+    <NavContext.Provider value={{ switchTab, navigateToSubscription, registerSettingsNavigator, openWallet, registerWalletOpener }}>
       {children}
     </NavContext.Provider>
   )

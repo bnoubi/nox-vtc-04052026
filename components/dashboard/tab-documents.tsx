@@ -14,8 +14,12 @@ import {
   ArrowRight,
   X,
   Check,
+  Coins,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
+import { usePlan } from "./plan-context"
+import { useNav } from "./nav-context"
 import { CreateBCFlow } from "./create-bc"
 
 // ── Types ────────────────────────────────────────────────────────
@@ -625,8 +629,31 @@ export function DocumentsTab() {
   const [invoices, setInvoices] = useState<InvoiceDocument[]>(initialInvoices)
   const [invoicingBC, setInvoicingBC] = useState<BCDocument | null>(null)
   const [viewingInvoice, setViewingInvoice] = useState<InvoiceDocument | null>(null)
+  const [showNoTokens, setShowNoTokens] = useState(false)
+  const { plan, tokens, spendToken } = usePlan()
+  const { openWallet } = useNav()
+  const isUnlimited = plan === "DUO" || plan === "TEAM"
 
   function handleGenerateInvoice(bc: BCDocument, tvaRate: number) {
+    // Token gate for SOLO users
+    if (!isUnlimited) {
+      if (tokens <= 0) {
+        setShowNoTokens(true)
+        setInvoicingBC(null)
+        return
+      }
+      const ok = spendToken()
+      if (!ok) {
+        setShowNoTokens(true)
+        setInvoicingBC(null)
+        return
+      }
+      toast("Document g\u00e9n\u00e9r\u00e9", {
+        description: "1 jeton utilis\u00e9",
+        icon: <Coins className="h-4 w-4 text-[#D4AF37]" strokeWidth={1.5} />,
+        duration: 2500,
+      })
+    }
     const tva = (bc.amount * tvaRate) / 100
     const ttc = bc.amount + tva
     const nextNum = invoices.length + 1
@@ -786,6 +813,58 @@ export function DocumentsTab() {
             invoice={viewingInvoice}
             onClose={() => setViewingInvoice(null)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* No Tokens Alert */}
+      <AnimatePresence>
+        {showNoTokens && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[80]"
+          >
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowNoTokens(false)} />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 500, damping: 35 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-3rem)] max-w-xs rounded-2xl bg-[#141414]/95 backdrop-blur-xl border border-[#D4AF37]/30 shadow-2xl shadow-black/60 p-5"
+            >
+              <button
+                onClick={() => setShowNoTokens(false)}
+                className="absolute top-3 right-3 w-7 h-7 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 flex items-center justify-center hover:bg-[#D4AF37]/20 transition-colors"
+                aria-label="Fermer"
+              >
+                <X className="h-3.5 w-3.5 text-[#D4AF37]" strokeWidth={2.5} />
+              </button>
+
+              <div className="flex justify-center mb-3">
+                <div className="w-11 h-11 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/25 flex items-center justify-center">
+                  <Coins className="h-5 w-5 text-[#D4AF37]" strokeWidth={1.5} />
+                </div>
+              </div>
+
+              <p className="text-sm font-semibold text-[#F5F5F5] text-center leading-snug">
+                {"R\u00e9serve de jetons \u00e9puis\u00e9e."}
+              </p>
+              <p className="text-xs text-[#A1A1AA] text-center mt-1.5 leading-relaxed">
+                {"Rechargez votre Wallet pour t\u00e9l\u00e9charger ce document."}
+              </p>
+
+              <button
+                onClick={() => {
+                  setShowNoTokens(false)
+                  openWallet()
+                }}
+                className="w-full mt-4 py-2.5 rounded-xl bg-[#D4AF37] text-[#1A1A1A] text-xs font-bold tracking-wide uppercase hover:bg-[#E5C44D] active:scale-[0.97] transition-all"
+              >
+                Ouvrir la Boutique
+              </button>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

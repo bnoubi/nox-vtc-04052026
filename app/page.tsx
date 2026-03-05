@@ -11,6 +11,7 @@ import { ClientsTab } from "@/components/dashboard/tab-clients"
 import { SettingsTab } from "@/components/dashboard/tab-settings"
 import { PlanProvider } from "@/components/dashboard/plan-context"
 import { NavProvider } from "@/components/dashboard/nav-context"
+import { Toaster } from "sonner"
 
 const tabComponents: Record<TabId, React.ComponentType> = {
   dashboard: DashboardTab,
@@ -61,6 +62,17 @@ export default function AppPage() {
 
           <SecurityBadge />
           <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+          <Toaster
+            position="top-center"
+            toastOptions={{
+              unstyled: true,
+              classNames: {
+                toast: "w-full max-w-md mx-auto flex items-center gap-3 px-4 py-3 rounded-2xl bg-[#141414]/95 backdrop-blur-xl border border-[#D4AF37]/30 shadow-2xl shadow-black/50",
+                title: "text-sm font-semibold text-[#F5F5F5]",
+                description: "text-[11px] text-[#A1A1AA]",
+              },
+            }}
+          />
         </main>
       </NavProvider>
     </PlanProvider>
