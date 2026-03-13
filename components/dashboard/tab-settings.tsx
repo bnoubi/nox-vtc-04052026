@@ -48,11 +48,8 @@ import { useNav } from "./nav-context"
 import { LimitAlertModal } from "./limit-alert-modal"
 import { GoldConfetti } from "./gold-confetti"
 import { allDrivers, allVehicles } from "./data"
-import { toast } from "sonner"
-import { AddDriverModal } from "./add-driver-modal"
-import { AddVehicleFlow } from "./add-vehicle-modal"
-import { EditDriverDrawer } from "./edit-driver-drawer"
-import { EditVehicleDrawer } from "./edit-vehicle-drawer"
+import { DriverDrawer } from "./driver-drawer"
+import { VehicleDrawer } from "./vehicle-drawer"
 import type { Driver, Vehicle } from "./data"
 
 const SOLO_LIMIT = 1
@@ -932,9 +929,9 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
   const maxSlots = limit
   const isFull = driverCount >= limit
   const [showConfetti, setShowConfetti] = useState(false)
-  const [showAddDriver, setShowAddDriver] = useState(false)
   const [showLimitAlert, setShowLimitAlert] = useState(false)
-  const [editingDriver, setEditingDriver] = useState<Driver | null>(null)
+  // Unified drawer: null = closed, undefined = add mode, Driver = edit mode
+  const [drawerDriver, setDrawerDriver] = useState<Driver | null | undefined>(null)
   const { navigateToSubscription } = useNav()
 
   function handleUpgrade() {
@@ -942,27 +939,19 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
     setTimeout(() => upgrade(), 300)
   }
 
-  function handleDriverSave(_driver: Driver, _data: { nom: string; prenom: string; phone: string; cartePro: string }) {
-    toast("Profil mis \u00e0 jour", {
-      description: `${_data.prenom} ${_data.nom}`,
-      duration: 2000,
-    })
-    setEditingDriver(null)
+  function handleDriverSave() {
+    setDrawerDriver(null)
   }
 
   function handleDriverDelete(driver: Driver) {
     setDriverCount(Math.max(0, driverCount - 1))
-    toast("\u00c9l\u00e9ment retir\u00e9 de la flotte", {
-      description: driver.name,
-      duration: 2000,
-    })
-    setEditingDriver(null)
+    setDrawerDriver(null)
   }
 
   return (
     <motion.div key="team" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full relative">
       <GoldConfetti trigger={showConfetti} />
-      <SubScreenHeader title="Gestion de l'&Eacute;quipe" onBack={onBack} />
+      <SubScreenHeader title="Gestion de l'Équipe" onBack={onBack} />
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-24">
         <div className="flex items-center justify-between mb-1">
           <p className="text-[10px] text-muted-foreground uppercase font-semibold font-heading tracking-[0.15em]">
@@ -976,7 +965,7 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
           {visibleDrivers.map((driver, index) => (
             <motion.div
               key={driver.id}
-              onClick={() => setEditingDriver(driver)}
+              onClick={() => setDrawerDriver(driver)}
               initial={isTeam && index >= DUO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.3, delay: index >= DUO_LIMIT ? (index - DUO_LIMIT) * 0.06 : 0 }}
@@ -998,7 +987,7 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
 
       {/* FAB - Add Driver (locked if full) */}
       <button
-        onClick={() => isFull ? setShowLimitAlert(true) : setShowAddDriver(true)}
+        onClick={() => isFull ? setShowLimitAlert(true) : setDrawerDriver(undefined)}
         className={cn(
           "absolute bottom-6 right-4 w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-all z-30",
           isFull
@@ -1012,22 +1001,18 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
         }
       </button>
 
-      <AddDriverModal
-        open={showAddDriver}
-        onClose={() => setShowAddDriver(false)}
-      />
       <LimitAlertModal
         open={showLimitAlert}
         onClose={() => setShowLimitAlert(false)}
         resourceLabel="chauffeur"
         onManageOffer={navigateToSubscription}
       />
-      <EditDriverDrawer
-        open={!!editingDriver}
-        driver={editingDriver}
-        onClose={() => setEditingDriver(null)}
+      <DriverDrawer
+        open={drawerDriver !== null}
+        driver={drawerDriver || null}
+        onClose={() => setDrawerDriver(null)}
         onSave={handleDriverSave}
-        onDelete={handleDriverDelete}
+        onDelete={drawerDriver ? handleDriverDelete : undefined}
       />
     </motion.div>
   )
@@ -1043,9 +1028,9 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   const maxSlots = limit
   const isFull = vehicleCount >= limit
   const [showConfetti, setShowConfetti] = useState(false)
-  const [showAddVehicle, setShowAddVehicle] = useState(false)
   const [showLimitAlert, setShowLimitAlert] = useState(false)
-  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null)
+  // Unified drawer: null = closed, undefined = add mode, Vehicle = edit mode
+  const [drawerVehicle, setDrawerVehicle] = useState<Vehicle | null | undefined>(null)
   const { navigateToSubscription } = useNav()
 
   function handleUpgrade() {
@@ -1053,21 +1038,13 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
     setTimeout(() => upgrade(), 300)
   }
 
-  function handleVehicleSave(_vehicle: Vehicle, _data: { model: string; plate: string; color: string }) {
-    toast("V\u00e9hicule mis \u00e0 jour", {
-      description: `${_data.model} \u2022 ${_data.plate}`,
-      duration: 2000,
-    })
-    setEditingVehicle(null)
+  function handleVehicleSave() {
+    setDrawerVehicle(null)
   }
 
   function handleVehicleDelete(vehicle: Vehicle) {
     setVehicleCount(Math.max(0, vehicleCount - 1))
-    toast("\u00c9l\u00e9ment retir\u00e9 de la flotte", {
-      description: vehicle.model,
-      duration: 2000,
-    })
-    setEditingVehicle(null)
+    setDrawerVehicle(null)
   }
 
   return (
@@ -1077,7 +1054,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-24">
         <div className="flex items-center justify-between mb-1">
           <p className="text-[10px] text-muted-foreground uppercase font-semibold font-heading tracking-[0.15em]">
-            V&eacute;hicules ({visibleVehicles.length}/{maxSlots})
+            Véhicules ({visibleVehicles.length}/{maxSlots})
           </p>
           {isTeam && (
             <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-gold/15 border border-gold/30 gold-gradient-text">TEAM</span>
@@ -1087,7 +1064,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
           {visibleVehicles.map((vehicle, index) => (
             <motion.div
               key={vehicle.id}
-              onClick={() => setEditingVehicle(vehicle)}
+              onClick={() => setDrawerVehicle(vehicle)}
               initial={isTeam && index >= DUO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.3, delay: index >= DUO_LIMIT ? (index - DUO_LIMIT) * 0.06 : 0 }}
@@ -1109,7 +1086,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
 
       {/* FAB - Add Vehicle (locked if full) */}
       <button
-        onClick={() => isFull ? setShowLimitAlert(true) : setShowAddVehicle(true)}
+        onClick={() => isFull ? setShowLimitAlert(true) : setDrawerVehicle(undefined)}
         className={cn(
           "absolute bottom-6 right-4 w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-all z-30",
           isFull
@@ -1123,22 +1100,18 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
         }
       </button>
 
-      <AddVehicleFlow
-        open={showAddVehicle}
-        onClose={() => setShowAddVehicle(false)}
-      />
       <LimitAlertModal
         open={showLimitAlert}
         onClose={() => setShowLimitAlert(false)}
-        resourceLabel="v\u00e9hicule"
+        resourceLabel="véhicule"
         onManageOffer={navigateToSubscription}
       />
-      <EditVehicleDrawer
-        open={!!editingVehicle}
-        vehicle={editingVehicle}
-        onClose={() => setEditingVehicle(null)}
+      <VehicleDrawer
+        open={drawerVehicle !== null}
+        vehicle={drawerVehicle || null}
+        onClose={() => setDrawerVehicle(null)}
         onSave={handleVehicleSave}
-        onDelete={handleVehicleDelete}
+        onDelete={drawerVehicle ? handleVehicleDelete : undefined}
       />
     </motion.div>
   )
