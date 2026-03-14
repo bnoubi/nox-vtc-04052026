@@ -101,7 +101,7 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
-            transition={{ type: "spring", stiffness: 400, damping: 40 }}
+            transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
             className="relative w-full max-w-md bg-[#0E0E0E]/95 backdrop-blur-2xl rounded-t-3xl border-t border-[#D4AF37]/25 flex flex-col max-h-[90vh] overflow-hidden"
           >
             {/* Drag handle */}

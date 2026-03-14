@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 
 const SLOGANS = [
   "La conformité VTC sans compromis.",
-  "Le Guardian NoX veille sur votre activité VTC en temps réel.",
+  "Le Guardian NOX veille sur votre activité VTC en temps réel.",
   "L'excellence de la gestion VTC.",
 ]
 
@@ -69,14 +69,18 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8, ease: "easeOut" }}
-            className="relative mb-12"
+            className="relative mb-12 flex flex-col items-center"
           >
             {/* Gold glow behind logo */}
             <div className="absolute inset-0 blur-3xl bg-[#D4AF37]/20 rounded-full scale-150" />
             
-            <h1 className="relative text-6xl font-bold tracking-tight">
+            <h1 className="relative text-5xl font-bold tracking-tight text-center">
               <span className="bg-gradient-to-b from-[#F5E6C8] via-[#D4AF37] to-[#B8962E] bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(212,175,55,0.4)]">
-                NoX
+                NOX
+              </span>
+              <span className="mx-2 text-[#D4AF37]/60">-</span>
+              <span className="bg-gradient-to-b from-[#F5E6C8] via-[#D4AF37] to-[#B8962E] bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(212,175,55,0.4)]">
+                VTC
               </span>
             </h1>
           </motion.div>
@@ -120,7 +124,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
                   </div>
 
                   <span className="relative text-[11px] font-semibold tracking-[0.2em] uppercase text-[#F5F5F5]">
-                    Entrer dans l&apos;univers NoX
+                    Entrer dans l&apos;univers NOX
                   </span>
                 </motion.button>
               )}

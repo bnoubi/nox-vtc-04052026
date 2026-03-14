@@ -151,12 +151,12 @@ export function GuardianScore() {
   const strokeDashoffset = circumference - (score / 100) * circumference
 
   return (
-    <section className="px-4">
-      <div className="relative flex flex-col items-center py-6">
+    <section className="px-4 w-full">
+      <div className="relative flex flex-col items-center justify-center py-6 mx-auto max-w-md">
         {/* Circular Progress Ring */}
         <button
           onClick={() => setShowDetails(true)}
-          className="relative group cursor-pointer"
+          className="relative group cursor-pointer active:scale-[0.98] transition-transform"
           aria-label="Voir les détails de conformité"
         >
           <svg
@@ -264,7 +264,7 @@ export function GuardianScore() {
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 400 }}
+              transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
               className="absolute bottom-0 left-0 right-0 max-h-[70vh] rounded-t-3xl bg-[#0E0E0E] border-t border-[#D4AF37]/30 overflow-hidden"
             >
               {/* Handle */}

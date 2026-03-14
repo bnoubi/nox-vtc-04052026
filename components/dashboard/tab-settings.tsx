@@ -1065,10 +1065,10 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
             <motion.div
               key={driver.id}
               onClick={() => setDrawerDriver(driver)}
-              initial={isTeam && index >= DUO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.3, delay: index >= DUO_LIMIT ? (index - DUO_LIMIT) * 0.06 : 0 }}
-              className="relative flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: index * 0.05, ease: [0.4, 0, 0.2, 1] }}
+              className="relative flex items-center gap-3 p-4 min-h-[56px] rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
             >
               {/* Compliance Status Dot */}
               <div className="absolute top-3 right-3">
@@ -1168,10 +1168,10 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
             <motion.div
               key={vehicle.id}
               onClick={() => setDrawerVehicle(vehicle)}
-              initial={isTeam && index >= DUO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.3, delay: index >= DUO_LIMIT ? (index - DUO_LIMIT) * 0.06 : 0 }}
-              className="relative flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: index * 0.05, ease: [0.4, 0, 0.2, 1] }}
+              className="relative flex items-center gap-3 p-4 min-h-[56px] rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
             >
               {/* Compliance Status Dot */}
               <div className="absolute top-3 right-3">

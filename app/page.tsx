@@ -60,10 +60,10 @@ export default function AppPage() {
   return (
     <PlanProvider>
       <NavProvider onTabChange={setActiveTab}>
-        <main className="min-h-screen bg-background">
+        <main className="min-h-screen bg-background overflow-x-hidden">
           <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
 
-          <div className="relative max-w-md mx-auto h-screen flex flex-col pb-32">
+          <div className="relative max-w-md mx-auto h-screen flex flex-col pb-32 overflow-x-hidden">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
