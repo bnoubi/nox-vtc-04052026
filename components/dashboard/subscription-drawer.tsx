@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, ShieldCheck, Loader2, CheckCircle2, Crown, Sparkles, FileText, Users, Car, Coins } from "lucide-react"
+import { X, ShieldCheck, Loader2, CheckCircle2, Crown, Coins } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePlan, type Plan } from "./plan-context"
 import { toast } from "sonner"
@@ -14,21 +14,24 @@ const PLAN_DETAILS = {
     name: "DUO",
     subtitle: "L'offre Binôme",
     price: "4,99",
-    quota: "Max 2 Chauffeurs / Max 2 Véhicules",
-    features: [
-      { icon: FileText, text: "Documents illimités" },
-      { icon: Sparkles, text: "Support prioritaire" },
+    bulletPoints: [
+      { text: "Signature Entreprise incluse", highlight: true },
+      { text: "Max 2 Chauffeurs / Max 2 Véhicules", highlight: false },
+      { text: "Documents illimités", highlight: false },
+      { text: "Support prioritaire", highlight: false },
     ],
   },
   TEAM: {
     name: "TEAM",
     subtitle: "L'offre Flotte",
     price: "9,99",
-    quota: "Max 10 Chauffeurs / Max 10 Véhicules",
-    features: [
-      { icon: FileText, text: "Documents illimités" },
-      { icon: Sparkles, text: "Stats avancées" },
-      { icon: Sparkles, text: "API & Intégrations" },
+    bulletPoints: [
+      { text: "Signature Entreprise incluse", highlight: true },
+      { text: "Max 10 Chauffeurs / Max 10 Véhicules", highlight: false },
+      { text: "Documents illimités", highlight: false },
+      { text: "Support prioritaire", highlight: false },
+      { text: "Stats avancées", highlight: false },
+      { text: "API & Intégrations", highlight: false },
     ],
   },
 } as const
@@ -150,29 +153,29 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
                   </div>
                 </div>
 
-                {/* Signature Highlight */}
-                <div className="text-center mb-3">
-                  <p className="text-[13px] font-light tracking-wide text-[#D4AF37]">
-                    Signature Entreprise incluse
-                  </p>
-                </div>
-
-                {/* Gold separator */}
-                <div className="h-px bg-gradient-to-r from-transparent via-[#D4AF37]/40 to-transparent mb-3" />
-
-                {/* Quota line */}
-                <p className="text-[11px] text-center text-[#A1A1AA] font-medium mb-4">
-                  {planInfo.quota}
-                </p>
-
-                {/* Features */}
-                <div className="space-y-2.5">
-                  {planInfo.features.map((f, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <div className="w-7 h-7 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/20 flex items-center justify-center">
-                        <f.icon className="h-3.5 w-3.5 text-[#D4AF37]" strokeWidth={1.5} />
+                {/* Bullet Points List */}
+                <div className="space-y-3">
+                  {planInfo.bulletPoints.map((point, i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <div className={cn(
+                        "w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5",
+                        point.highlight
+                          ? "bg-[#D4AF37] shadow-[0_0_10px_rgba(212,175,55,0.4)]"
+                          : "bg-[#D4AF37]/15 border border-[#D4AF37]/30"
+                      )}>
+                        <CheckCircle2 className={cn(
+                          "h-3 w-3",
+                          point.highlight ? "text-[#0E0E0E]" : "text-[#D4AF37]"
+                        )} strokeWidth={2.5} />
                       </div>
-                      <span className="text-sm text-[#F5F5F5]">{f.text}</span>
+                      <span className={cn(
+                        "text-[13px] leading-relaxed",
+                        point.highlight
+                          ? "font-semibold text-[#D4AF37]"
+                          : "text-[#F5F5F5]"
+                      )}>
+                        {point.text}
+                      </span>
                     </div>
                   ))}
                 </div>
