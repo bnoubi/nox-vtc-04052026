@@ -14,20 +14,20 @@ const PLAN_DETAILS = {
     name: "DUO",
     subtitle: "L'offre Binôme",
     price: "4,99",
+    quota: "Max 2 Chauffeurs / Max 2 Véhicules",
     features: [
       { icon: FileText, text: "Documents illimités" },
-      { icon: Users, text: "Jusqu'à 2 chauffeurs" },
-      { icon: Car, text: "Jusqu'à 2 véhicules" },
+      { icon: Sparkles, text: "Support prioritaire" },
     ],
   },
   TEAM: {
     name: "TEAM",
     subtitle: "L'offre Flotte",
     price: "9,99",
+    quota: "Max 10 Chauffeurs / Max 10 Véhicules",
     features: [
       { icon: FileText, text: "Documents illimités" },
-      { icon: Users, text: "Jusqu'à 10 chauffeurs" },
-      { icon: Car, text: "Jusqu'à 10 véhicules" },
+      { icon: Sparkles, text: "Stats avancées" },
       { icon: Sparkles, text: "API & Intégrations" },
     ],
   },
@@ -149,6 +149,21 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
                     <p className="text-[10px] text-[#A1A1AA]">/mois</p>
                   </div>
                 </div>
+
+                {/* Signature Highlight */}
+                <div className="text-center mb-3">
+                  <p className="text-[13px] font-light tracking-wide text-[#D4AF37]">
+                    Signature Entreprise incluse
+                  </p>
+                </div>
+
+                {/* Gold separator */}
+                <div className="h-px bg-gradient-to-r from-transparent via-[#D4AF37]/40 to-transparent mb-3" />
+
+                {/* Quota line */}
+                <p className="text-[11px] text-center text-[#A1A1AA] font-medium mb-4">
+                  {planInfo.quota}
+                </p>
 
                 {/* Features */}
                 <div className="space-y-2.5">
