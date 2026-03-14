@@ -11,6 +11,7 @@ import { ClientsTab } from "@/components/dashboard/tab-clients"
 import { SettingsTab } from "@/components/dashboard/tab-settings"
 import { PlanProvider } from "@/components/dashboard/plan-context"
 import { NavProvider } from "@/components/dashboard/nav-context"
+import { SplashScreen } from "@/components/dashboard/splash-screen"
 import { Toaster } from "sonner"
 
 const tabComponents: Record<TabId, React.ComponentType> = {
@@ -21,13 +22,26 @@ const tabComponents: Record<TabId, React.ComponentType> = {
   settings: SettingsTab,
 }
 
+const SPLASH_SESSION_KEY = "nox_splash_shown"
+
 export default function AppPage() {
   const [activeTab, setActiveTab] = useState<TabId>("dashboard")
   const [mounted, setMounted] = useState(false)
+  const [showSplash, setShowSplash] = useState(false)
 
   useEffect(() => {
+    // Check if splash was already shown this session
+    const splashShown = sessionStorage.getItem(SPLASH_SESSION_KEY)
+    if (!splashShown) {
+      setShowSplash(true)
+    }
     setMounted(true)
   }, [])
+
+  function handleSplashComplete() {
+    sessionStorage.setItem(SPLASH_SESSION_KEY, "true")
+    setShowSplash(false)
+  }
 
   const ActiveComponent = tabComponents[activeTab]
 
@@ -37,6 +51,10 @@ export default function AppPage() {
         <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
       </main>
     )
+  }
+
+  if (showSplash) {
+    return <SplashScreen onComplete={handleSplashComplete} />
   }
 
   return (
