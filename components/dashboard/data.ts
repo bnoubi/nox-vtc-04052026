@@ -3,6 +3,7 @@ export interface Driver {
   name: string
   initials: string
   online: boolean
+  carteProExpiration: string // ISO date string
 }
 
 export interface Vehicle {
@@ -10,22 +11,24 @@ export interface Vehicle {
   model: string
   plate: string
   inService: boolean
+  assuranceExpiration: string // ISO date string
+  controleTechniqueExpiration: string // ISO date string
 }
 
 export const allDrivers: Driver[] = [
-  { id: "1", name: "Karim Benzari", initials: "KB", online: true },
-  { id: "2", name: "Sophie Martin", initials: "SM", online: false },
-  { id: "3", name: "Lucas Fernandez", initials: "LF", online: true },
-  { id: "4", name: "Amélie Rousseau", initials: "AR", online: true },
-  { id: "5", name: "Thomas Nguyen", initials: "TN", online: false },
+  { id: "1", name: "Karim Benzari", initials: "KB", online: true, carteProExpiration: "2026-08-15" },
+  { id: "2", name: "Sophie Martin", initials: "SM", online: false, carteProExpiration: "2026-04-02" },
+  { id: "3", name: "Lucas Fernandez", initials: "LF", online: true, carteProExpiration: "2026-03-20" },
+  { id: "4", name: "Amélie Rousseau", initials: "AR", online: true, carteProExpiration: "2027-01-10" },
+  { id: "5", name: "Thomas Nguyen", initials: "TN", online: false, carteProExpiration: "2026-02-28" },
 ]
 
 export const allVehicles: Vehicle[] = [
-  { id: "1", model: "Mercedes Classe S", plate: "AB-123-CD", inService: true },
-  { id: "2", model: "BMW Série 7", plate: "EF-456-GH", inService: true },
-  { id: "3", model: "Audi A8 L", plate: "IJ-789-KL", inService: true },
-  { id: "4", model: "Mercedes Classe V", plate: "MN-012-OP", inService: true },
-  { id: "5", model: "Tesla Model S", plate: "QR-345-ST", inService: false },
+  { id: "1", model: "Mercedes Classe S", plate: "AB-123-CD", inService: true, assuranceExpiration: "2026-03-18", controleTechniqueExpiration: "2026-09-01" },
+  { id: "2", model: "BMW Série 7", plate: "EF-456-GH", inService: true, assuranceExpiration: "2026-06-15", controleTechniqueExpiration: "2026-12-20" },
+  { id: "3", model: "Audi A8 L", plate: "IJ-789-KL", inService: true, assuranceExpiration: "2026-05-01", controleTechniqueExpiration: "2026-02-10" },
+  { id: "4", model: "Mercedes Classe V", plate: "MN-012-OP", inService: true, assuranceExpiration: "2026-07-22", controleTechniqueExpiration: "2026-11-30" },
+  { id: "5", model: "Tesla Model S", plate: "QR-345-ST", inService: false, assuranceExpiration: "2026-04-10", controleTechniqueExpiration: "2026-08-15" },
 ]
 
 export const existingClients = [
