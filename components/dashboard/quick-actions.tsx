@@ -4,8 +4,8 @@ import React, { useState } from "react"
 import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AddClientModal } from "./add-client-modal"
-import { AddDriverModal } from "./add-driver-modal"
-import { AddVehicleFlow } from "./add-vehicle-modal"
+import { DriverDrawer } from "./driver-drawer"
+import { VehicleDrawer } from "./vehicle-drawer"
 import { CreateBCFlow } from "./create-bc"
 import { CreateInvoiceFlow } from "./create-invoice"
 import { usePlan, PLAN_LIMITS } from "./plan-context"
@@ -61,8 +61,8 @@ function QuickActionTile({ icon, label, locked, onClick, onLockedClick }: QuickA
 
 export function QuickActions() {
   const [showClientModal, setShowClientModal] = useState(false)
-  const [showDriverModal, setShowDriverModal] = useState(false)
-  const [showVehicleFlow, setShowVehicleFlow] = useState(false)
+  const [showDriverDrawer, setShowDriverDrawer] = useState(false)
+  const [showVehicleDrawer, setShowVehicleDrawer] = useState(false)
   const [showBCFlow, setShowBCFlow] = useState(false)
   const [showInvoiceFlow, setShowInvoiceFlow] = useState(false)
   const [limitAlert, setLimitAlert] = useState<{ open: boolean; label: string }>({ open: false, label: "" })
@@ -97,14 +97,14 @@ export function QuickActions() {
           icon={<Car className="h-5 w-5" strokeWidth={1.5} />}
           label="+ Véhicule"
           locked={vehiclesFull}
-          onClick={() => setShowVehicleFlow(true)}
-          onLockedClick={() => setLimitAlert({ open: true, label: "v\u00e9hicule" })}
+          onClick={() => setShowVehicleDrawer(true)}
+          onLockedClick={() => setLimitAlert({ open: true, label: "véhicule" })}
         />
         <QuickActionTile
           icon={<UserPlus className="h-5 w-5" strokeWidth={1.5} />}
           label="+ Chauffeur"
           locked={driversFull}
-          onClick={() => setShowDriverModal(true)}
+          onClick={() => setShowDriverDrawer(true)}
           onLockedClick={() => setLimitAlert({ open: true, label: "chauffeur" })}
         />
       </div>
@@ -113,13 +113,17 @@ export function QuickActions() {
         open={showClientModal}
         onClose={() => setShowClientModal(false)}
       />
-      <AddDriverModal
-        open={showDriverModal}
-        onClose={() => setShowDriverModal(false)}
+      <DriverDrawer
+        open={showDriverDrawer}
+        driver={null}
+        onClose={() => setShowDriverDrawer(false)}
+        onSave={() => setShowDriverDrawer(false)}
       />
-      <AddVehicleFlow
-        open={showVehicleFlow}
-        onClose={() => setShowVehicleFlow(false)}
+      <VehicleDrawer
+        open={showVehicleDrawer}
+        vehicle={null}
+        onClose={() => setShowVehicleDrawer(false)}
+        onSave={() => setShowVehicleDrawer(false)}
       />
       <CreateBCFlow
         open={showBCFlow}

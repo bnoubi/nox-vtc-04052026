@@ -50,6 +50,7 @@ import { GoldConfetti } from "./gold-confetti"
 import { allDrivers, allVehicles } from "./data"
 import { DriverDrawer } from "./driver-drawer"
 import { VehicleDrawer } from "./vehicle-drawer"
+import { WalletDrawer } from "./wallet-drawer"
 import type { Driver, Vehicle } from "./data"
 
 const SOLO_LIMIT = 1
@@ -1361,8 +1362,9 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
 // ── Main Settings ─────────────────────────────────────────────
 
 function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => void }) {
-  const { plan, tokens } = usePlan()
+  const { plan, tokens, driverCount, vehicleCount } = usePlan()
   const isTeam = plan === "TEAM"
+  const [walletOpen, setWalletOpen] = useState(false)
 
   const accountSettings: SettingItem[] = [
     { icon: <User className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Profil", description: "Jean Dupont, jean.dupont@nox-vtc.fr", screen: "profile" },
@@ -1374,14 +1376,14 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
   const managementSettings: SettingItem[] = [
     {
       icon: <Users className="h-4 w-4" strokeWidth={1.5} />,
-      label: "Gestion de l'\u00c9quipe",
-      description: isTeam ? `${allDrivers.length} chauffeurs actifs` : plan === "DUO" ? "2 chauffeurs max" : "0 chauffeur actif",
+      label: "Gestion de l'Équipe",
+      description: `${driverCount} chauffeur${driverCount > 1 ? "s" : ""} actif${driverCount > 1 ? "s" : ""}`,
       screen: "team",
     },
     {
       icon: <Car className="h-4 w-4" strokeWidth={1.5} />,
       label: "Gestion du Parc",
-      description: isTeam ? `${allVehicles.length} vehicules en service` : plan === "DUO" ? "2 vehicules max" : "0 vehicule actif",
+      description: `${vehicleCount} véhicule${vehicleCount > 1 ? "s" : ""} en service`,
       screen: "fleet",
     },
   ]
@@ -1420,18 +1422,28 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
                 </p>
               ) : (
                 <p className="text-lg font-bold font-heading text-gold">
-                  Illimite
+                  Illimité
                 </p>
               )}
             </div>
           </div>
-          <div className="w-full py-2 rounded-xl bg-gold/15 border border-gold/30 flex flex-col items-center justify-center gap-0.5">
-            <span className="text-[11px] font-bold text-gold tracking-wider uppercase">Documents Illimités</span>
-            <div className="flex items-center gap-1">
-              <Headphones className="h-3 w-3 text-gold/70" strokeWidth={1.5} />
-              <span className="text-[9px] text-gold/70 font-medium">Support Prioritaire 24/7</span>
+          {plan === "SOLO" ? (
+            <button
+              onClick={() => setWalletOpen(true)}
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#D4AF37]/20 via-[#D4AF37]/10 to-[#D4AF37]/20 border border-gold/40 flex items-center justify-center gap-2 hover:border-gold/60 active:scale-[0.98] transition-all"
+            >
+              <Coins className="h-4 w-4 text-gold" strokeWidth={1.5} />
+              <span className="text-[11px] font-bold text-gold tracking-wider uppercase">Recharger mes Jetons</span>
+            </button>
+          ) : (
+            <div className="w-full py-2 rounded-xl bg-gold/15 border border-gold/30 flex flex-col items-center justify-center gap-0.5">
+              <span className="text-[11px] font-bold text-gold tracking-wider uppercase">Documents Illimités</span>
+              <div className="flex items-center gap-1">
+                <Headphones className="h-3 w-3 text-gold/70" strokeWidth={1.5} />
+                <span className="text-[9px] text-gold/70 font-medium">Support Prioritaire 24/7</span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Compte */}
@@ -1475,6 +1487,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
           </div>
         </div>
       </div>
+      <WalletDrawer open={walletOpen} onClose={() => setWalletOpen(false)} />
     </motion.div>
   )
 }
