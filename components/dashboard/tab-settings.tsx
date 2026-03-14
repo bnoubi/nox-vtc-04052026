@@ -52,6 +52,7 @@ import { DriverDrawer } from "./driver-drawer"
 import { VehicleDrawer } from "./vehicle-drawer"
 import { WalletDrawer } from "./wallet-drawer"
 import { SubscriptionDrawer } from "./subscription-drawer"
+import { ComplianceDot, getDriverComplianceStatus, getVehicleComplianceStatus } from "./compliance-dot"
 import { toast } from "sonner"
 import type { Driver, Vehicle } from "./data"
 
@@ -1067,8 +1068,12 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
               initial={isTeam && index >= DUO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.3, delay: index >= DUO_LIMIT ? (index - DUO_LIMIT) * 0.06 : 0 }}
-              className="flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
+              className="relative flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
             >
+              {/* Compliance Status Dot */}
+              <div className="absolute top-3 right-3">
+                <ComplianceDot status={getDriverComplianceStatus(driver.carteProExpiration)} />
+              </div>
               <div className="w-10 h-10 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0 group-hover:bg-gold/25 transition-colors">
                 <span className="text-sm font-bold text-gold">{driver.initials}</span>
               </div>
@@ -1166,8 +1171,12 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
               initial={isTeam && index >= DUO_LIMIT ? { opacity: 0, y: 20, scale: 0.95 } : false}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.3, delay: index >= DUO_LIMIT ? (index - DUO_LIMIT) * 0.06 : 0 }}
-              className="flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
+              className="relative flex items-center gap-3 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
             >
+              {/* Compliance Status Dot */}
+              <div className="absolute top-3 right-3">
+                <ComplianceDot status={getVehicleComplianceStatus(vehicle.assuranceExpiration, vehicle.controleTechniqueExpiration)} />
+              </div>
               <div className="w-10 h-10 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0 group-hover:bg-gold/25 transition-colors">
                 <Car className="h-4 w-4 text-gold" strokeWidth={1.5} />
               </div>
