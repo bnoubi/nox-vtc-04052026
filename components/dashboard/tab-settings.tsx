@@ -51,6 +51,8 @@ import { allDrivers, allVehicles } from "./data"
 import { DriverDrawer } from "./driver-drawer"
 import { VehicleDrawer } from "./vehicle-drawer"
 import { WalletDrawer } from "./wallet-drawer"
+import { SubscriptionDrawer } from "./subscription-drawer"
+import { toast } from "sonner"
 import type { Driver, Vehicle } from "./data"
 
 const SOLO_LIMIT = 1
@@ -700,14 +702,35 @@ function BankingScreen({ onBack }: { onBack: () => void }) {
 // ── Abonnement Screen ──────────────────────────────────────────
 
 function SubscriptionScreen({ onBack }: { onBack: () => void }) {
-  const { plan, upgrade } = usePlan()
+  const { plan, upgrade, tokens } = usePlan()
   const isTeam = plan === "TEAM"
   const isDuo = plan === "DUO"
   const [showConfetti, setShowConfetti] = useState(false)
+  const [targetPlan, setTargetPlan] = useState<"DUO" | "TEAM" | null>(null)
+  const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false)
 
-  function handleChoose(target: "DUO" | "TEAM") {
+  function handleChoose(target: "SOLO" | "DUO" | "TEAM") {
+    // Downgrade to SOLO requires confirmation
+    if (target === "SOLO" && (plan === "DUO" || plan === "TEAM")) {
+      setShowDowngradeConfirm(true)
+      return
+    }
+    // Upgrade to DUO or TEAM opens payment drawer
+    if (target === "DUO" || target === "TEAM") {
+      setTargetPlan(target)
+    }
+  }
+
+  function confirmDowngrade() {
+    setShowDowngradeConfirm(false)
     setShowConfetti(true)
-    setTimeout(() => upgrade(target), 300)
+    setTimeout(() => {
+      upgrade("SOLO")
+      toast("Vous êtes de retour en SOLO", {
+        description: tokens > 0 ? `Vos ${tokens} jetons ont été réactivés.` : "Rechargez des jetons pour générer des documents.",
+        duration: 3000,
+      })
+    }, 300)
   }
 
   const planCards = [
@@ -808,7 +831,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                     <h3 className={cn("text-sm font-bold font-heading", isPlanTeam ? (isCurrent ? "gold-gradient-text" : "text-foreground") : isPlanDuo ? (isCurrent ? "text-gold" : "text-foreground") : "text-foreground")}>{p.name}</h3>
                     <span className="text-[9px] text-muted-foreground font-medium italic">{p.subtitle}</span>
                     {isCurrent && (
-                      <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/20 text-gold border border-gold/30 uppercase">Actif</span>
+                      <span className="px-2 py-0.5 text-[7px] font-bold rounded-full bg-[#D4AF37] text-[#0E0E0E] uppercase tracking-wide shadow-[0_0_10px_rgba(212,175,55,0.3)]">Offre Active</span>
                     )}
                   </div>
                   <div className="text-right">
@@ -837,9 +860,10 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                   ))}
                 </div>
 
+                {/* Show button for upgrades */}
                 {isUpgrade && (
                   <button
-                    onClick={() => handleChoose(p.id as "DUO" | "TEAM")}
+                    onClick={() => handleChoose(p.id)}
                     className={cn(
                       "w-full mt-3 py-2.5 rounded-xl text-xs font-bold active:scale-[0.98] transition-all",
                       isPlanTeam
@@ -848,6 +872,15 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                     )}
                   >
                     Choisir cette offre
+                  </button>
+                )}
+                {/* Show downgrade button for SOLO when user is DUO/TEAM */}
+                {!isCurrent && p.id === "SOLO" && (plan === "DUO" || plan === "TEAM") && (
+                  <button
+                    onClick={() => handleChoose("SOLO")}
+                    className="w-full mt-3 py-2 rounded-xl text-[11px] font-medium text-muted-foreground border border-onyx-border/30 hover:border-gold/30 hover:text-gold/70 active:scale-[0.98] transition-all"
+                  >
+                    Repasser en SOLO
                   </button>
                 )}
               </div>
@@ -859,10 +892,74 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
         <div className="mx-4 mb-5 flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-onyx-card/50 border border-onyx-border/20">
           <Coins className="h-3.5 w-3.5 text-gold/50 shrink-0 mt-0.5" strokeWidth={1.5} />
           <p className="text-[10px] text-muted-foreground leading-relaxed">
-            {"Vos jetons acquis sont conserv\u00e9s pr\u00e9cieusement en cas de changement d\u2019offre."}
+            {"Vos jetons acquis sont conservés précieusement en cas de changement d'offre."}
           </p>
         </div>
       </div>
+
+      {/* Subscription Payment Drawer */}
+      <SubscriptionDrawer
+        open={!!targetPlan}
+        targetPlan={targetPlan}
+        onClose={() => setTargetPlan(null)}
+      />
+
+      {/* Downgrade Confirmation Modal */}
+      <AnimatePresence>
+        {showDowngradeConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[80]"
+          >
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowDowngradeConfirm(false)} />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 500, damping: 35 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-sm rounded-2xl bg-[#141414]/95 backdrop-blur-xl border border-[#D4AF37]/30 shadow-2xl shadow-black/60 p-5"
+            >
+              <button
+                onClick={() => setShowDowngradeConfirm(false)}
+                className="absolute top-3 right-3 w-7 h-7 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 flex items-center justify-center hover:bg-[#D4AF37]/20 transition-colors"
+                aria-label="Fermer"
+              >
+                <X className="h-3.5 w-3.5 text-[#D4AF37]" strokeWidth={2.5} />
+              </button>
+
+              <div className="flex justify-center mb-4">
+                <div className="w-12 h-12 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/25 flex items-center justify-center">
+                  <AlertTriangle className="h-6 w-6 text-[#D4AF37]" strokeWidth={1.5} />
+                </div>
+              </div>
+
+              <p className="text-base font-semibold text-[#F5F5F5] text-center leading-snug mb-2">
+                Repasser en SOLO ?
+              </p>
+              <p className="text-[12px] text-[#A1A1AA] text-center leading-relaxed mb-5">
+                En repassant en SOLO, vous ne pourrez gérer qu'un seul véhicule et un seul chauffeur. Les documents seront facturés à l'usage (jetons).
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDowngradeConfirm(false)}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-[#A1A1AA] border border-[#333] hover:border-[#555] active:scale-[0.97] transition-all"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={confirmDowngrade}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-[#D4AF37] text-[#1A1A1A] hover:bg-[#E5C44D] active:scale-[0.97] transition-all"
+                >
+                  Confirmer
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
