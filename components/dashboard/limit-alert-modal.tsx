@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Crown } from "lucide-react"
+import { X, Shield } from "lucide-react"
 
 interface LimitAlertModalProps {
   open: boolean
@@ -19,50 +19,52 @@ export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer }:
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[60]"
+          className="fixed inset-0 z-[100]"
         >
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+          <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={onClose} />
 
-          {/* Alert box -- positioned at top for visibility above nav bar */}
+          {/* Alert box -- positioned top-left corner */}
           <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: -20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: -20 }}
+            initial={{ opacity: 0, x: -20, y: -20 }}
+            animate={{ opacity: 1, x: 0, y: 0 }}
+            exit={{ opacity: 0, x: -20, y: -20 }}
             transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm rounded-2xl bg-[#0E0E0E] border border-[#D4AF37]/40 shadow-[0_8px_40px_rgba(0,0,0,0.8),0_0_20px_rgba(212,175,55,0.15)] p-6"
+            className="absolute top-0 left-0 m-3 w-[calc(100%-1.5rem)] max-w-sm rounded-2xl bg-[#0A0A0A] border border-[#D4AF37]/50 shadow-[0_8px_40px_rgba(0,0,0,0.9),0_0_30px_rgba(212,175,55,0.2)] p-5"
           >
-            {/* Close X */}
+            {/* Close X - top right */}
             <button
               onClick={onClose}
-              className="absolute top-3 right-3 w-8 h-8 min-h-[44px] min-w-[44px] -mt-1 -mr-1 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 flex items-center justify-center hover:bg-[#D4AF37]/20 active:scale-[0.95] transition-all"
+              className="absolute top-2.5 right-2.5 w-9 h-9 rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/10 flex items-center justify-center hover:bg-[#D4AF37]/25 active:scale-[0.95] transition-all"
               aria-label="Fermer"
             >
               <X className="h-4 w-4 text-[#D4AF37]" strokeWidth={2.5} />
             </button>
 
-            {/* Icon */}
-            <div className="flex justify-center mb-4">
-              <div className="w-14 h-14 rounded-full bg-gradient-to-b from-[#D4AF37]/20 to-[#D4AF37]/5 border border-[#D4AF37]/30 flex items-center justify-center shadow-[0_0_20px_rgba(212,175,55,0.2)]">
-                <Crown className="h-6 w-6 text-[#D4AF37]" strokeWidth={1.5} />
+            {/* Shield Icon */}
+            <div className="flex justify-center mb-4 mt-1">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-b from-[#D4AF37]/25 to-[#D4AF37]/5 border border-[#D4AF37]/40 flex items-center justify-center shadow-[0_0_25px_rgba(212,175,55,0.25)]">
+                <Shield className="h-5 w-5 text-[#D4AF37]" strokeWidth={1.5} />
               </div>
             </div>
 
-            {/* Message */}
-            <p className="text-base font-semibold text-[#F5F5F5] text-center leading-snug">
-              Limite atteinte
-            </p>
-            <p className="text-[13px] text-[#A1A1AA] text-center mt-2 leading-relaxed">
-              {`Vous avez atteint la limite d'ajout de ${resourceLabel} pour votre offre actuelle. Passez à une offre supérieure pour débloquer plus de places.`}
+            {/* Title */}
+            <p className="text-sm font-bold text-[#D4AF37] text-center tracking-wider uppercase mb-2">
+              Limite Atteinte
             </p>
 
-            {/* CTA */}
+            {/* Message */}
+            <p className="text-[12px] text-[#A1A1AA] text-center leading-relaxed px-2">
+              {`Vous avez atteint la limite d'ajout de ${resourceLabel} pour votre offre actuelle. Passez à une offre supérieure pour continuer.`}
+            </p>
+
+            {/* CTA Button */}
             <button
               onClick={() => {
                 onClose()
                 onManageOffer()
               }}
-              className="w-full mt-5 py-3.5 min-h-[48px] rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#B8962E] text-[#0E0E0E] text-sm font-bold tracking-wider uppercase hover:from-[#E5C44D] hover:to-[#D4AF37] active:scale-[0.98] transition-all shadow-[0_4px_20px_rgba(212,175,55,0.3)]"
+              className="w-full mt-5 py-3 min-h-[48px] rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#B8962E] text-[#0A0A0A] text-xs font-bold tracking-[0.15em] uppercase hover:from-[#E5C44D] hover:to-[#D4AF37] active:scale-[0.98] transition-all shadow-[0_4px_20px_rgba(212,175,55,0.35)]"
             >
               Mon Abonnement
             </button>
