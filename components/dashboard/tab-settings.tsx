@@ -912,47 +912,53 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[80]"
+            className="fixed inset-0 z-[100]"
           >
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowDowngradeConfirm(false)} />
+            <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={() => setShowDowngradeConfirm(false)} />
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 500, damping: 35 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-sm rounded-2xl bg-[#141414]/95 backdrop-blur-xl border border-[#D4AF37]/30 shadow-2xl shadow-black/60 p-5"
+              initial={{ opacity: 0, x: -20, y: -20 }}
+              animate={{ opacity: 1, x: 0, y: 0 }}
+              exit={{ opacity: 0, x: -20, y: -20 }}
+              transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+              className="absolute top-0 left-0 m-3 w-[calc(100%-1.5rem)] max-w-sm rounded-2xl bg-[#0A0A0A] border border-[#D4AF37]/50 shadow-[0_8px_40px_rgba(0,0,0,0.9),0_0_30px_rgba(212,175,55,0.2)] p-4"
             >
+              {/* Close X */}
               <button
                 onClick={() => setShowDowngradeConfirm(false)}
-                className="absolute top-3 right-3 w-7 h-7 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 flex items-center justify-center hover:bg-[#D4AF37]/20 transition-colors"
+                className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/10 flex items-center justify-center hover:bg-[#D4AF37]/25 active:scale-[0.95] transition-all"
                 aria-label="Fermer"
               >
                 <X className="h-3.5 w-3.5 text-[#D4AF37]" strokeWidth={2.5} />
               </button>
 
-              <div className="flex justify-center mb-4">
-                <div className="w-12 h-12 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/25 flex items-center justify-center">
-                  <AlertTriangle className="h-6 w-6 text-[#D4AF37]" strokeWidth={1.5} />
+              {/* Alert Icon */}
+              <div className="flex justify-center mb-3 mt-1">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-b from-[#D4AF37]/25 to-[#D4AF37]/5 border border-[#D4AF37]/40 flex items-center justify-center shadow-[0_0_20px_rgba(212,175,55,0.2)]">
+                  <AlertTriangle className="h-4.5 w-4.5 text-[#D4AF37]" strokeWidth={1.5} />
                 </div>
               </div>
 
-              <p className="text-base font-semibold text-[#F5F5F5] text-center leading-snug mb-2">
-                Repasser en SOLO ?
-              </p>
-              <p className="text-[12px] text-[#A1A1AA] text-center leading-relaxed mb-5">
-                En repassant en SOLO, vous ne pourrez gérer qu'un seul véhicule et un seul chauffeur. Les documents seront facturés à l'usage (jetons).
+              {/* Title */}
+              <p className="text-xs font-bold text-[#D4AF37] text-center tracking-wider uppercase mb-2">
+                Attention
               </p>
 
-              <div className="flex gap-3">
+              {/* Message */}
+              <p className="text-[11px] text-[#A1A1AA] text-center leading-relaxed px-1 mb-4">
+                En repassant en SOLO, votre capacité sera limitée à 1 véhicule et 1 chauffeur. Pour générer des documents vous devrez acheter des jetons. Confirmer le changement ?
+              </p>
+
+              {/* Buttons */}
+              <div className="flex gap-2">
                 <button
                   onClick={() => setShowDowngradeConfirm(false)}
-                  className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-[#A1A1AA] border border-[#333] hover:border-[#555] active:scale-[0.97] transition-all"
+                  className="flex-1 py-2.5 min-h-[44px] rounded-xl text-[11px] font-semibold text-[#A1A1AA] border border-[#333] hover:border-[#D4AF37]/30 active:scale-[0.97] transition-all"
                 >
                   Annuler
                 </button>
                 <button
                   onClick={confirmDowngrade}
-                  className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-[#D4AF37] text-[#1A1A1A] hover:bg-[#E5C44D] active:scale-[0.97] transition-all"
+                  className="flex-1 py-2.5 min-h-[44px] rounded-xl text-[11px] font-bold bg-gradient-to-r from-[#D4AF37] to-[#B8962E] text-[#0A0A0A] tracking-wide uppercase hover:from-[#E5C44D] hover:to-[#D4AF37] active:scale-[0.97] transition-all shadow-[0_2px_12px_rgba(212,175,55,0.3)]"
                 >
                   Confirmer
                 </button>
