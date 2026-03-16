@@ -1475,6 +1475,7 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
 
 function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => void }) {
   const { plan, tokens, driverCount, vehicleCount } = usePlan()
+  const { logout } = useNav()
   const isTeam = plan === "TEAM"
   const [walletOpen, setWalletOpen] = useState(false)
 
@@ -1584,7 +1585,10 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
 
         {/* Déconnexion */}
         <div className="mx-4 mb-6">
-          <button className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-2xl bg-red-950/30 border border-red-900/40 hover:bg-red-950/50 hover:border-red-800/50 active:scale-[0.98] active:bg-red-950/60 transition-all group">
+          <button 
+            onClick={logout}
+            className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-2xl bg-red-950/30 border border-red-900/40 hover:bg-red-950/50 hover:border-red-800/50 active:scale-[0.98] active:bg-red-950/60 transition-all group"
+          >
             <LogOut className="h-4 w-4 text-red-400/80 group-hover:text-red-400 transition-colors" strokeWidth={1.5} />
             <span className="text-sm font-medium text-red-400/80 group-hover:text-red-400 transition-colors">Déconnexion</span>
           </button>

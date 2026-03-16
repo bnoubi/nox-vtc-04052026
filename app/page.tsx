@@ -69,10 +69,14 @@ export default function AppPage() {
     return <AuthScreen onLoginSuccess={handleAuthComplete} />
   }
 
+  function handleLogout() {
+    setStep("auth")
+  }
+
   // Step 3: Dashboard
   return (
     <PlanProvider>
-      <NavProvider onTabChange={setActiveTab}>
+      <NavProvider onTabChange={setActiveTab} onLogout={handleLogout}>
         <main className="min-h-screen bg-background overflow-x-hidden">
           <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
 

@@ -11,6 +11,7 @@ interface NavContextValue {
   registerSettingsNavigator: (fn: (screen: SettingsScreen) => void) => void
   openWallet: () => void
   registerWalletOpener: (fn: () => void) => void
+  logout: () => void
 }
 
 const NavContext = createContext<NavContextValue | null>(null)
@@ -18,9 +19,11 @@ const NavContext = createContext<NavContextValue | null>(null)
 export function NavProvider({
   children,
   onTabChange,
+  onLogout,
 }: {
   children: React.ReactNode
   onTabChange: (tab: TabId) => void
+  onLogout?: () => void
 }) {
   const settingsNavigatorRef = useRef<((screen: SettingsScreen) => void) | null>(null)
   const walletOpenerRef = useRef<(() => void) | null>(null)
@@ -37,6 +40,10 @@ export function NavProvider({
     walletOpenerRef.current?.()
   }, [])
 
+  const logout = useCallback(() => {
+    onLogout?.()
+  }, [onLogout])
+
   const switchTab = useCallback((tab: TabId) => {
     onTabChange(tab)
   }, [onTabChange])
@@ -50,7 +57,7 @@ export function NavProvider({
   }, [onTabChange])
 
   return (
-    <NavContext.Provider value={{ switchTab, navigateToSubscription, registerSettingsNavigator, openWallet, registerWalletOpener }}>
+    <NavContext.Provider value={{ switchTab, navigateToSubscription, registerSettingsNavigator, openWallet, registerWalletOpener, logout }}>
       {children}
     </NavContext.Provider>
   )
