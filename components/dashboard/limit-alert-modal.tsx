@@ -24,13 +24,13 @@ export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer }:
           {/* Backdrop */}
           <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={onClose} />
 
-          {/* Alert box -- positioned top-left corner */}
+          {/* Alert box -- positioned bottom center for thumb accessibility */}
           <motion.div
-            initial={{ opacity: 0, x: -20, y: -20 }}
-            animate={{ opacity: 1, x: 0, y: 0 }}
-            exit={{ opacity: 0, x: -20, y: -20 }}
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
             transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-            className="absolute top-0 left-0 m-3 w-[calc(100%-1.5rem)] max-w-sm rounded-2xl bg-[#0A0A0A] border border-[#D4AF37]/50 shadow-[0_8px_40px_rgba(0,0,0,0.9),0_0_30px_rgba(212,175,55,0.2)] p-5"
+            className="absolute bottom-0 left-0 right-0 mx-auto mb-10 w-[calc(100%-2rem)] max-w-md rounded-2xl bg-[#0A0A0A] border border-[#D4AF37]/50 shadow-[0_8px_40px_rgba(0,0,0,0.9),0_0_30px_rgba(212,175,55,0.2)] p-5 pb-safe"
           >
             {/* Close X - top right */}
             <button
