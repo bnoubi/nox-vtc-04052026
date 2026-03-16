@@ -1263,12 +1263,14 @@ function NotificationsScreen({ onBack }: { onBack: () => void }) {
 
   function NotifRow({ label, description, field }: { label: string; description: string; field: keyof typeof prefs }) {
     return (
-      <div className="flex items-center gap-3 px-4 py-3.5 group">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-foreground">{label}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>
+      <div className="grid grid-cols-[1fr_56px] items-center min-h-[64px] px-4 overflow-hidden">
+        <div className="min-w-0 pr-3">
+          <p className="text-sm font-medium text-foreground truncate">{label}</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{description}</p>
         </div>
-        <Toggle checked={prefs[field]} onChange={(v) => setPrefs({ ...prefs, [field]: v })} />
+        <div className="flex justify-end">
+          <Toggle checked={prefs[field]} onChange={(v) => setPrefs({ ...prefs, [field]: v })} />
+        </div>
       </div>
     )
   }
