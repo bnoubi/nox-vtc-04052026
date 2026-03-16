@@ -1263,12 +1263,12 @@ function NotificationsScreen({ onBack }: { onBack: () => void }) {
 
   function NotifRow({ label, description, field }: { label: string; description: string; field: keyof typeof prefs }) {
     return (
-      <div className="grid grid-cols-[1fr_56px] items-center min-h-[64px] px-4 overflow-hidden">
-        <div className="min-w-0 pr-3">
-          <p className="text-sm font-medium text-foreground truncate">{label}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{description}</p>
+      <div className="relative h-[70px] px-4 overflow-hidden">
+        <div className="absolute inset-y-0 left-4 right-20 flex flex-col justify-center">
+          <p className="text-sm font-medium text-foreground truncate max-w-[70%]">{label}</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5 truncate max-w-[70%]">{description}</p>
         </div>
-        <div className="flex justify-end">
+        <div className="absolute inset-y-0 right-4 flex items-center">
           <Toggle checked={prefs[field]} onChange={(v) => setPrefs({ ...prefs, [field]: v })} />
         </div>
       </div>
