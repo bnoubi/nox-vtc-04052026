@@ -11,7 +11,7 @@ import { ClientsTab } from "@/components/dashboard/tab-clients"
 import { SettingsTab } from "@/components/dashboard/tab-settings"
 import { PlanProvider } from "@/components/dashboard/plan-context"
 import { NavProvider } from "@/components/dashboard/nav-context"
-import { SplashScreen } from "@/components/dashboard/splash-screen"
+import { WelcomeComponent } from "@/components/WelcomeComponent"
 import { Toaster } from "sonner"
 
 const tabComponents: Record<TabId, React.ComponentType> = {
@@ -22,25 +22,30 @@ const tabComponents: Record<TabId, React.ComponentType> = {
   settings: SettingsTab,
 }
 
-const SPLASH_SESSION_KEY = "nox_splash_shown"
+type AppStep = "welcome" | "auth" | "dashboard"
+
+const WELCOME_SESSION_KEY = "nox_welcome_shown"
 
 export default function AppPage() {
   const [activeTab, setActiveTab] = useState<TabId>("dashboard")
   const [mounted, setMounted] = useState(false)
-  const [showSplash, setShowSplash] = useState(false)
+  const [step, setStep] = useState<AppStep>("dashboard")
 
   useEffect(() => {
-    // Check if splash was already shown this session
-    const splashShown = sessionStorage.getItem(SPLASH_SESSION_KEY)
-    if (!splashShown) {
-      setShowSplash(true)
+    const welcomeShown = sessionStorage.getItem(WELCOME_SESSION_KEY)
+    if (!welcomeShown) {
+      setStep("welcome")
     }
     setMounted(true)
   }, [])
 
-  function handleSplashComplete() {
-    sessionStorage.setItem(SPLASH_SESSION_KEY, "true")
-    setShowSplash(false)
+  function handleWelcomeFinished() {
+    sessionStorage.setItem(WELCOME_SESSION_KEY, "true")
+    setStep("auth")
+  }
+
+  function handleAuthComplete() {
+    setStep("dashboard")
   }
 
   const ActiveComponent = tabComponents[activeTab]
@@ -53,10 +58,30 @@ export default function AppPage() {
     )
   }
 
-  if (showSplash) {
-    return <SplashScreen onComplete={handleSplashComplete} />
+  // Step 1: Welcome / Onboarding
+  if (step === "welcome") {
+    return <WelcomeComponent onFinished={handleWelcomeFinished} />
   }
 
+  // Step 2: Authentication (placeholder)
+  if (step === "auth") {
+    return (
+      <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#000000]">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-[#D4AF37] mb-4">Authentification</h2>
+          <p className="text-[#666666] mb-8">En attente de l&apos;écran d&apos;authentification</p>
+          <button
+            onClick={handleAuthComplete}
+            className="px-8 py-3 rounded-xl bg-[#D4AF37] text-[#0A0A0A] font-bold tracking-wide uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all"
+          >
+            Continuer vers le Dashboard
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Step 3: Dashboard
   return (
     <PlanProvider>
       <NavProvider onTabChange={setActiveTab}>
