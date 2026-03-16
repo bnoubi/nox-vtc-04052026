@@ -12,6 +12,7 @@ import { SettingsTab } from "@/components/dashboard/tab-settings"
 import { PlanProvider } from "@/components/dashboard/plan-context"
 import { NavProvider } from "@/components/dashboard/nav-context"
 import { WelcomeComponent } from "@/components/WelcomeComponent"
+import { AuthScreen } from "@/components/AuthScreen"
 import { Toaster } from "sonner"
 
 const tabComponents: Record<TabId, React.ComponentType> = {
@@ -63,22 +64,9 @@ export default function AppPage() {
     return <WelcomeComponent onFinished={handleWelcomeFinished} />
   }
 
-  // Step 2: Authentication (placeholder)
+  // Step 2: Authentication
   if (step === "auth") {
-    return (
-      <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#000000]">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-[#D4AF37] mb-4">Authentification</h2>
-          <p className="text-[#666666] mb-8">En attente de l&apos;écran d&apos;authentification</p>
-          <button
-            onClick={handleAuthComplete}
-            className="px-8 py-3 rounded-xl bg-[#D4AF37] text-[#0A0A0A] font-bold tracking-wide uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all"
-          >
-            Continuer vers le Dashboard
-          </button>
-        </div>
-      </div>
-    )
+    return <AuthScreen onLoginSuccess={handleAuthComplete} />
   }
 
   // Step 3: Dashboard
