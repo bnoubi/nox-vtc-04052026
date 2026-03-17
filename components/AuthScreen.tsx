@@ -43,7 +43,7 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
 
       {/* Content Container */}
       <div className="relative w-full max-w-sm px-6">
-        
+
         {/* Logo Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -55,7 +55,7 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
           <div className="relative w-full max-w-[220px]">
             <Image
               src="/assets/logo.png"
-              alt="NOX VTC"
+              alt="Logo NOX"
               width={220}
               height={110}
               priority

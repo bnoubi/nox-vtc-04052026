@@ -71,7 +71,7 @@ export function WelcomeComponent({ onFinished }: WelcomeComponentProps) {
             <div className="relative w-full max-w-[280px]">
               <Image
                 src="/assets/logo.png"
-                alt="NOX VTC"
+                alt="Logo NOX"
                 width={280}
                 height={140}
                 priority
