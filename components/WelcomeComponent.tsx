@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import Image from "next/image"
 
 const SLOGANS = [
   "La conformité VTC sans compromis.",
@@ -67,15 +68,16 @@ export function WelcomeComponent({ onFinished }: WelcomeComponentProps) {
             className="relative mb-12 flex flex-col items-center"
           >
             <div className="absolute inset-0 blur-3xl bg-[#D4AF37]/20 rounded-full scale-150" />
-            <h1 className="relative text-5xl font-bold tracking-tight text-center">
-              <span className="bg-gradient-to-b from-[#F5E6C8] via-[#D4AF37] to-[#B8962E] bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(212,175,55,0.4)]">
-                NOX
-              </span>
-              <span className="mx-2 text-[#D4AF37]/60">-</span>
-              <span className="bg-gradient-to-b from-[#F5E6C8] via-[#D4AF37] to-[#B8962E] bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(212,175,55,0.4)]">
-                VTC
-              </span>
-            </h1>
+            <div className="relative w-full max-w-[280px]">
+              <Image
+                src="/assets/logo.png"
+                alt="NOX VTC"
+                width={280}
+                height={140}
+                priority
+                className="w-full h-auto drop-shadow-[0_0_30px_rgba(212,175,55,0.4)]"
+              />
+            </div>
           </motion.div>
 
           {/* Slogans */}

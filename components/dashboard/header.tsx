@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import Image from "next/image"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Coins } from "lucide-react"
 import { usePlan } from "./plan-context"
@@ -22,8 +23,17 @@ export function DashboardHeader() {
 
   return (
     <header className="flex items-center justify-between px-4 py-4">
-      {/* User Profile */}
+      {/* Brand Icon + User Profile */}
       <div className="flex items-center gap-3">
+        <div className="relative h-10 w-10 rounded-xl overflow-hidden flex-shrink-0">
+          <Image
+            src="/assets/icon.png"
+            alt="NOX VTC"
+            width={40}
+            height={40}
+            className="w-full h-full object-cover"
+          />
+        </div>
         <Avatar className={cn("h-11 w-11 border", isTeam ? "border-gold/50" : "border-gold/30")}>
           <AvatarImage src="/placeholder-avatar.jpg" alt="User" />
           <AvatarFallback className="bg-onyx-card text-foreground text-sm font-medium">

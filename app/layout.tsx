@@ -19,6 +19,11 @@ export const metadata: Metadata = {
   title: 'NoX VTC | Luxury Chauffeur Dashboard',
   description: 'Professional VTC management platform for luxury chauffeur services',
   generator: 'v0.app',
+  icons: {
+    icon: '/assets/icon.png',
+    shortcut: '/assets/icon.png',
+    apple: '/assets/icon.png',
+  },
 }
 
 export const viewport: Viewport = {

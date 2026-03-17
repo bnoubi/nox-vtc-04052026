@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Mail, Lock, Eye, EyeOff } from "lucide-react"
+import Image from "next/image"
 
 interface AuthScreenProps {
   onLoginSuccess: () => void
@@ -51,15 +52,16 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
           className="mb-10 flex flex-col items-center"
         >
           <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-20 blur-3xl bg-[#D4AF37]/15 w-40 h-40 rounded-full" />
-          <h1 className="relative text-4xl font-bold tracking-tight text-center">
-            <span className="bg-gradient-to-b from-[#F5E6C8] via-[#D4AF37] to-[#B8962E] bg-clip-text text-transparent drop-shadow-[0_0_25px_rgba(212,175,55,0.35)]">
-              NOX
-            </span>
-            <span className="mx-2 text-[#D4AF37]/50">-</span>
-            <span className="bg-gradient-to-b from-[#F5E6C8] via-[#D4AF37] to-[#B8962E] bg-clip-text text-transparent drop-shadow-[0_0_25px_rgba(212,175,55,0.35)]">
-              VTC
-            </span>
-          </h1>
+          <div className="relative w-full max-w-[220px]">
+            <Image
+              src="/assets/logo.png"
+              alt="NOX VTC"
+              width={220}
+              height={110}
+              priority
+              className="w-full h-auto drop-shadow-[0_0_25px_rgba(212,175,55,0.35)]"
+            />
+          </div>
         </motion.div>
 
         {/* Login Form */}
