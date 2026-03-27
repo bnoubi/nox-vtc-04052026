@@ -14,96 +14,34 @@ import {
   Mail,
   MapPin,
   StickyNote,
+  Building2,
+  Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AddClientModal } from "./add-client-modal"
 import { CreateBCFlow, type BCPrefillClient } from "./create-bc"
+import { allClients, type Client } from "./data"
 
-interface Client {
-  id: string
-  firstName: string
-  lastName: string
-  trips: number
-  lastTrip: string
-  phone: string
-  email: string
-  address: string
-  notes: string
-  tag?: "VIP" | "Régulier"
+// ── Helper: Get display name ─────────────────────────────────
+
+function getClientDisplayName(client: Client): string {
+  if (client.type === "particulier") {
+    return `${client.prenom} ${client.nom}`
+  }
+  return client.raisonSociale || ""
 }
 
-const clients: Client[] = [
-  {
-    id: "1",
-    firstName: "Alexandre",
-    lastName: "Laurent",
-    trips: 24,
-    lastTrip: "06/02/2026",
-    phone: "+33 6 12 34 56 78",
-    email: "a.laurent@email.com",
-    address: "8 Rue de Rivoli, Paris 1er",
-    notes: "Client fidèle. Préfère les Mercedes. Toujours ponctuel.",
-    tag: "VIP",
-  },
-  {
-    id: "2",
-    firstName: "Sophie",
-    lastName: "Beaumont",
-    trips: 12,
-    lastTrip: "05/02/2026",
-    phone: "+33 6 98 76 54 32",
-    email: "s.beaumont@email.com",
-    address: "Le Bristol Paris, Rue du Fbg St-Honoré",
-    notes: "Demande souvent un siège enfant. Trajets aéroport fréquents.",
-    tag: "Régulier",
-  },
-  {
-    id: "3",
-    firstName: "Philippe",
-    lastName: "Moreau",
-    trips: 8,
-    lastTrip: "28/01/2026",
-    phone: "+33 6 55 44 33 22",
-    email: "p.moreau@cabinet-moreau.fr",
-    address: "Gare de Lyon, Paris 12e",
-    notes: "Avocat. Trajets professionnels uniquement.",
-  },
-  {
-    id: "4",
-    firstName: "Claire",
-    lastName: "Dubois",
-    trips: 31,
-    lastTrip: "04/02/2026",
-    phone: "+33 6 11 22 33 44",
-    email: "c.dubois@luxe.com",
-    address: "16 Av. Montaigne, Paris 8e",
-    notes: "Directrice achats. Facturation entreprise mensuelle.",
-    tag: "VIP",
-  },
-  {
-    id: "5",
-    firstName: "Marc",
-    lastName: "Petit",
-    trips: 5,
-    lastTrip: "20/01/2026",
-    phone: "+33 6 77 88 99 00",
-    email: "marc.petit@gmail.com",
-    address: "Gare du Nord, Paris 10e",
-    notes: "Nouveau client. À fidéliser.",
-  },
-  {
-    id: "6",
-    firstName: "Isabelle",
-    lastName: "Garcia",
-    trips: 15,
-    lastTrip: "02/02/2026",
-    phone: "+33 6 44 55 66 77",
-    email: "i.garcia@design.fr",
-    address: "7 Rue de Passy, Paris 16e",
-    notes: "Paiement CB uniquement. Trajets réguliers week-end.",
-    tag: "Régulier",
-  },
-]
+function getClientInitials(client: Client): string {
+  if (client.type === "particulier") {
+    return `${client.prenom?.[0] || ""}${client.nom?.[0] || ""}`
+  }
+  // For companies, use first 2 letters of raison sociale
+  const words = (client.raisonSociale || "").split(" ")
+  if (words.length >= 2) {
+    return `${words[0][0]}${words[1][0]}`.toUpperCase()
+  }
+  return (client.raisonSociale || "").slice(0, 2).toUpperCase()
+}
 
 // ── Client Card ──────────────────────────────────────────────
 
@@ -114,22 +52,39 @@ function ClientCard({
   client: Client
   onSelect: () => void
 }) {
-  const initials = `${client.firstName[0]}${client.lastName[0]}`
+  const initials = getClientInitials(client)
+  const displayName = getClientDisplayName(client)
+  const isPro = client.type === "professionnel"
 
   return (
     <button
       onClick={onSelect}
       className="flex items-center gap-3 w-full p-3 rounded-2xl bg-onyx-card border border-onyx-border/50 hover:border-gold/20 transition-colors text-left"
     >
-      <div className="w-11 h-11 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
-        <span className="text-sm font-bold text-gold">{initials}</span>
+      {/* Avatar */}
+      <div className={cn(
+        "w-11 h-11 rounded-full border flex items-center justify-center shrink-0",
+        isPro 
+          ? "bg-blue-500/10 border-blue-500/30" 
+          : "bg-gold/15 border-gold/30"
+      )}>
+        {isPro ? (
+          <Building2 className="h-5 w-5 text-blue-400" strokeWidth={1.5} />
+        ) : (
+          <span className="text-sm font-bold text-gold">{initials}</span>
+        )}
       </div>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <p className="text-sm font-semibold text-foreground truncate">
-            {client.firstName} {client.lastName}
+            {displayName}
           </p>
+          {isPro && (
+            <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-blue-500/15 text-blue-400 border border-blue-500/30 shrink-0">
+              PRO
+            </span>
+          )}
           {client.tag && (
             <span
               className={cn(
@@ -172,19 +127,31 @@ function ClientDetail({
   onClose: () => void
   onCreateBC: (prefill: BCPrefillClient) => void
 }) {
-  const initials = `${client.firstName[0]}${client.lastName[0]}`
+  const initials = getClientInitials(client)
+  const displayName = getClientDisplayName(client)
+  const isPro = client.type === "professionnel"
 
   function handleCreateBC() {
-    const prefill: BCPrefillClient = {
-      civilite: "M.",
-      nom: client.lastName,
-      prenom: client.firstName,
-      tel: client.phone,
-    }
+    const prefill: BCPrefillClient = isPro
+      ? {
+          civilite: "",
+          nom: client.raisonSociale || "",
+          prenom: "",
+          tel: client.phone,
+        }
+      : {
+          civilite: client.civilite || "M.",
+          nom: client.nom || "",
+          prenom: client.prenom || "",
+          tel: client.phone,
+        }
     onClose()
-    // Small delay to let close animation finish before opening BC
     setTimeout(() => onCreateBC(prefill), 350)
   }
+
+  const fullAddress = client.billingAddress 
+    ? `${client.billingAddress.rue}, ${client.billingAddress.codePostal} ${client.billingAddress.ville}`
+    : ""
 
   return (
     <motion.div
@@ -220,13 +187,27 @@ function ClientDetail({
 
         {/* Profile header */}
         <div className="flex flex-col items-center px-4 pt-4 pb-6">
-          <div className="w-16 h-16 rounded-full bg-gold/15 border-2 border-gold/40 flex items-center justify-center mb-3">
-            <span className="text-xl font-bold text-gold">{initials}</span>
+          <div className={cn(
+            "w-16 h-16 rounded-full border-2 flex items-center justify-center mb-3",
+            isPro 
+              ? "bg-blue-500/10 border-blue-500/40" 
+              : "bg-gold/15 border-gold/40"
+          )}>
+            {isPro ? (
+              <Building2 className="h-7 w-7 text-blue-400" strokeWidth={1.5} />
+            ) : (
+              <span className="text-xl font-bold text-gold">{initials}</span>
+            )}
           </div>
-          <h1 className="text-lg font-bold text-foreground">
-            {client.firstName} {client.lastName}
+          <h1 className="text-lg font-bold text-foreground text-center">
+            {displayName}
           </h1>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1 flex-wrap justify-center">
+            {isPro && (
+              <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-500/15 text-blue-400 border border-blue-500/30">
+                PROFESSIONNEL
+              </span>
+            )}
             {client.tag && (
               <span
                 className={cn(
@@ -291,6 +272,57 @@ function ClientDetail({
           ))}
         </div>
 
+        {/* Professional Info (if applicable) */}
+        {isPro && (
+          <div className="px-4 mb-5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              Informations Entreprise
+            </p>
+            <div className="rounded-2xl bg-onyx-card border border-onyx-border/50 overflow-hidden divide-y divide-onyx-border/30">
+              {client.siren && (
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-[10px] text-muted-foreground uppercase">SIREN</span>
+                  <span className="text-xs text-foreground font-mono">{client.siren}</span>
+                </div>
+              )}
+              {client.tvaIntra && (
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-[10px] text-muted-foreground uppercase">TVA Intracom.</span>
+                  <span className="text-xs text-foreground font-mono">{client.tvaIntra}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Contacts (for professionals) */}
+        {isPro && client.contacts && client.contacts.length > 0 && (
+          <div className="px-4 mb-5">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Users className="h-3 w-3" strokeWidth={1.5} />
+              Contacts / Passagers ({client.contacts.length})
+            </p>
+            <div className="space-y-2">
+              {client.contacts.map((contact) => (
+                <div key={contact.id} className="flex items-center gap-3 p-3 rounded-xl bg-onyx-card border border-onyx-border/50">
+                  <div className="w-8 h-8 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center">
+                    <span className="text-[10px] font-bold text-gold">
+                      {contact.prenom[0]}{contact.nom[0]}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground">{contact.prenom} {contact.nom}</p>
+                    <p className="text-[10px] text-muted-foreground">{contact.phone}</p>
+                  </div>
+                  <button className="p-2 rounded-lg hover:bg-gold/10 text-gold transition-colors">
+                    <Phone className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Contact info */}
         <div className="px-4 mb-5">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
@@ -307,10 +339,12 @@ function ClientDetail({
                 {client.email}
               </span>
             </div>
-            <div className="flex items-center gap-3 px-4 py-3">
-              <MapPin className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
-              <span className="text-xs text-foreground">{client.address}</span>
-            </div>
+            {fullAddress && (
+              <div className="flex items-center gap-3 px-4 py-3">
+                <MapPin className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
+                <span className="text-xs text-foreground">{fullAddress}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -355,11 +389,14 @@ export function ClientsTab() {
     setBcPrefill(null)
   }
 
-  const filtered = clients.filter(
-    (c) =>
-      c.firstName.toLowerCase().includes(search.toLowerCase()) ||
-      c.lastName.toLowerCase().includes(search.toLowerCase()),
-  )
+  const filtered = allClients.filter((c) => {
+    const searchLower = search.toLowerCase()
+    const displayName = getClientDisplayName(c).toLowerCase()
+    return displayName.includes(searchLower) || c.email.toLowerCase().includes(searchLower)
+  })
+
+  const proCount = filtered.filter(c => c.type === "professionnel").length
+  const partCount = filtered.filter(c => c.type === "particulier").length
 
   return (
     <div className="flex flex-col h-full">
@@ -380,9 +417,22 @@ export function ClientsTab() {
           />
         </div>
 
-        <p className="text-[11px] text-muted-foreground mt-2">
-          {filtered.length} client{filtered.length > 1 ? "s" : ""}
-        </p>
+        <div className="flex items-center gap-3 mt-2">
+          <p className="text-[11px] text-muted-foreground">
+            {filtered.length} client{filtered.length > 1 ? "s" : ""}
+          </p>
+          {proCount > 0 && (
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[10px] font-medium">
+              <Building2 className="h-3 w-3" strokeWidth={1.5} />
+              {proCount} pro
+            </span>
+          )}
+          {partCount > 0 && (
+            <span className="text-[10px] text-muted-foreground">
+              {partCount} particulier{partCount > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 space-y-2 pb-20">
