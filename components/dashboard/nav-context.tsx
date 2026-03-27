@@ -5,6 +5,12 @@ import type { TabId } from "./bottom-nav"
 
 type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security"
 
+interface EntityNavigation {
+  entityType: "driver" | "vehicle"
+  entityId: string
+  field: string
+}
+
 interface NavContextValue {
   switchTab: (tab: TabId) => void
   navigateToSubscription: () => void
@@ -12,6 +18,10 @@ interface NavContextValue {
   openWallet: () => void
   registerWalletOpener: (fn: () => void) => void
   logout: () => void
+  navigateToEntity: (entityType: "driver" | "vehicle", entityId: string, field: string) => void
+  registerEntityNavigator: (fn: (nav: EntityNavigation) => void) => void
+  pendingEntityNavigation: EntityNavigation | null
+  clearPendingEntityNavigation: () => void
 }
 
 const NavContext = createContext<NavContextValue | null>(null)

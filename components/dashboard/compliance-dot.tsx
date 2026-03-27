@@ -65,22 +65,39 @@ export function ComplianceDot({ status, className }: ComplianceDotProps) {
 }
 
 // Helper function to calculate compliance status from dates
-export function getDriverComplianceStatus(carteProExpiration: string): ComplianceStatus {
+export function getDriverComplianceStatus(
+  carteProExpiration: string,
+  apacExpiration?: string,
+  rcProExpiration?: string
+): ComplianceStatus {
   const today = new Date()
-  const expDate = new Date(carteProExpiration)
-  const daysUntil = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+  
+  const dates = [carteProExpiration]
+  if (apacExpiration) dates.push(apacExpiration)
+  if (rcProExpiration) dates.push(rcProExpiration)
+  
+  let hasExpired = false
+  let hasWarning = false
+  
+  for (const dateStr of dates) {
+    const expDate = new Date(dateStr)
+    const daysUntil = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    
+    if (daysUntil < 0) hasExpired = true
+    else if (daysUntil < 30) hasWarning = true
+  }
 
-  if (daysUntil < 0) return "expired"
-  if (daysUntil < 30) return "warning"
+  if (hasExpired) return "expired"
+  if (hasWarning) return "warning"
   return "ok"
 }
 
 export function getVehicleComplianceStatus(
-  assuranceExpiration: string,
+  assuranceTransportExpiration: string,
   controleTechniqueExpiration: string
 ): ComplianceStatus {
   const today = new Date()
-  const assuranceDate = new Date(assuranceExpiration)
+  const assuranceDate = new Date(assuranceTransportExpiration)
   const ctDate = new Date(controleTechniqueExpiration)
   
   const assuranceDays = Math.ceil((assuranceDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))

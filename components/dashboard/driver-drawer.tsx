@@ -19,7 +19,7 @@ interface DriverDrawerProps {
   open: boolean
   driver: Driver | null // null = Add mode, Driver = Edit mode
   onClose: () => void
-  onSave: (data: { nom: string; prenom: string; phone: string; cartePro: string; expirationCarte: string }) => void
+  onSave: (data: { nom: string; prenom: string; phone: string; cartePro: string; expirationCarte: string; apacExpiration: string; rcProExpiration: string }) => void
   onDelete?: (driver: Driver) => void
 }
 
@@ -30,6 +30,8 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
   const [phone, setPhone] = useState("")
   const [cartePro, setCartePro] = useState("")
   const [expirationCarte, setExpirationCarte] = useState("")
+  const [apacExpiration, setApacExpiration] = useState("")
+  const [rcProExpiration, setRcProExpiration] = useState("")
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -42,10 +44,9 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
         setNom(parts.slice(1).join(" ") || "")
         setPhone("+33 6 00 00 00 00")
         setCartePro("VTC-" + driver.id.padStart(6, "0"))
-        // Default expiration 1 year from now
-        const exp = new Date()
-        exp.setFullYear(exp.getFullYear() + 1)
-        setExpirationCarte(exp.toISOString().split("T")[0])
+        setExpirationCarte(driver.carteProExpiration || "")
+        setApacExpiration(driver.apacExpiration || "")
+        setRcProExpiration(driver.rcProExpiration || "")
       } else {
         // Add mode: empty
         setNom("")
@@ -53,6 +54,8 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
         setPhone("")
         setCartePro("")
         setExpirationCarte("")
+        setApacExpiration("")
+        setRcProExpiration("")
       }
       setConfirmDelete(false)
       setSaved(false)
@@ -60,13 +63,15 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
   }, [driver, open])
 
   const carteStatus = getExpirationStatus(expirationCarte)
+  const apacStatus = getExpirationStatus(apacExpiration)
+  const rcProStatus = getExpirationStatus(rcProExpiration)
   const canSave = nom.trim() && prenom.trim()
 
   function handleSave() {
     if (!canSave) return
     setSaved(true)
     setTimeout(() => {
-      onSave({ nom, prenom, phone, cartePro, expirationCarte })
+      onSave({ nom, prenom, phone, cartePro, expirationCarte, apacExpiration, rcProExpiration })
       toast(isEditMode ? "Mise à jour effectuée" : "Chauffeur ajouté", {
         description: `${prenom} ${nom}`,
         duration: 2000,
@@ -212,6 +217,50 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
                   onChange={(e) => setExpirationCarte(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] focus:outline-none focus:border-[#D4AF37]/50 transition-colors [color-scheme:dark]"
                 />
+              </div>
+
+              {/* EXPIRATION APAC */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold flex items-center gap-1.5">
+                    <Calendar className="h-3 w-3" strokeWidth={1.5} />
+                    EXPIRATION APAC
+                  </label>
+                  {apacStatus.label && (
+                    <span className={cn("px-1.5 py-0.5 text-[8px] font-bold rounded border", apacStatus.cls)}>
+                      {apacStatus.label}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="date"
+                  value={apacExpiration}
+                  onChange={(e) => setApacExpiration(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] focus:outline-none focus:border-[#D4AF37]/50 transition-colors [color-scheme:dark]"
+                />
+                <p className="text-[9px] text-[#666] mt-1">Attestation Préfectorale</p>
+              </div>
+
+              {/* EXPIRATION RC PRO */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold flex items-center gap-1.5">
+                    <Calendar className="h-3 w-3" strokeWidth={1.5} />
+                    ÉCHÉANCE RC PRO
+                  </label>
+                  {rcProStatus.label && (
+                    <span className={cn("px-1.5 py-0.5 text-[8px] font-bold rounded border", rcProStatus.cls)}>
+                      {rcProStatus.label}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="date"
+                  value={rcProExpiration}
+                  onChange={(e) => setRcProExpiration(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] focus:outline-none focus:border-[#D4AF37]/50 transition-colors [color-scheme:dark]"
+                />
+                <p className="text-[9px] text-[#666] mt-1">Responsabilité Civile Professionnelle</p>
               </div>
             </div>
 

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { Clock, MapPin, Navigation, Plus, User } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { CreateBCFlow } from "./create-bc"
 
 const HOURS = Array.from({ length: 15 }, (_, i) => i + 8)
 
@@ -163,6 +164,7 @@ export function CalendarTab() {
   const days = useMemo(() => getDaysOfWeek(), [])
   const todayIndex = useMemo(() => days.findIndex((d) => d.isToday), [days])
   const [selectedDay, setSelectedDay] = useState(todayIndex >= 0 ? todayIndex : 0)
+  const [showBCFlow, setShowBCFlow] = useState(false)
 
   const selectedTrips = tripsByDay[selectedDay] || []
 
@@ -309,9 +311,14 @@ export function CalendarTab() {
       </div>
 
       {/* Floating add button */}
-      <button className="fixed bottom-28 right-5 z-30 w-12 h-12 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 transition-transform">
+      <button 
+        onClick={() => setShowBCFlow(true)}
+        className="fixed bottom-28 right-5 z-30 w-12 h-12 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 transition-transform"
+      >
         <Plus className="h-5 w-5 text-primary-foreground" strokeWidth={2} />
       </button>
+
+      <CreateBCFlow open={showBCFlow} onClose={() => setShowBCFlow(false)} />
     </div>
   )
 }

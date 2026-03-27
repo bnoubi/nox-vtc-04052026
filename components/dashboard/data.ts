@@ -4,31 +4,40 @@ export interface Driver {
   initials: string
   online: boolean
   carteProExpiration: string // ISO date string
+  apacExpiration: string // Attestation Préfectorale - ISO date string
+  rcProExpiration: string // RC Professionnelle - ISO date string
 }
+
+export type MotorType = "diesel" | "essence" | "hybride" | "electrique"
+export type VehicleCategory = "citadine" | "berline" | "suv" | "van"
 
 export interface Vehicle {
   id: string
   model: string
   plate: string
   inService: boolean
-  assuranceExpiration: string // ISO date string
+  datePremiereImmat: string // Date de première immatriculation - ISO date string
+  motorType: MotorType
+  category: VehicleCategory
+  color: string
+  assuranceTransportExpiration: string // Assurance Transport à Titre Onéreux - ISO date string
   controleTechniqueExpiration: string // ISO date string
 }
 
 export const allDrivers: Driver[] = [
-  { id: "1", name: "Karim Benzari", initials: "KB", online: true, carteProExpiration: "2026-08-15" },
-  { id: "2", name: "Sophie Martin", initials: "SM", online: false, carteProExpiration: "2026-04-02" },
-  { id: "3", name: "Lucas Fernandez", initials: "LF", online: true, carteProExpiration: "2026-03-20" },
-  { id: "4", name: "Amélie Rousseau", initials: "AR", online: true, carteProExpiration: "2027-01-10" },
-  { id: "5", name: "Thomas Nguyen", initials: "TN", online: false, carteProExpiration: "2026-02-28" },
+  { id: "1", name: "Karim Benzari", initials: "KB", online: true, carteProExpiration: "2026-08-15", apacExpiration: "2026-12-31", rcProExpiration: "2026-09-15" },
+  { id: "2", name: "Sophie Martin", initials: "SM", online: false, carteProExpiration: "2026-04-02", apacExpiration: "2026-03-15", rcProExpiration: "2026-06-30" },
+  { id: "3", name: "Lucas Fernandez", initials: "LF", online: true, carteProExpiration: "2026-03-20", apacExpiration: "2026-11-20", rcProExpiration: "2026-04-10" },
+  { id: "4", name: "Amélie Rousseau", initials: "AR", online: true, carteProExpiration: "2027-01-10", apacExpiration: "2027-06-01", rcProExpiration: "2027-03-15" },
+  { id: "5", name: "Thomas Nguyen", initials: "TN", online: false, carteProExpiration: "2026-02-28", apacExpiration: "2026-02-15", rcProExpiration: "2026-01-20" },
 ]
 
 export const allVehicles: Vehicle[] = [
-  { id: "1", model: "Mercedes Classe S", plate: "AB-123-CD", inService: true, assuranceExpiration: "2026-03-18", controleTechniqueExpiration: "2026-09-01" },
-  { id: "2", model: "BMW Série 7", plate: "EF-456-GH", inService: true, assuranceExpiration: "2026-06-15", controleTechniqueExpiration: "2026-12-20" },
-  { id: "3", model: "Audi A8 L", plate: "IJ-789-KL", inService: true, assuranceExpiration: "2026-05-01", controleTechniqueExpiration: "2026-02-10" },
-  { id: "4", model: "Mercedes Classe V", plate: "MN-012-OP", inService: true, assuranceExpiration: "2026-07-22", controleTechniqueExpiration: "2026-11-30" },
-  { id: "5", model: "Tesla Model S", plate: "QR-345-ST", inService: false, assuranceExpiration: "2026-04-10", controleTechniqueExpiration: "2026-08-15" },
+  { id: "1", model: "Mercedes Classe S", plate: "AB-123-CD", inService: true, datePremiereImmat: "2022-03-15", motorType: "diesel", category: "berline", color: "#0F0F0F", assuranceTransportExpiration: "2026-03-18", controleTechniqueExpiration: "2026-09-01" },
+  { id: "2", model: "BMW Série 7", plate: "EF-456-GH", inService: true, datePremiereImmat: "2021-06-20", motorType: "essence", category: "berline", color: "#F5F5F5", assuranceTransportExpiration: "2026-06-15", controleTechniqueExpiration: "2026-12-20" },
+  { id: "3", model: "Audi A8 L", plate: "IJ-789-KL", inService: true, datePremiereImmat: "2019-11-10", motorType: "hybride", category: "berline", color: "#6B7280", assuranceTransportExpiration: "2026-05-01", controleTechniqueExpiration: "2026-02-10" },
+  { id: "4", model: "Mercedes Classe V", plate: "MN-012-OP", inService: true, datePremiereImmat: "2023-01-05", motorType: "diesel", category: "van", color: "#0F0F0F", assuranceTransportExpiration: "2026-07-22", controleTechniqueExpiration: "2026-11-30" },
+  { id: "5", model: "Tesla Model S", plate: "QR-345-ST", inService: false, datePremiereImmat: "2024-08-12", motorType: "electrique", category: "berline", color: "#1E3A5F", assuranceTransportExpiration: "2026-04-10", controleTechniqueExpiration: "2026-08-15" },
 ]
 
 export const existingClients = [

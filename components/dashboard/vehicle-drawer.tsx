@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { X, Car, Hash, Palette, Calendar, Shield, Trash2, ChevronLeft, ArrowRight, CheckCircle2 } from "lucide-react"
+import { X, Car, Hash, Palette, Calendar, Shield, Trash2, ChevronLeft, ArrowRight, CheckCircle2, ChevronDown, Fuel, Grid } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import type { Vehicle } from "./data"
+import type { Vehicle, MotorType, VehicleCategory } from "./data"
 
 const VEHICLE_COLORS = [
   { name: "Noir", value: "#0F0F0F" },
@@ -13,7 +13,21 @@ const VEHICLE_COLORS = [
   { name: "Gris", value: "#6B7280" },
   { name: "Bleu", value: "#1E3A5F" },
   { name: "Bordeaux", value: "#6B1D2A" },
-  { name: "Vert", value: "#1B6B4A" },
+  { name: "Autre", value: "custom" },
+]
+
+const MOTOR_TYPES: { value: MotorType; label: string }[] = [
+  { value: "diesel", label: "Diesel" },
+  { value: "essence", label: "Essence" },
+  { value: "hybride", label: "Hybride" },
+  { value: "electrique", label: "Électrique" },
+]
+
+const VEHICLE_CATEGORIES: { value: VehicleCategory; label: string }[] = [
+  { value: "citadine", label: "Citadine" },
+  { value: "berline", label: "Berline" },
+  { value: "suv", label: "SUV" },
+  { value: "van", label: "Van" },
 ]
 
 function getExpirationStatus(dateStr: string): { label: string; cls: string } {
@@ -24,11 +38,58 @@ function getExpirationStatus(dateStr: string): { label: string; cls: string } {
   return { label: "OK", cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" }
 }
 
+function calculateVehicleAge(dateStr: string): { years: number; days: number; display: string } {
+  if (!dateStr) return { years: 0, days: 0, display: "" }
+  const startDate = new Date(dateStr)
+  const today = new Date()
+  
+  let years = today.getFullYear() - startDate.getFullYear()
+  const monthDiff = today.getMonth() - startDate.getMonth()
+  const dayDiff = today.getDate() - startDate.getDate()
+  
+  if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
+    years--
+  }
+  
+  const yearAnniversary = new Date(startDate)
+  yearAnniversary.setFullYear(startDate.getFullYear() + years)
+  const daysRemaining = Math.floor((today.getTime() - yearAnniversary.getTime()) / (1000 * 60 * 60 * 24))
+  
+  return { 
+    years, 
+    days: daysRemaining, 
+    display: `${years} an${years > 1 ? "s" : ""} et ${daysRemaining} jour${daysRemaining > 1 ? "s" : ""}`
+  }
+}
+
+function getAgeStatus(years: number, motorType: MotorType): { color: string; label: string } {
+  // Pas de limite d'âge pour hybride et électrique
+  if (motorType === "hybride" || motorType === "electrique") {
+    return { color: "text-emerald-400", label: "Aucune limite" }
+  }
+  // Pour thermiques (diesel/essence)
+  if (years >= 7) return { color: "text-rose-500", label: "Critique" }
+  if (years >= 6) return { color: "text-rose-400", label: "Changement impératif" }
+  if (years >= 5) return { color: "text-amber-400", label: "Alerte anticipation" }
+  return { color: "text-emerald-400", label: "Conforme" }
+}
+
 interface VehicleDrawerProps {
   open: boolean
   vehicle: Vehicle | null // null = Add mode, Vehicle = Edit mode
   onClose: () => void
-  onSave: (data: { plate: string; brand: string; model: string; color: string; expirationAssurance: string; expirationCT: string }) => void
+  onSave: (data: { 
+    plate: string
+    brand: string
+    model: string
+    color: string
+    customColor: string
+    datePremiereImmat: string
+    motorType: MotorType
+    category: VehicleCategory
+    assuranceTransportExpiration: string
+    expirationCT: string
+  }) => void
   onDelete?: (vehicle: Vehicle) => void
 }
 
@@ -39,10 +100,16 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
   const [brand, setBrand] = useState("")
   const [model, setModel] = useState("")
   const [color, setColor] = useState("#0F0F0F")
-  const [expirationAssurance, setExpirationAssurance] = useState("")
+  const [customColor, setCustomColor] = useState("")
+  const [datePremiereImmat, setDatePremiereImmat] = useState("")
+  const [motorType, setMotorType] = useState<MotorType>("diesel")
+  const [category, setCategory] = useState<VehicleCategory>("berline")
+  const [assuranceTransportExpiration, setAssuranceTransportExpiration] = useState("")
   const [expirationCT, setExpirationCT] = useState("")
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [motorDropdownOpen, setMotorDropdownOpen] = useState(false)
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -52,19 +119,31 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
         setBrand(parts[0] || "")
         setModel(parts.slice(1).join(" ") || vehicle.model)
         setPlate(vehicle.plate)
-        setColor("#0F0F0F")
-        // Default expiration 1 year from now
-        const exp = new Date()
-        exp.setFullYear(exp.getFullYear() + 1)
-        setExpirationAssurance(exp.toISOString().split("T")[0])
-        setExpirationCT(exp.toISOString().split("T")[0])
+        setDatePremiereImmat(vehicle.datePremiereImmat || "")
+        setMotorType(vehicle.motorType || "diesel")
+        setCategory(vehicle.category || "berline")
+        // Check if color is a predefined one or custom
+        const isPredefined = VEHICLE_COLORS.some(c => c.value === vehicle.color)
+        if (isPredefined) {
+          setColor(vehicle.color)
+          setCustomColor("")
+        } else {
+          setColor("custom")
+          setCustomColor(vehicle.color || "")
+        }
+        setAssuranceTransportExpiration(vehicle.assuranceTransportExpiration || "")
+        setExpirationCT(vehicle.controleTechniqueExpiration || "")
       } else {
         // Add mode: empty
         setPlate("")
         setBrand("")
         setModel("")
         setColor("#0F0F0F")
-        setExpirationAssurance("")
+        setCustomColor("")
+        setDatePremiereImmat("")
+        setMotorType("diesel")
+        setCategory("berline")
+        setAssuranceTransportExpiration("")
         setExpirationCT("")
       }
       setStep(1)
@@ -73,14 +152,27 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
     }
   }, [vehicle, open])
 
-  const assuranceStatus = getExpirationStatus(expirationAssurance)
+  const assuranceStatus = getExpirationStatus(assuranceTransportExpiration)
   const ctStatus = getExpirationStatus(expirationCT)
-  const canNext = plate.trim() && brand.trim() && model.trim()
+  const vehicleAge = calculateVehicleAge(datePremiereImmat)
+  const ageStatus = getAgeStatus(vehicleAge.years, motorType)
+  const canNext = plate.trim() && brand.trim() && model.trim() && datePremiereImmat
 
   function handleSave() {
     setSaved(true)
     setTimeout(() => {
-      onSave({ plate, brand, model, color, expirationAssurance, expirationCT })
+      onSave({ 
+        plate, 
+        brand, 
+        model, 
+        color: color === "custom" ? customColor : color, 
+        customColor,
+        datePremiereImmat,
+        motorType,
+        category,
+        assuranceTransportExpiration,
+        expirationCT
+      })
       toast(isEditMode ? "Mise à jour effectuée" : "Véhicule ajouté", {
         description: `${brand} ${model} • ${plate}`,
         duration: 2000,
@@ -199,6 +291,29 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
                       />
                     </div>
 
+                    {/* DATE PREMIERE IMMATRICULATION */}
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-1.5 flex items-center gap-1.5">
+                        <Calendar className="h-3 w-3" strokeWidth={1.5} />
+                        DATE 1ÈRE IMMATRICULATION *
+                      </label>
+                      <input
+                        type="date"
+                        value={datePremiereImmat}
+                        onChange={(e) => setDatePremiereImmat(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] focus:outline-none focus:border-[#D4AF37]/50 transition-colors [color-scheme:dark]"
+                      />
+                      {datePremiereImmat && (
+                        <div className="mt-2 px-3 py-2 rounded-lg bg-[#1A1A1A] border border-[#333]">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-[#A1A1AA]">Âge du véhicule</span>
+                            <span className={cn("text-xs font-semibold", ageStatus.color)}>{vehicleAge.display}</span>
+                          </div>
+                          <p className={cn("text-[9px] mt-0.5", ageStatus.color)}>{ageStatus.label}</p>
+                        </div>
+                      )}
+                    </div>
+
                     {/* MARQUE */}
                     <div>
                       <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-1.5 flex items-center gap-1.5">
@@ -228,6 +343,88 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
                       />
                     </div>
 
+                    {/* TYPE DE MOTEUR */}
+                    <div className="relative">
+                      <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-1.5 flex items-center gap-1.5">
+                        <Fuel className="h-3 w-3" strokeWidth={1.5} />
+                        TYPE DE MOTEUR
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setMotorDropdownOpen(!motorDropdownOpen)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] flex items-center justify-between focus:outline-none focus:border-[#D4AF37]/50 transition-colors"
+                      >
+                        <span>{MOTOR_TYPES.find(m => m.value === motorType)?.label}</span>
+                        <ChevronDown className={cn("h-4 w-4 text-[#A1A1AA] transition-transform", motorDropdownOpen && "rotate-180")} strokeWidth={1.5} />
+                      </button>
+                      {motorDropdownOpen && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setMotorDropdownOpen(false)} />
+                          <div className="absolute top-full left-0 right-0 mt-1 z-20 bg-[#1A1A1A] border border-[#333] rounded-xl overflow-hidden shadow-xl">
+                            {MOTOR_TYPES.map((m) => (
+                              <button
+                                key={m.value}
+                                type="button"
+                                onClick={() => {
+                                  setMotorType(m.value)
+                                  setMotorDropdownOpen(false)
+                                }}
+                                className={cn(
+                                  "w-full px-3 py-2.5 text-sm text-left transition-colors",
+                                  motorType === m.value 
+                                    ? "bg-[#D4AF37]/10 text-[#D4AF37]" 
+                                    : "text-[#F5F5F5] hover:bg-[#333]/50"
+                                )}
+                              >
+                                {m.label}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* CATEGORIE */}
+                    <div className="relative">
+                      <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-1.5 flex items-center gap-1.5">
+                        <Grid className="h-3 w-3" strokeWidth={1.5} />
+                        CATÉGORIE
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] flex items-center justify-between focus:outline-none focus:border-[#D4AF37]/50 transition-colors"
+                      >
+                        <span>{VEHICLE_CATEGORIES.find(c => c.value === category)?.label}</span>
+                        <ChevronDown className={cn("h-4 w-4 text-[#A1A1AA] transition-transform", categoryDropdownOpen && "rotate-180")} strokeWidth={1.5} />
+                      </button>
+                      {categoryDropdownOpen && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setCategoryDropdownOpen(false)} />
+                          <div className="absolute top-full left-0 right-0 mt-1 z-20 bg-[#1A1A1A] border border-[#333] rounded-xl overflow-hidden shadow-xl">
+                            {VEHICLE_CATEGORIES.map((c) => (
+                              <button
+                                key={c.value}
+                                type="button"
+                                onClick={() => {
+                                  setCategory(c.value)
+                                  setCategoryDropdownOpen(false)
+                                }}
+                                className={cn(
+                                  "w-full px-3 py-2.5 text-sm text-left transition-colors",
+                                  category === c.value 
+                                    ? "bg-[#D4AF37]/10 text-[#D4AF37]" 
+                                    : "text-[#F5F5F5] hover:bg-[#333]/50"
+                                )}
+                              >
+                                {c.label}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
                     {/* COULEUR */}
                     <div>
                       <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-2 flex items-center gap-1.5">
@@ -246,11 +443,14 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
                             >
                               <div
                                 className={cn(
-                                  "w-9 h-9 rounded-full transition-all",
-                                  active && "ring-2 ring-[#D4AF37] ring-offset-2 ring-offset-[#0E0E0E]"
+                                  "w-9 h-9 rounded-full transition-all flex items-center justify-center",
+                                  active && "ring-2 ring-[#D4AF37] ring-offset-2 ring-offset-[#0E0E0E]",
+                                  c.value === "custom" && "border-2 border-dashed border-[#555]"
                                 )}
-                                style={{ backgroundColor: c.value }}
-                              />
+                                style={{ backgroundColor: c.value !== "custom" ? c.value : "#1A1A1A" }}
+                              >
+                                {c.value === "custom" && <span className="text-[10px] text-[#A1A1AA]">?</span>}
+                              </div>
                               <span className={cn(
                                 "text-[8px]",
                                 active ? "text-[#D4AF37] font-semibold" : "text-[#A1A1AA]/60"
@@ -259,6 +459,15 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
                           )
                         })}
                       </div>
+                      {color === "custom" && (
+                        <input
+                          type="text"
+                          placeholder="Ex: Bleu nuit métallisé"
+                          value={customColor}
+                          onChange={(e) => setCustomColor(e.target.value)}
+                          className="w-full mt-3 px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] placeholder:text-[#555] focus:outline-none focus:border-[#D4AF37]/50 transition-colors"
+                        />
+                      )}
                     </div>
                   </motion.div>
                 ) : (
@@ -270,12 +479,12 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
                     transition={{ duration: 0.2 }}
                     className="space-y-4"
                   >
-                    {/* EXPIRATION ASSURANCE */}
+                    {/* ASSURANCE TRANSPORT À TITRE ONÉREUX */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold flex items-center gap-1.5">
                           <Shield className="h-3 w-3" strokeWidth={1.5} />
-                          EXPIRATION ASSURANCE
+                          ASSURANCE TRANSPORT À TITRE ONÉREUX
                         </label>
                         {assuranceStatus.label && (
                           <span className={cn("px-1.5 py-0.5 text-[8px] font-bold rounded border", assuranceStatus.cls)}>
@@ -285,10 +494,11 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
                       </div>
                       <input
                         type="date"
-                        value={expirationAssurance}
-                        onChange={(e) => setExpirationAssurance(e.target.value)}
+                        value={assuranceTransportExpiration}
+                        onChange={(e) => setAssuranceTransportExpiration(e.target.value)}
                         className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] focus:outline-none focus:border-[#D4AF37]/50 transition-colors [color-scheme:dark]"
                       />
+                      <p className="text-[9px] text-[#666] mt-1">Date d&apos;échéance uniquement</p>
                     </div>
 
                     {/* ECHEANCE CONTROLE TECHNIQUE */}

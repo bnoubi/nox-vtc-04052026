@@ -1078,7 +1078,7 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
             >
               {/* Compliance Status Dot */}
               <div className="absolute top-3 right-3">
-                <ComplianceDot status={getDriverComplianceStatus(driver.carteProExpiration)} />
+                <ComplianceDot status={getDriverComplianceStatus(driver.carteProExpiration, driver.apacExpiration, driver.rcProExpiration)} />
               </div>
               <div className="w-10 h-10 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0 group-hover:bg-gold/25 transition-colors">
                 <span className="text-sm font-bold text-gold">{driver.initials}</span>
@@ -1159,7 +1159,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   return (
     <motion.div key="fleet" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full relative">
       <GoldConfetti trigger={showConfetti} />
-      <SubScreenHeader title="Gestion du Parc" onBack={onBack} />
+      <SubScreenHeader title="Gestion des véhicules" onBack={onBack} />
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-24">
         <div className="flex items-center justify-between mb-1">
           <p className="text-[10px] text-muted-foreground uppercase font-semibold font-heading tracking-[0.15em]">
@@ -1181,7 +1181,7 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
             >
               {/* Compliance Status Dot */}
               <div className="absolute top-3 right-3">
-                <ComplianceDot status={getVehicleComplianceStatus(vehicle.assuranceExpiration, vehicle.controleTechniqueExpiration)} />
+                <ComplianceDot status={getVehicleComplianceStatus(vehicle.assuranceTransportExpiration, vehicle.controleTechniqueExpiration)} />
               </div>
               <div className="w-10 h-10 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0 group-hover:bg-gold/25 transition-colors">
                 <Car className="h-4 w-4 text-gold" strokeWidth={1.5} />
@@ -1473,7 +1473,7 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
   )
 }
 
-// ── Main Settings ─────────────────────────────────────────────
+// ── Main Settings ────────���────────────────────────────────────
 
 function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => void }) {
   const { plan, tokens, driverCount, vehicleCount } = usePlan()
@@ -1497,7 +1497,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
     },
     {
       icon: <Car className="h-4 w-4" strokeWidth={1.5} />,
-      label: "Gestion du Parc",
+      label: "Gestion des véhicules",
       description: `${vehicleCount} véhicule${vehicleCount > 1 ? "s" : ""} en service`,
       screen: "fleet",
     },

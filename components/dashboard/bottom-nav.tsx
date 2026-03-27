@@ -14,7 +14,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   {
     icon: <LayoutDashboard className="h-5 w-5" strokeWidth={1.5} />,
-    label: "Tableau de Bord",
+    label: "Tableau\nde Bord",
     id: "dashboard",
   },
   {
@@ -24,7 +24,7 @@ const navItems: NavItem[] = [
   },
   {
     icon: <FileText className="h-5 w-5" strokeWidth={1.5} />,
-    label: "Documents",
+    label: "Bons de CDE\n& Factures",
     id: "documents",
   },
   {
@@ -75,7 +75,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
                   </div>
                   <span
                     className={cn(
-                      "text-[10px] font-medium leading-tight text-center w-full",
+                      "text-[10px] font-medium leading-tight text-center w-full whitespace-pre-line",
                       isActive ? "text-gold" : "text-muted-foreground",
                     )}
                   >

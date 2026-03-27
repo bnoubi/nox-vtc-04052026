@@ -704,7 +704,7 @@ export function DocumentsTab() {
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 pt-2 pb-4">
-        <h1 className="text-lg font-bold text-foreground mb-3">Documents</h1>
+        <h1 className="text-lg font-bold text-foreground mb-3">Bons de CDE & Factures</h1>
 
         {/* Type Tabs */}
         <div className="flex gap-2 mb-3">
