@@ -219,12 +219,12 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
                 />
               </div>
 
-              {/* EXPIRATION APAC */}
+              {/* EXPIRATION VISITE MÉDICALE / APAC */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold flex items-center gap-1.5">
                     <Calendar className="h-3 w-3" strokeWidth={1.5} />
-                    EXPIRATION APAC
+                    EXPIRATION VISITE MÉDICALE
                   </label>
                   {apacStatus.label && (
                     <span className={cn("px-1.5 py-0.5 text-[8px] font-bold rounded border", apacStatus.cls)}>
@@ -238,7 +238,7 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
                   onChange={(e) => setApacExpiration(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] focus:outline-none focus:border-[#D4AF37]/50 transition-colors [color-scheme:dark]"
                 />
-                <p className="text-[9px] text-[#666] mt-1">Attestation Préfectorale</p>
+                <p className="text-[9px] text-[#666] mt-1">APAC : Attestation Préfectorale d&apos;Aptitude Physique</p>
               </div>
 
               {/* EXPIRATION RC PRO */}
@@ -246,7 +246,7 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold flex items-center gap-1.5">
                     <Calendar className="h-3 w-3" strokeWidth={1.5} />
-                    ÉCHÉANCE RC PRO
+                    EXPIRATION RC PRO
                   </label>
                   {rcProStatus.label && (
                     <span className={cn("px-1.5 py-0.5 text-[8px] font-bold rounded border", rcProStatus.cls)}>

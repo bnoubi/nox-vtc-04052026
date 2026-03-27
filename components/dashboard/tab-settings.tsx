@@ -1056,7 +1056,7 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
   return (
     <motion.div key="team" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full relative">
       <GoldConfetti trigger={showConfetti} />
-      <SubScreenHeader title="Gestion de l'Équipe" onBack={onBack} />
+      <SubScreenHeader title="Gestion des Chauffeurs" onBack={onBack} />
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-24">
         <div className="flex items-center justify-between mb-1">
           <p className="text-[10px] text-muted-foreground uppercase font-semibold font-heading tracking-[0.15em]">
@@ -1491,7 +1491,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
   const managementSettings: SettingItem[] = [
     {
       icon: <Users className="h-4 w-4" strokeWidth={1.5} />,
-      label: "Gestion de l'Équipe",
+      label: "Gestion des Chauffeurs",
       description: `${driverCount} chauffeur${driverCount > 1 ? "s" : ""} actif${driverCount > 1 ? "s" : ""}`,
       screen: "team",
     },

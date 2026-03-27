@@ -65,13 +65,13 @@ function calculateVehicleAge(dateStr: string): { years: number; days: number; di
 function getAgeStatus(years: number, motorType: MotorType): { color: string; label: string } {
   // Pas de limite d'âge pour hybride et électrique
   if (motorType === "hybride" || motorType === "electrique") {
-    return { color: "text-emerald-400", label: "Aucune limite" }
+    return { color: "text-[#D4AF37]", label: "Aucune limite" }
   }
   // Pour thermiques (diesel/essence)
   if (years >= 7) return { color: "text-rose-500", label: "Critique" }
   if (years >= 6) return { color: "text-rose-400", label: "Changement impératif" }
   if (years >= 5) return { color: "text-amber-400", label: "Alerte anticipation" }
-  return { color: "text-emerald-400", label: "Conforme" }
+  return { color: "text-[#D4AF37]", label: "Conforme" }
 }
 
 interface VehicleDrawerProps {
@@ -479,12 +479,12 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
                     transition={{ duration: 0.2 }}
                     className="space-y-4"
                   >
-                    {/* ASSURANCE TRANSPORT À TITRE ONÉREUX */}
+                    {/* EXPIRATION ASSURANCE TRANSPORT */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold flex items-center gap-1.5">
                           <Shield className="h-3 w-3" strokeWidth={1.5} />
-                          ASSURANCE TRANSPORT À TITRE ONÉREUX
+                          EXPIRATION ASSU. TRANS. ONÉREUX
                         </label>
                         {assuranceStatus.label && (
                           <span className={cn("px-1.5 py-0.5 text-[8px] font-bold rounded border", assuranceStatus.cls)}>
@@ -498,15 +498,15 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
                         onChange={(e) => setAssuranceTransportExpiration(e.target.value)}
                         className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] focus:outline-none focus:border-[#D4AF37]/50 transition-colors [color-scheme:dark]"
                       />
-                      <p className="text-[9px] text-[#666] mt-1">Date d&apos;échéance uniquement</p>
+                      <p className="text-[9px] text-[#666] mt-1">Assurance Transport à Titre Onéreux</p>
                     </div>
 
-                    {/* ECHEANCE CONTROLE TECHNIQUE */}
+                    {/* EXPIRATION CONTROLE TECHNIQUE */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold flex items-center gap-1.5">
                           <Calendar className="h-3 w-3" strokeWidth={1.5} />
-                          ÉCHÉANCE CONTRÔLE TECHNIQUE
+                          EXPIRATION CONTRÔLE TECHNIQUE
                         </label>
                         {ctStatus.label && (
                           <span className={cn("px-1.5 py-0.5 text-[8px] font-bold rounded border", ctStatus.cls)}>
