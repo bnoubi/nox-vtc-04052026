@@ -24,7 +24,7 @@ const navItems: NavItem[] = [
   },
   {
     icon: <FileText className="h-5 w-5" strokeWidth={1.5} />,
-    label: "Bons de CDE\n& Factures",
+    label: "Bons de Cde\n& Factures",
     id: "documents",
   },
   {

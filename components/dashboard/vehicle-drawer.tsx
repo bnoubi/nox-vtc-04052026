@@ -65,13 +65,13 @@ function calculateVehicleAge(dateStr: string): { years: number; days: number; di
 function getAgeStatus(years: number, motorType: MotorType): { color: string; label: string } {
   // Pas de limite d'âge pour hybride et électrique
   if (motorType === "hybride" || motorType === "electrique") {
-    return { color: "text-[#D4AF37]", label: "Aucune limite" }
+    return { color: "text-[#00FF00]", label: "Aucune limite" }
   }
   // Pour thermiques (diesel/essence)
-  if (years >= 7) return { color: "text-rose-500", label: "Critique" }
-  if (years >= 6) return { color: "text-rose-400", label: "Changement impératif" }
-  if (years >= 5) return { color: "text-amber-400", label: "Alerte anticipation" }
-  return { color: "text-[#D4AF37]", label: "Conforme" }
+  if (years >= 7) return { color: "text-[#FF0000]", label: "Critique - Hors délai" }
+  if (years >= 6) return { color: "text-[#FF4500]", label: "Changement impératif" }
+  if (years >= 5) return { color: "text-[#FFA500]", label: "Alerte anticipation" }
+  return { color: "text-[#00FF00]", label: "Conforme" }
 }
 
 interface VehicleDrawerProps {

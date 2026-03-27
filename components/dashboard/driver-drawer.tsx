@@ -219,12 +219,12 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
                 />
               </div>
 
-              {/* EXPIRATION VISITE MÉDICALE / APAC */}
+              {/* EXPIRATION VISITE MÉDICALE - APAC */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold flex items-center gap-1.5">
                     <Calendar className="h-3 w-3" strokeWidth={1.5} />
-                    EXPIRATION VISITE MÉDICALE
+                    EXPIRATION VISITE MÉDICALE - APAC
                   </label>
                   {apacStatus.label && (
                     <span className={cn("px-1.5 py-0.5 text-[8px] font-bold rounded border", apacStatus.cls)}>
