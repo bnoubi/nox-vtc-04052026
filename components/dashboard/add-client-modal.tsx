@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { X, UserRoundPlus, Building2, Plus, Trash2 } from "lucide-react"
+import { X, UserRoundPlus, Building2, Plus, Trash2, Contact } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ClientType, ClientContact } from "./data"
 
@@ -136,6 +136,25 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto max-h-[calc(90vh-120px)]">
+              
+              {/* Import from Contacts Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  // Simulate importing from phone contacts
+                  // In a real app, this would use the Contacts API
+                  if (isParticulier) {
+                    setPrenom("Jean")
+                    setNom("Dupont")
+                    setPhone("+33 6 12 34 56 78")
+                    setEmail("jean.dupont@email.com")
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-onyx-card border border-dashed border-gold/30 text-gold text-xs font-medium hover:bg-gold/5 hover:border-gold/50 transition-all"
+              >
+                <Contact className="h-4 w-4" strokeWidth={1.5} />
+                Importer depuis les contacts
+              </button>
               
               {/* Type Selector */}
               <div>

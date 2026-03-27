@@ -58,6 +58,14 @@ export interface BillingAddress {
   ville: string
 }
 
+// Historique de trajets/documents
+export interface ClientTripHistory {
+  id: string
+  date: string
+  trajet: string
+  montant: number
+}
+
 // Interface Client complète (compatible Factur-X)
 export interface Client {
   id: string
@@ -81,6 +89,10 @@ export interface Client {
   lastTrip: string
   notes: string
   tag?: "VIP" | "Régulier"
+  // Préférences Prestige (accueil personnalisé)
+  preferences?: string
+  // Historique des trajets (3 derniers)
+  tripHistory?: ClientTripHistory[]
 }
 
 export const allClients: Client[] = [
@@ -97,6 +109,12 @@ export const allClients: Client[] = [
     lastTrip: "06/02/2026",
     notes: "Client fidèle. Préfère les Mercedes. Toujours ponctuel.",
     tag: "VIP",
+    preferences: "Eau plate Evian, Température 21°C, Musique classique en sourdine",
+    tripHistory: [
+      { id: "t1", date: "06/02/2026", trajet: "Paris CDG → Ritz Paris", montant: 95 },
+      { id: "t2", date: "02/02/2026", trajet: "Ritz Paris → La Défense", montant: 65 },
+      { id: "t3", date: "28/01/2026", trajet: "Gare du Nord → Ritz Paris", montant: 45 },
+    ],
   },
   {
     id: "2",
@@ -111,6 +129,11 @@ export const allClients: Client[] = [
     lastTrip: "05/02/2026",
     notes: "Demande souvent un siège enfant. Trajets aéroport fréquents.",
     tag: "Régulier",
+    preferences: "Siège enfant requis, Silence souhaité, Température 22°C",
+    tripHistory: [
+      { id: "t4", date: "05/02/2026", trajet: "Domicile → Orly", montant: 75 },
+      { id: "t5", date: "01/02/2026", trajet: "Orly → Domicile", montant: 75 },
+    ],
   },
   {
     id: "3",
@@ -129,6 +152,12 @@ export const allClients: Client[] = [
     lastTrip: "28/01/2026",
     notes: "Facturation mensuelle. Trajets professionnels uniquement.",
     tag: "VIP",
+    preferences: "Journaux du jour disponibles, Chargeurs iPhone/USB-C",
+    tripHistory: [
+      { id: "t6", date: "28/01/2026", trajet: "Cabinet → Tribunal de Paris", montant: 55 },
+      { id: "t7", date: "25/01/2026", trajet: "CDG → Cabinet", montant: 85 },
+      { id: "t8", date: "20/01/2026", trajet: "Cabinet → Ministère", montant: 40 },
+    ],
   },
   {
     id: "4",
@@ -145,6 +174,10 @@ export const allClients: Client[] = [
     lastTrip: "04/02/2026",
     notes: "Directrice achats. Facturation entreprise mensuelle.",
     tag: "VIP",
+    tripHistory: [
+      { id: "t9", date: "04/02/2026", trajet: "Siège → Salon du Luxe", montant: 60 },
+      { id: "t10", date: "30/01/2026", trajet: "Orly → Siège", montant: 80 },
+    ],
   },
   {
     id: "5",
@@ -172,6 +205,11 @@ export const allClients: Client[] = [
     lastTrip: "02/02/2026",
     notes: "Paiement CB uniquement. Trajets réguliers week-end.",
     tag: "Régulier",
+    preferences: "Paiement CB uniquement, Eau gazeuse",
+    tripHistory: [
+      { id: "t11", date: "02/02/2026", trajet: "Domicile → Opéra Garnier", montant: 35 },
+      { id: "t12", date: "27/01/2026", trajet: "Opéra → Domicile", montant: 35 },
+    ],
   },
 ]
 
