@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef } from "react"
+import React, { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Coins,
@@ -1037,7 +1037,18 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
   const [showLimitAlert, setShowLimitAlert] = useState(false)
   // Unified drawer: null = closed, undefined = add mode, Driver = edit mode
   const [drawerDriver, setDrawerDriver] = useState<Driver | null | undefined>(null)
-  const { navigateToSubscription } = useNav()
+  const { navigateToSubscription, pendingEntityNavigation, clearPendingEntityNavigation } = useNav()
+
+  // Deep link: open driver drawer if pending navigation
+  useEffect(() => {
+    if (pendingEntityNavigation && pendingEntityNavigation.entityType === "driver") {
+      const driver = allDrivers.find(d => d.id === pendingEntityNavigation.entityId)
+      if (driver) {
+        setDrawerDriver(driver)
+      }
+      clearPendingEntityNavigation()
+    }
+  }, [pendingEntityNavigation, clearPendingEntityNavigation])
 
   function handleUpgrade() {
     setShowConfetti(true)
@@ -1140,7 +1151,18 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   const [showLimitAlert, setShowLimitAlert] = useState(false)
   // Unified drawer: null = closed, undefined = add mode, Vehicle = edit mode
   const [drawerVehicle, setDrawerVehicle] = useState<Vehicle | null | undefined>(null)
-  const { navigateToSubscription } = useNav()
+  const { navigateToSubscription, pendingEntityNavigation, clearPendingEntityNavigation } = useNav()
+
+  // Deep link: open vehicle drawer if pending navigation
+  useEffect(() => {
+    if (pendingEntityNavigation && pendingEntityNavigation.entityType === "vehicle") {
+      const vehicle = allVehicles.find(v => v.id === pendingEntityNavigation.entityId)
+      if (vehicle) {
+        setDrawerVehicle(vehicle)
+      }
+      clearPendingEntityNavigation()
+    }
+  }, [pendingEntityNavigation, clearPendingEntityNavigation])
 
   function handleUpgrade() {
     setShowConfetti(true)

@@ -1,11 +1,11 @@
 "use client"
 
-import { createContext, useContext, useCallback, useRef } from "react"
+import { createContext, useContext, useCallback, useRef, useState } from "react"
 import type { TabId } from "./bottom-nav"
 
 type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security"
 
-interface EntityNavigation {
+export interface EntityNavigation {
   entityType: "driver" | "vehicle"
   entityId: string
   field: string
@@ -19,7 +19,6 @@ interface NavContextValue {
   registerWalletOpener: (fn: () => void) => void
   logout: () => void
   navigateToEntity: (entityType: "driver" | "vehicle", entityId: string, field: string) => void
-  registerEntityNavigator: (fn: (nav: EntityNavigation) => void) => void
   pendingEntityNavigation: EntityNavigation | null
   clearPendingEntityNavigation: () => void
 }
@@ -37,6 +36,7 @@ export function NavProvider({
 }) {
   const settingsNavigatorRef = useRef<((screen: SettingsScreen) => void) | null>(null)
   const walletOpenerRef = useRef<(() => void) | null>(null)
+  const [pendingEntityNavigation, setPendingEntityNavigation] = useState<EntityNavigation | null>(null)
 
   const registerSettingsNavigator = useCallback((fn: (screen: SettingsScreen) => void) => {
     settingsNavigatorRef.current = fn
@@ -66,8 +66,37 @@ export function NavProvider({
     }, 50)
   }, [onTabChange])
 
+  const navigateToEntity = useCallback((entityType: "driver" | "vehicle", entityId: string, field: string) => {
+    // Store the pending navigation
+    setPendingEntityNavigation({ entityType, entityId, field })
+    // Switch to settings tab
+    onTabChange("settings")
+    // Navigate to the correct settings screen
+    setTimeout(() => {
+      if (entityType === "driver") {
+        settingsNavigatorRef.current?.("team")
+      } else {
+        settingsNavigatorRef.current?.("fleet")
+      }
+    }, 50)
+  }, [onTabChange])
+
+  const clearPendingEntityNavigation = useCallback(() => {
+    setPendingEntityNavigation(null)
+  }, [])
+
   return (
-    <NavContext.Provider value={{ switchTab, navigateToSubscription, registerSettingsNavigator, openWallet, registerWalletOpener, logout }}>
+    <NavContext.Provider value={{ 
+      switchTab, 
+      navigateToSubscription, 
+      registerSettingsNavigator, 
+      openWallet, 
+      registerWalletOpener, 
+      logout,
+      navigateToEntity,
+      pendingEntityNavigation,
+      clearPendingEntityNavigation
+    }}>
       {children}
     </NavContext.Provider>
   )
