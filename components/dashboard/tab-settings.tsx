@@ -53,6 +53,7 @@ import { VehicleDrawer } from "./vehicle-drawer"
 import { WalletDrawer } from "./wallet-drawer"
 import { SubscriptionDrawer } from "./subscription-drawer"
 import { ComplianceDot, getDriverComplianceStatus, getVehicleComplianceStatus } from "./compliance-dot"
+import { CGVSettings } from "./cgv-settings"
 import { toast } from "sonner"
 import type { Driver, Vehicle } from "./data"
 
@@ -60,7 +61,7 @@ const SOLO_LIMIT = 1
 const DUO_LIMIT = 2
 const TEAM_LIMIT = 10
 
-type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security"
+type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security" | "cgv"
 
 // ── Animation variants ────────────────────────────────────────
 
@@ -1506,6 +1507,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
   const accountSettings: SettingItem[] = [
     { icon: <User className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Profil", description: "Jean Dupont, jean.dupont@nox-vtc.fr", screen: "profile" },
     { icon: <Building2 className="h-4 w-4" strokeWidth={1.5} />, label: "Profil Entreprise", description: "NoX VTC SAS \u2022 SIRET 912 345 678", screen: "enterprise" },
+    { icon: <FileText className="h-4 w-4" strokeWidth={1.5} />, label: "Mes Conditions de Vente", description: "CGV rattachees a vos documents", screen: "cgv" },
     { icon: <Landmark className="h-4 w-4" strokeWidth={1.5} />, label: "Infos Bancaires", description: "IBAN \u2022\u2022\u2022\u2022 4668", badge: "AES-256", screen: "banking" },
     { icon: <Crown className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Abonnement", description: isTeam ? "Offre TEAM active" : plan === "DUO" ? "Offre DUO active" : "Offre SOLO active", screen: "subscription" },
   ]
@@ -1632,7 +1634,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
   )
 }
 
-// ── Export ───���────���────────��────────────────────────────────────
+// ── Export ───���────���────────��────────────────────────────────���───
 
 export function SettingsTab() {
   const [screen, setScreen] = useState<SettingsScreen>("main")
@@ -1653,8 +1655,9 @@ export function SettingsTab() {
         {screen === "banking" && <BankingScreen key="banking" onBack={() => setScreen("main")} />}
         {screen === "subscription" && <SubscriptionScreen key="subscription" onBack={() => setScreen("main")} />}
         {screen === "notifications" && <NotificationsScreen key="notifications" onBack={() => setScreen("main")} />}
-        {screen === "security" && <SecurityScreen key="security" onBack={() => setScreen("main")} />}
-      </AnimatePresence>
+{screen === "security" && <SecurityScreen key="security" onBack={() => setScreen("main")} />}
+  {screen === "cgv" && <CGVSettings key="cgv" onBack={() => setScreen("main")} />}
+  </AnimatePresence>
     </div>
   )
 }
