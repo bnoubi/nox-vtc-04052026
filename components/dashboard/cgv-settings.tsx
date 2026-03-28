@@ -257,7 +257,7 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
   }
 
   const handleSave = () => {
-    toast.success("CGV enregistrees et rattachees a vos futurs documents", {
+    toast.success("✓ CGV enregistrées et rattachées à vos futurs documents", {
       duration: 3000,
     })
   }
@@ -270,7 +270,7 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
 
   const renderPreview = () => {
     if (mode === "configurator") {
-      const paymentTimingText = config.paymentTiming === "before" ? "avant" : "apres"
+      const paymentTimingText = config.paymentTiming === "before" ? "avant" : "après"
       const methodsText = getPaymentMethodsText(config.paymentMethods)
       const cancellationDelayText = formatDuration(config.cancellationDelay)
       const waitTimeText = formatDuration(config.waitTime + "min").replace("min", "")
@@ -280,19 +280,19 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
           <li className="flex gap-2">
             <span className="text-gold">•</span>
             <span>
-              Paiement exige <strong className="text-gold">{paymentTimingText}</strong> l&apos;execution de la course ({methodsText})
+              Paiement exigé <strong className="text-gold">{paymentTimingText}</strong> l&apos;exécution de la course ({methodsText})
             </span>
           </li>
           <li className="flex gap-2">
             <span className="text-gold">•</span>
             <span>
-              Delai de reglement : <strong className="text-gold">{getPaymentDelayText(config.paymentDelay)}</strong>
+              Délai de règlement : <strong className="text-gold">{getPaymentDelayText(config.paymentDelay)}</strong>
             </span>
           </li>
           <li className="flex gap-2">
             <span className="text-gold">•</span>
             <span>
-              Annulation gratuite jusqu&apos;a <strong className="text-gold">{cancellationDelayText}</strong> avant la prise en charge
+              Annulation gratuite jusqu&apos;à <strong className="text-gold">{cancellationDelayText}</strong> avant la prise en charge
             </span>
           </li>
           <li className="flex gap-2">
@@ -304,13 +304,13 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
           <li className="flex gap-2">
             <span className="text-gold">•</span>
             <span>
-              Temps d&apos;attente gratuit : <strong className="text-gold">{waitTimeText}</strong> a la prise en charge
+              Temps d&apos;attente gratuit : <strong className="text-gold">{waitTimeText}</strong> à la prise en charge
             </span>
           </li>
           <li className="flex gap-2">
             <span className="text-gold">•</span>
             <span>
-              Au-dela : facturation de <strong className="text-gold">{config.waitFee} €/min</strong> supplementaire
+              Au-delà : facturation de <strong className="text-gold">{config.waitFee} €/min</strong> supplémentaire
             </span>
           </li>
           <li className="flex gap-2">
@@ -326,7 +326,7 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
     if (mode === "freetext") {
       return (
         <div className="text-[12px] text-foreground/90 whitespace-pre-wrap leading-relaxed">
-          {freeText || <span className="text-muted-foreground italic">Votre texte apparaitra ici...</span>}
+          {freeText || <span className="text-muted-foreground italic">Votre texte apparaîtra ici...</span>}
         </div>
       )
     }
@@ -334,13 +334,13 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
     if (mode === "import" && importedFile) {
       return (
         <div className="text-[12px] text-foreground/90">
-          <p className="font-medium text-gold mb-1">CGV importees — {importedFile.name}</p>
-          <p className="text-muted-foreground">Ce document sera joint automatiquement a tous vos bons de commande.</p>
+          <p className="font-medium text-gold mb-1">CGV importées — {importedFile.name}</p>
+          <p className="text-muted-foreground">Ce document sera joint automatiquement à tous vos bons de commande.</p>
         </div>
       )
     }
 
-    return <p className="text-[12px] text-muted-foreground italic">Importez un document pour voir l&apos;apercu...</p>
+    return <p className="text-[12px] text-muted-foreground italic">Importez un document pour voir l&apos;aperçu...</p>
   }
 
   return (
@@ -359,7 +359,7 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
         {/* Header Description */}
         <div className="px-4 py-4">
           <p className="text-[12px] text-muted-foreground leading-relaxed">
-            Configurez les conditions de vente qui seront automatiquement integrees a tous vos bons de commande et factures.
+            Configurez les conditions de vente qui seront automatiquement intégrées à tous vos bons de commande et factures.
           </p>
         </div>
 
@@ -387,13 +387,13 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <span className={cn("font-semibold text-sm", mode === "configurator" ? "text-gold" : "text-foreground")}>
-                    Configurateur guide
+                    Configurateur guidé
                   </span>
                   <span className="px-2 py-0.5 rounded-full bg-gold/20 text-gold text-[9px] font-bold uppercase">
-                    Recommande
+                    Recommandé
                   </span>
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Je parametre mes conditions en quelques clics</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Je paramètre mes conditions en quelques clics</p>
               </div>
               {mode === "configurator" && (
                 <div className="w-5 h-5 rounded-full bg-gold flex items-center justify-center">
@@ -424,9 +424,9 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
               </div>
               <div className="flex-1">
                 <span className={cn("font-semibold text-sm", mode === "freetext" ? "text-gold" : "text-foreground")}>
-                  Rediger mes propres CGV
+                  Rédiger mes propres CGV
                 </span>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Je redige mes conditions de A a Z</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Je rédige mes conditions de A à Z</p>
               </div>
               {mode === "freetext" && (
                 <div className="w-5 h-5 rounded-full bg-gold flex items-center justify-center">
@@ -459,7 +459,7 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
                 <span className={cn("font-semibold text-sm", mode === "import" ? "text-gold" : "text-foreground")}>
                   Importer un document
                 </span>
-                <p className="text-[11px] text-muted-foreground mt-0.5">J&apos;ai deja un fichier CGV existant</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">J&apos;ai déjà un fichier CGV existant</p>
               </div>
               {mode === "import" && (
                 <div className="w-5 h-5 rounded-full bg-gold flex items-center justify-center">
@@ -474,15 +474,15 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
         <div className="px-4 mb-6">
           {mode === "configurator" && (
             <div className="bg-onyx-card/60 rounded-xl border border-onyx-border/30 p-4">
-              <SettingRow label="Paiement exige">
+              <SettingRow label="Paiement exigé">
                 <PillToggle
                   options={["before", "after"] as PaymentTiming[]}
                   value={config.paymentTiming}
                   onChange={(v) => updateConfig("paymentTiming", v)}
-                  labels={{ before: "Avant la course", after: "Apres la course" }}
+                  labels={{ before: "Avant la course", after: "Après la course" }}
                 />
                 <div className="mt-3">
-                  <p className="text-[10px] text-muted-foreground mb-2">Moyens acceptes</p>
+                  <p className="text-[10px] text-muted-foreground mb-2">Moyens acceptés</p>
                   <CheckboxGrid
                     options={["cb", "applepay", "googlepay", "paypal", "virement", "especes"]}
                     selected={config.paymentMethods}
@@ -493,13 +493,13 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
                       googlepay: "Google Pay",
                       paypal: "PayPal",
                       virement: "Virement",
-                      especes: "Especes",
+                      especes: "Espèces",
                     }}
                   />
                 </div>
               </SettingRow>
 
-              <SettingRow label="Delai de reglement" subLabel="Pour facturation Factur-X">
+              <SettingRow label="Délai de règlement" subLabel="Pour facturation Factur-X">
                 <PillToggle
                   options={["comptant", "15j", "30j"] as PaymentDelay[]}
                   value={config.paymentDelay}
@@ -508,7 +508,7 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
                 />
               </SettingRow>
 
-              <SettingRow label="Annulation gratuite jusqu'a">
+              <SettingRow label="Annulation gratuite jusqu'à">
                 <PillToggle
                   options={["1h", "2h", "4h", "24h"] as CancellationDelay[]}
                   value={config.cancellationDelay}
@@ -517,7 +517,7 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
                 />
               </SettingRow>
 
-              <SettingRow label="Au-dela du delai, facturation de" subLabel="du montant TTC">
+              <SettingRow label="Au-delà du délai, facturation de" subLabel="du montant TTC">
                 <PillToggle
                   options={["0", "25", "50", "100"] as CancellationFee[]}
                   value={config.cancellationFee}
@@ -526,7 +526,7 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
                 />
               </SettingRow>
 
-              <SettingRow label="Temps d'attente gratuit a la prise en charge">
+              <SettingRow label="Temps d'attente gratuit à la prise en charge">
                 <PillToggle
                   options={["5", "10", "15", "20"] as WaitTime[]}
                   value={config.waitTime}
@@ -535,7 +535,7 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
                 />
               </SettingRow>
 
-              <SettingRow label="Au-dela, facturation de">
+              <SettingRow label="Au-delà, facturation de">
                 <PillToggle
                   options={["0.25", "0.50", "0.75", "1.00"] as WaitFee[]}
                   value={config.waitFee}
@@ -544,12 +544,12 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
                 />
               </SettingRow>
 
-              <SettingRow label="Client absent a la prise en charge (No-show)">
+              <SettingRow label="Client absent à la prise en charge (No-show)">
                 <PillToggle
                   options={["0", "50", "100"] as NoShowFee[]}
                   value={config.noShowFee}
                   onChange={(v) => updateConfig("noShowFee", v)}
-                  labels={{ "0": "Non facture", "50": "50% facture", "100": "100% facture" }}
+                  labels={{ "0": "Non facturé", "50": "50% facturé", "100": "100% facturé" }}
                 />
               </SettingRow>
             </div>
@@ -563,19 +563,19 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gold/10 border border-gold/30 text-gold text-xs font-medium hover:bg-gold/15 active:scale-[0.98] transition-all"
               >
                 <Sparkles className="h-4 w-4" strokeWidth={1.5} />
-                Charger le modele standard NoX
+                Charger le modèle standard NoX
               </button>
 
               <textarea
                 value={freeText}
                 onChange={(e) => setFreeText(e.target.value)}
-                placeholder="Redigez ici vos conditions generales de vente...
+                placeholder="Rédigez ici vos conditions générales de vente...
 
-Ex : Paiement avant la course. Annulation gratuite jusqu'a 2h avant.
+Ex : Paiement avant la course. Annulation gratuite jusqu'à 2h avant.
 Temps d'attente offert : 10 minutes..."
                 className="w-full min-h-[200px] px-4 py-3 rounded-xl bg-[#1A1A1A] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 resize-y focus:outline-none focus:border-gold/50 transition-colors"
               />
-              <p className="text-[10px] text-muted-foreground text-right">{freeText.length} caracteres</p>
+              <p className="text-[10px] text-muted-foreground text-right">{freeText.length} caractères</p>
             </div>
           )}
 
@@ -625,7 +625,7 @@ Temps d'attente offert : 10 minutes..."
           <div className="bg-[#2a2a2a] rounded-t-xl border border-onyx-border/30 border-b-0">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-onyx-border/20">
               <Eye className="h-4 w-4 text-gold" strokeWidth={1.5} />
-              <span className="text-xs font-semibold text-foreground">Apercu — Conditions & Acceptation</span>
+              <span className="text-xs font-semibold text-foreground">Aperçu — Conditions & Acceptation</span>
             </div>
             <div className="p-4">{renderPreview()}</div>
           </div>
@@ -636,7 +636,7 @@ Temps d'attente offert : 10 minutes..."
           <div className="flex gap-2.5 p-3 rounded-xl bg-onyx-card/40 border border-onyx-border/20">
             <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" strokeWidth={1.5} />
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Les CGV generees sont fournies a titre indicatif. Pour une activite professionnelle, une validation juridique est recommandee.
+              Les CGV générées sont fournies à titre indicatif. Pour une activité professionnelle, une validation juridique est recommandée.
             </p>
           </div>
         </div>
