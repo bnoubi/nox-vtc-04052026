@@ -608,39 +608,41 @@ export function TarifsSettings({ onBack }: { onBack: () => void }) {
             title="Forfaits Fixes" 
             subtitle="Tarifs prédéfinis pour trajets récurrents"
           >
-            <div className="space-y-3">
-              {forfaits.map((forfait, index) => (
-                <div key={forfait.id} className="flex items-center gap-2">
+            <div className="space-y-3 px-4">
+              {forfaits.map((forfait) => (
+                <div key={forfait.id} className="flex items-center justify-between gap-2 overflow-hidden">
                   <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" strokeWidth={1.5} />
                   <input
                     type="text"
                     value={forfait.name}
                     onChange={(e) => updateForfait(forfait.id, "name", e.target.value)}
                     placeholder="Nom du trajet..."
-                    className="flex-1 px-3 py-2 rounded-lg bg-[#1A1A1A] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
-                    style={{ fontSize: "16px" }}
+                    className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-[#1A1A1A] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50 truncate"
+                    style={{ fontSize: "14px" }}
                   />
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={forfait.price}
-                    onChange={(e) => updateForfait(forfait.id, "price", parseFloat(e.target.value) || 0)}
-                    className="w-20 px-2 py-2 rounded-lg bg-[#1A1A1A] border border-onyx-border/30 text-sm text-right text-foreground focus:outline-none focus:border-gold/50"
-                    style={{ fontSize: "16px" }}
-                  />
-                  <span className="text-xs text-muted-foreground">€</span>
-                  <button
-                    onClick={() => deleteForfait(forfait.id)}
-                    disabled={forfaits.length <= 1}
-                    className={cn(
-                      "p-2 rounded-lg transition-colors",
-                      forfaits.length > 1 
-                        ? "hover:bg-rose-500/10 text-rose-400 active:scale-95" 
-                        : "opacity-30 cursor-not-allowed text-muted-foreground"
-                    )}
-                  >
-                    <X className="h-4 w-4" strokeWidth={1.5} />
-                  </button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={forfait.price}
+                      onChange={(e) => updateForfait(forfait.id, "price", parseFloat(e.target.value) || 0)}
+                      className="w-16 px-2 py-2 rounded-lg bg-[#1A1A1A] border border-onyx-border/30 text-sm text-right text-foreground focus:outline-none focus:border-gold/50"
+                      style={{ fontSize: "14px" }}
+                    />
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">€</span>
+                    <button
+                      onClick={() => deleteForfait(forfait.id)}
+                      disabled={forfaits.length <= 1}
+                      className={cn(
+                        "p-2 rounded-lg transition-colors flex-shrink-0",
+                        forfaits.length > 1 
+                          ? "hover:bg-rose-500/10 text-rose-400 active:scale-95" 
+                          : "opacity-30 cursor-not-allowed text-muted-foreground"
+                      )}
+                    >
+                      <X className="h-4 w-4" strokeWidth={1.5} />
+                    </button>
+                  </div>
                 </div>
               ))}
 
