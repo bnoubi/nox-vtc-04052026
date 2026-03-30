@@ -224,6 +224,42 @@ function formatPrice(value: number): string {
   return value.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €"
 }
 
+/**
+ * Determines which tariff applies based on pickup time.
+ * Handles midnight crossing correctly (e.g., 21:00 -> 06:59 spans midnight).
+ * @param time - Time string in "HH:MM" format
+ * @param tranches - Array of time slot definitions
+ * @returns The matching tranche ID or "a" as default
+ */
+export function detectTarifFromTime(time: string, tranches: { id: string; startTime: string; endTime: string }[]): string {
+  if (!time) return "a"
+  
+  const [hours, minutes] = time.split(":").map(Number)
+  const timeInMinutes = hours * 60 + minutes
+  
+  for (const tranche of tranches) {
+    const [startH, startM] = tranche.startTime.split(":").map(Number)
+    const [endH, endM] = tranche.endTime.split(":").map(Number)
+    const startInMinutes = startH * 60 + startM
+    const endInMinutes = endH * 60 + endM
+    
+    // Handle midnight crossing (e.g., 21:00 to 06:59)
+    if (startInMinutes > endInMinutes) {
+      // Time slot spans midnight
+      if (timeInMinutes >= startInMinutes || timeInMinutes <= endInMinutes) {
+        return tranche.id
+      }
+    } else {
+      // Normal time slot (same day)
+      if (timeInMinutes >= startInMinutes && timeInMinutes <= endInMinutes) {
+        return tranche.id
+      }
+    }
+  }
+  
+  return "a" // Default to Tarif A (Journée)
+}
+
 function formatPriceUnit(value: number, unit: string): string {
   return value.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + unit
 }
@@ -244,8 +280,8 @@ export function TarifsSettings({ onBack }: { onBack: () => void }) {
   // Tranches horaires
   const [tranchesEnabled, setTranchesEnabled] = useState(true)
   const [tranches, setTranches] = useState<TrancheHoraire[]>([
-    { id: "a", name: "Tarif A — Journée", startTime: "07:00", endTime: "21:00", coefficient: 1.00 },
-    { id: "b", name: "Tarif B — Nuit", startTime: "21:00", endTime: "07:00", coefficient: 1.25 },
+    { id: "a", name: "Tarif A — Journée", startTime: "07:00", endTime: "20:59", coefficient: 1.00 },
+    { id: "b", name: "Tarif B — Nuit", startTime: "21:00", endTime: "06:59", coefficient: 1.25 },
     { id: "c", name: "Tarif C — Week-end & Fériés", startTime: "00:00", endTime: "23:59", coefficient: 1.50 }
   ])
   const [applyWeekend, setApplyWeekend] = useState(true)
