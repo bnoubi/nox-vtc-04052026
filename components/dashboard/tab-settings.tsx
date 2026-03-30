@@ -320,10 +320,11 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
   const [logoName, setLogoName] = useState("")
   const [brandColor, setBrandColor] = useState("#C5A059")
 
-  // Informations l��gales
+  // Informations legales
   const [legal, setLegal] = useState({
     denomination: "NoX VTC SAS",
     siren: "912 345 678 00015",
+    tvaIntra: "FR12 912345678",
     adresse: "42 Avenue des Champs-Élysées, 75008 Paris",
   })
 
@@ -480,6 +481,25 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
                   className="flex-1 px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground font-mono focus:outline-none focus:border-gold/50 transition-colors"
                 />
               </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">N° TVA Intracommunautaire</p>
+                <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-gold/10 text-gold border border-gold/20">Factur-X</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
+                  <FileText className="h-3.5 w-3.5 text-gold" strokeWidth={1.5} />
+                </div>
+                <input
+                  type="text"
+                  value={legal.tvaIntra}
+                  onChange={(e) => setLegal({ ...legal, tvaIntra: e.target.value })}
+                  placeholder="FR12 123456789"
+                  className="flex-1 px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground font-mono focus:outline-none focus:border-gold/50 transition-colors"
+                />
+              </div>
+              <p className="text-[9px] text-muted-foreground mt-1 ml-10">Si assujetti a la TVA - utilise pour vos documents legaux</p>
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Adresse du siege social</p>
