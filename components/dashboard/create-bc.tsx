@@ -1,75 +1,109 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { AnimatePresence, motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import {
-  Edit3,
-  Share2,
   X,
-  FileText,
   ChevronLeft,
-  ChevronDown,
   ChevronRight,
-  Search,
-  UserRoundPlus,
-  MapPin,
-  Clock,
-  CalendarDays,
-  Car,
-  User,
-  StickyNote,
-  CircleDot,
-  Check,
-  MessageCircle,
-  Phone,
+  ChevronDown,
+  FileText,
   Link2,
+  MessageSquare,
+  Phone,
   Copy,
-  CheckCheck,
-  Building2,
+  Check,
+  MapPin,
+  Navigation,
   Plus,
-  Minus,
   Trash2,
-  Eye,
-  Info,
-  Upload,
-  Shield,
+  Car,
+  Users,
   Briefcase,
-  CreditCard,
-  Send,
+  Euro,
+  Eye,
   Save,
+  Send,
   Download,
-  Mail,
+  Share2,
+  Building2,
+  User,
+  Search,
+  Shield,
+  Sparkles,
+  Info,
+  Edit3,
+  CheckCheck,
+  Route,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { usePlan } from "./plan-context"
-import { allDrivers, allVehicles, existingClients, allClients } from "./data"
+import { allClients, allVehicles, type Client, type Vehicle } from "./data"
 import { toast } from "sonner"
 
-// ── Types ─────────────────────────────────────────────────────
+// ============================================================================
+// TYPES
+// ============================================================================
 
-export interface BCPrefillClient {
-  civilite: string
-  nom: string
-  prenom: string
-  tel: string
+type FlowStep = "menu" | "link" | "form"
+type FormTab = "formulaire" | "apercu"
+
+interface Supplement {
+  id: string
+  label: string
+  price: number
+  enabled: boolean
 }
 
-interface CreateBCProps {
-  open: boolean
-  onClose: () => void
-  prefillClient?: BCPrefillClient | null
+interface Stop {
+  id: string
+  address: string
 }
 
-type BCStep = "choose" | "manual" | "link"
-type TabId = "form" | "preview"
-type ClientType = "particulier" | "professionnel"
-type ValidityOption = "24h" | "48h" | "7j" | "30j"
-type StatusOption = "attente" | "confirme" | "annule"
-type VehicleCategory = "berline" | "van" | "monospace" | "luxe"
+// ============================================================================
+// SIMULATED PROFILE DATA (from settings)
+// ============================================================================
 
-// ── Utilities ─────────────────────────────────────────────────
+const emetteurProfile = {
+  logo: null as string | null,
+  initials: "JD",
+  denomination: "NoX VTC SAS",
+  siren: "912 345 678",
+  tvaIntra: "FR12 912345678",
+  adresse: "42 Avenue des Champs-Élysées, 75008 Paris",
+  email: "contact@nox-vtc.fr",
+  phone: "+33 1 23 45 67 89",
+  carteVTC: "VTC-075-2024-00142",
+  rcProPolice: "AXA-PRO-2024-789456",
+  rcProValid: true,
+}
 
-function generateBRNumber() {
+const tarifGrille = {
+  priseEnCharge: 5,
+  tarifKm: 2.5,
+  tarifAttente: 0.5,
+  courseMinimum: 15,
+}
+
+const defaultSupplements: Supplement[] = [
+  { id: "bagage", label: "Bagage volumineux", price: 5, enabled: false },
+  { id: "animal", label: "Animal de compagnie", price: 10, enabled: false },
+  { id: "siege", label: "Siège bébé", price: 8, enabled: false },
+  { id: "nuit", label: "Majoration nuit", price: 10, enabled: false },
+]
+
+const cgvContent = `• Paiement exigé avant l'exécution de la course (CB, Apple Pay, Espèces)
+• Délai de règlement : Comptant
+• Annulation gratuite jusqu'à 2 heures avant la prise en charge
+• En cas d'annulation tardive : facturation de 50% du montant TTC
+• Temps d'attente gratuit : 10 minutes à la prise en charge
+• Au-delà : facturation de 0,50 €/min supplémentaire
+• No-show (client absent) : facturation de 50% du montant TTC`
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+function generateBRNumber(): string {
   const now = new Date()
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, "0")
@@ -77,390 +111,70 @@ function generateBRNumber() {
   return `BR-${year}-${month}-${seq}`
 }
 
-function formatDate(date: Date) {
+function formatDate(date: Date): string {
   const days = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"]
   const months = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
   return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`
 }
 
-function formatTime(date: Date) {
+function formatTime(date: Date): string {
   return `${String(date.getHours()).padStart(2, "0")}h${String(date.getMinutes()).padStart(2, "0")}`
 }
 
-function formatAmount(n: number) {
-  return new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(amount)
 }
 
-function addDays(date: Date, days: number) {
-  const result = new Date(date)
-  result.setDate(result.getDate() + days)
-  return result
+function simulateRoute(from: string, to: string, stops: Stop[]): { distance: number; duration: number } {
+  if (!from || !to) return { distance: 0, duration: 0 }
+  const base = (from.length + to.length) * 0.8
+  const stopsExtra = stops.filter(s => s.address).length * 5
+  const distance = Math.round((base + stopsExtra) * 10) / 10
+  const duration = Math.round(distance * 2.2)
+  return { distance, duration }
 }
 
-function getExpiryDate(validity: ValidityOption, createdAt: Date) {
-  switch (validity) {
-    case "24h": return addDays(createdAt, 1)
-    case "48h": return addDays(createdAt, 2)
-    case "7j": return addDays(createdAt, 7)
-    case "30j": return addDays(createdAt, 30)
-  }
-}
+// ============================================================================
+// SUB-COMPONENTS
+// ============================================================================
 
-// ── Bottom Sheet : Choose method ──────────────────────────────
-
-function ChooseMethodSheet({
-  onManual,
-  onLink,
-  onClose,
-}: {
-  onManual: () => void
-  onLink: () => void
-  onClose: () => void
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[70] flex items-end justify-center"
-    >
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <motion.div
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-        className="relative w-full max-w-md bg-background rounded-t-3xl border-t border-x border-onyx-border/50 overflow-hidden"
-      >
-        <div className="flex justify-center pt-3">
-          <div className="w-10 h-1 rounded-full bg-onyx-border/50" />
-        </div>
-
-        <div className="px-5 pt-4 pb-2">
-          <h2 className="text-base font-bold text-foreground">
-            Nouveau Bon de Réservation
-          </h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            Choisissez votre méthode de création
-          </p>
-        </div>
-
-        <div className="px-5 pb-4 space-y-2.5">
-          <button
-            onClick={onManual}
-            className="flex items-center gap-3.5 w-full p-4 rounded-2xl bg-onyx-card border border-gold/20 hover:border-gold/40 hover:gold-glow-sm active:scale-[0.98] transition-all"
-          >
-            <div className="w-11 h-11 rounded-xl bg-gold/10 border border-gold/30 flex items-center justify-center shrink-0">
-              <Edit3 className="h-5 w-5 text-gold" strokeWidth={1.5} />
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-semibold text-foreground">
-                Saisie Manuelle
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Remplir le formulaire complet
-              </p>
-            </div>
-          </button>
-
-          <button
-            onClick={onLink}
-            className="flex items-center gap-3.5 w-full p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 hover:border-onyx-border active:scale-[0.98] transition-all"
-          >
-            <div className="w-11 h-11 rounded-xl bg-secondary flex items-center justify-center shrink-0">
-              <Share2 className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-semibold text-foreground">
-                Envoyer un lien au client
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Le client saisit lui-même son bon de réservation
-              </p>
-            </div>
-          </button>
-        </div>
-
-        {/* Info tip */}
-        <div className="mx-5 mb-5 px-3 py-2 rounded-xl bg-gold/5 border border-gold/15">
-          <p className="text-[10px] text-gold/80 text-center">
-            Gain de temps : automatisez la saisie des données clients
-          </p>
-        </div>
-      </motion.div>
-    </motion.div>
-  )
-}
-
-// ── Share Link Screen ─────────────────────────────────────────
-
-function ShareLinkScreen({ onBack, onClose }: { onBack: () => void; onClose: () => void }) {
-  const [selectedClientId, setSelectedClientId] = useState("")
-  const [freeContact, setFreeContact] = useState("")
-  const [copied, setCopied] = useState(false)
-  const [sent, setSent] = useState<"sms" | "whatsapp" | null>(null)
-  const [clientDropdownOpen, setClientDropdownOpen] = useState(false)
-
-  const clientOptions = existingClients.map((c) => ({
-    value: c.id,
-    label: `${c.title} ${c.name}`,
-    sub: c.phone,
-  }))
-
-  const selectedClient = existingClients.find((c) => c.id === selectedClientId)
-
-  const slug = selectedClient
-    ? selectedClient.name.toLowerCase().replace(/\s+/g, "-")
-    : freeContact
-      ? freeContact.replace(/@.*/, "").replace(/[^a-zA-Z0-9]/g, "-").replace(/-+/g, "-").toLowerCase() || "client"
-      : "votre-client"
-
-  const generatedLink = `nox.vtc/book/${slug}`
-
-  function handleCopy() {
-    navigator.clipboard?.writeText(`https://${generatedLink}`)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  function handleSend(channel: "sms" | "whatsapp") {
-    setSent(channel)
-    setTimeout(() => {
-      onClose()
-    }, 1800)
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: 40 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 40 }}
-      transition={{ duration: 0.25, ease: "easeInOut" }}
-      className="fixed inset-0 z-[70] bg-background flex flex-col"
-    >
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-onyx-border/30">
-        <button
-          onClick={onBack}
-          className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 active:scale-95 transition-all"
-        >
-          <ChevronLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-base font-bold text-foreground">Partage du lien</h1>
-          <p className="text-[10px] text-muted-foreground">Envoyer un lien de réservation</p>
-        </div>
-        <button
-          onClick={onClose}
-          className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 active:scale-95 transition-all"
-        >
-          <X className="h-4 w-4 text-foreground" strokeWidth={1.5} />
-        </button>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-6">
-        {/* Select existing client */}
-        <section>
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-            <User className="h-3.5 w-3.5" strokeWidth={1.5} />
-            Destinataire
-          </p>
-          
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setClientDropdownOpen(!clientDropdownOpen)}
-              className={cn(
-                "w-full flex items-center justify-between px-4 py-3 rounded-xl bg-onyx-card border text-sm transition-colors text-left",
-                clientDropdownOpen ? "border-gold/40" : "border-onyx-border/50 hover:border-onyx-border"
-              )}
-            >
-              <span className={selectedClient ? "text-foreground" : "text-muted-foreground/50"}>
-                {selectedClient ? `${selectedClient.title} ${selectedClient.name}` : "Sélectionner un client existant"}
-              </span>
-              <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", clientDropdownOpen && "rotate-180")} strokeWidth={1.5} />
-            </button>
-
-            <AnimatePresence>
-              {clientDropdownOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute top-full left-0 right-0 z-20 mt-1 py-1 rounded-xl bg-onyx-card border border-onyx-border/50 shadow-2xl shadow-black/60 max-h-48 overflow-y-auto scrollbar-hide"
-                >
-                  {clientOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => {
-                        setSelectedClientId(option.value)
-                        setFreeContact("")
-                        setClientDropdownOpen(false)
-                      }}
-                      className={cn(
-                        "w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-secondary/30 transition-colors",
-                        selectedClientId === option.value && "bg-gold/5"
-                      )}
-                    >
-                      <div>
-                        <p className={cn("text-sm", selectedClientId === option.value ? "text-gold font-medium" : "text-foreground")}>
-                          {option.label}
-                        </p>
-                        {option.sub && <p className="text-[10px] text-muted-foreground">{option.sub}</p>}
-                      </div>
-                      {selectedClientId === option.value && <Check className="h-3.5 w-3.5 text-gold shrink-0" strokeWidth={2} />}
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </section>
-
-        {/* Separator */}
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-px bg-onyx-border/30" />
-          <span className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider">ou</span>
-          <div className="flex-1 h-px bg-onyx-border/30" />
-        </div>
-
-        {/* Free contact input */}
-        <section>
-          <input
-            type="text"
-            placeholder="Saisir email ou téléphone"
-            value={freeContact}
-            onChange={(e) => {
-              setFreeContact(e.target.value)
-              setSelectedClientId("")
-            }}
-            className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
-            style={{ fontSize: "16px" }}
-          />
-        </section>
-
-        {/* Link Preview */}
-        <section>
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-            <Link2 className="h-3.5 w-3.5" strokeWidth={1.5} />
-            Lien de réservation
-          </p>
-          <div className="relative rounded-2xl bg-onyx-card border border-gold/20 p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-muted-foreground mb-1">Lien personnalisé</p>
-                <p className="text-sm font-mono font-medium text-gold truncate">{generatedLink}</p>
-              </div>
-              <button
-                onClick={handleCopy}
-                className={cn(
-                  "w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 transition-all active:scale-95",
-                  copied ? "bg-emerald-500/15 border-emerald-500/30" : "bg-gold/10 border-gold/30 hover:bg-gold/20"
-                )}
-              >
-                {copied ? <CheckCheck className="h-4 w-4 text-emerald-400" strokeWidth={1.5} /> : <Copy className="h-4 w-4 text-gold" strokeWidth={1.5} />}
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* Success feedback */}
-        <AnimatePresence>
-          {sent && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20"
-            >
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
-                <CheckCheck className="h-5 w-5 text-emerald-400" strokeWidth={1.5} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-emerald-400">Lien envoyé avec succès</p>
-                <p className="text-[11px] text-emerald-400/70 mt-0.5">
-                  {sent === "sms" ? "Le client recevra un SMS sous quelques secondes." : "Le message WhatsApp a été envoyé."}
-                </p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Fixed bottom: Send buttons */}
-      <div className="px-4 py-4 border-t border-onyx-border/30 bg-background space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => handleSend("sms")}
-            disabled={!!sent || (!selectedClientId && !freeContact)}
-            className={cn(
-              "flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold transition-all active:scale-[0.98]",
-              sent === "sms"
-                ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400"
-                : "bg-onyx-card border border-gold/30 text-gold hover:bg-gold/10 hover:border-gold/50 disabled:opacity-40"
-            )}
-          >
-            <Phone className="h-4 w-4" strokeWidth={1.5} />
-            {sent === "sms" ? "Envoyé" : "Par SMS"}
-          </button>
-          <button
-            onClick={() => handleSend("whatsapp")}
-            disabled={!!sent || (!selectedClientId && !freeContact)}
-            className={cn(
-              "flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold transition-all active:scale-[0.98]",
-              sent === "whatsapp"
-                ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400"
-                : "bg-gold text-primary-foreground hover:bg-gold-light gold-glow-sm disabled:opacity-40"
-            )}
-          >
-            <MessageCircle className="h-4 w-4" strokeWidth={1.5} />
-            {sent === "whatsapp" ? "Envoyé" : "Par WhatsApp"}
-          </button>
-        </div>
-        <p className="text-[10px] text-center text-muted-foreground/50">
-          Le client recevra un lien sécurisé pour remplir ses informations de trajet.
-        </p>
-      </div>
-    </motion.div>
-  )
-}
-
-// ── Collapsible Section ───────────────────────────────────────
-
-function CollapsibleSection({
+function SectionCard({
   title,
+  subtitle,
   icon,
-  children,
+  badge,
   defaultOpen = true,
+  children,
 }: {
   title: string
-  icon: React.ReactNode
-  children: React.ReactNode
+  subtitle?: string
+  icon?: React.ReactNode
+  badge?: React.ReactNode
   defaultOpen?: boolean
+  children: React.ReactNode
 }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen)
-
+  const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="rounded-2xl bg-onyx-card border border-onyx-border/30 overflow-hidden">
+    <div className="rounded-xl bg-onyx-card border border-onyx-border/30 overflow-hidden">
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-secondary/20 transition-colors"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-3 active:bg-white/5 transition-colors"
       >
-        <div className="flex items-center gap-2">
-          <span className="text-gold">{icon}</span>
-          <span className="text-sm font-semibold text-foreground">{title}</span>
+        <div className="flex items-center gap-3">
+          {icon && <div className="w-8 h-8 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center text-gold">{icon}</div>}
+          <div className="text-left">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-foreground">{title}</span>
+              {badge}
+            </div>
+            {subtitle && <p className="text-[10px] text-muted-foreground">{subtitle}</p>}
+          </div>
         </div>
-        <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", isOpen && "rotate-180")} strokeWidth={1.5} />
+        <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} strokeWidth={1.5} />
       </button>
       <AnimatePresence initial={false}>
-        {isOpen && (
+        {open && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
@@ -468,9 +182,7 @@ function CollapsibleSection({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-4 pt-1 space-y-4 border-t border-onyx-border/20">
-              {children}
-            </div>
+            <div className="px-4 pb-4 pt-1 border-t border-onyx-border/20">{children}</div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -478,1119 +190,1089 @@ function CollapsibleSection({
   )
 }
 
-// ── Input Field ───────────────────────────────────────────────
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 
-function InputField({
-  label,
-  required,
-  tag,
-  tagColor = "gold",
-  placeholder,
-  value,
-  onChange,
-  type = "text",
-  inputMode,
-  rows,
-  icon,
-  suffix,
-  info,
-  readOnly,
-  error,
-}: {
-  label: string
-  required?: boolean
-  tag?: string
-  tagColor?: "gold" | "muted"
-  placeholder?: string
-  value: string
-  onChange?: (val: string) => void
-  type?: string
-  inputMode?: "text" | "numeric" | "decimal" | "tel" | "email"
-  rows?: number
-  icon?: React.ReactNode
-  suffix?: string
-  info?: string
-  readOnly?: boolean
-  error?: string
-}) {
-  const inputClasses = cn(
-    "w-full px-4 py-3 rounded-xl bg-[#1A1A1A] border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none transition-colors",
-    error ? "border-rose-500/50 focus:border-rose-500" : "border-onyx-border/30 focus:border-gold/50",
-    icon && "pl-10",
-    suffix && "pr-12",
-    readOnly && "opacity-60 cursor-not-allowed"
-  )
+export function CreateBCFlow({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [step, setStep] = useState<FlowStep>("menu")
+  const [tab, setTab] = useState<FormTab>("formulaire")
+  const [copied, setCopied] = useState(false)
 
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-1.5">
-        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-          {label}
-          {required && <span className="text-gold ml-0.5">*</span>}
-        </label>
-        {tag && (
-          <span className={cn(
-            "px-1.5 py-0.5 rounded text-[8px] font-bold uppercase",
-            tagColor === "gold" ? "bg-gold/15 text-gold" : "bg-secondary text-muted-foreground"
-          )}>
-            {tag}
-          </span>
-        )}
-      </div>
-      <div className="relative">
-        {icon && (
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-            {icon}
-          </span>
-        )}
-        {rows ? (
-          <textarea
-            value={value}
-            onChange={(e) => onChange?.(e.target.value)}
-            placeholder={placeholder}
-            rows={rows}
-            readOnly={readOnly}
-            className={cn(inputClasses, "resize-none")}
-            style={{ fontSize: "16px" }}
-          />
-        ) : (
-          <input
-            type={type}
-            inputMode={inputMode}
-            value={value}
-            onChange={(e) => onChange?.(e.target.value)}
-            placeholder={placeholder}
-            readOnly={readOnly}
-            className={inputClasses}
-            style={{ fontSize: "16px" }}
-          />
-        )}
-        {suffix && (
-          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-            {suffix}
-          </span>
-        )}
-      </div>
-      {info && <p className="text-[10px] text-muted-foreground mt-1">{info}</p>}
-      {error && <p className="text-[10px] text-rose-400 mt-1">{error}</p>}
-    </div>
-  )
-}
-
-// ── Pill Toggle ───────────────────────────────────────────────
-
-function PillToggle<T extends string>({
-  options,
-  value,
-  onChange,
-  labels,
-}: {
-  options: T[]
-  value: T
-  onChange: (val: T) => void
-  labels: Record<T, string>
-}) {
-  return (
-    <div className="flex gap-2 flex-wrap">
-      {options.map((opt) => (
-        <button
-          key={opt}
-          type="button"
-          onClick={() => onChange(opt)}
-          className={cn(
-            "px-3 py-2 rounded-xl text-xs font-medium border transition-all active:scale-95",
-            value === opt
-              ? "bg-gold/15 border-gold/40 text-gold"
-              : "bg-secondary/30 border-onyx-border/50 text-muted-foreground hover:border-onyx-border"
-          )}
-        >
-          {labels[opt]}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-// ── Stepper ───────────────────────────────────────────────────
-
-function Stepper({
-  value,
-  onChange,
-  min = 0,
-  max = 99,
-}: {
-  value: number
-  onChange: (val: number) => void
-  min?: number
-  max?: number
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <button
-        type="button"
-        onClick={() => onChange(Math.max(min, value - 1))}
-        disabled={value <= min}
-        className="w-10 h-10 rounded-xl bg-onyx-card border border-onyx-border/50 flex items-center justify-center text-foreground hover:border-gold/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
-      >
-        <Minus className="h-4 w-4" strokeWidth={1.5} />
-      </button>
-      <span className="w-8 text-center text-lg font-bold text-foreground tabular-nums">{value}</span>
-      <button
-        type="button"
-        onClick={() => onChange(Math.min(max, value + 1))}
-        disabled={value >= max}
-        className="w-10 h-10 rounded-xl bg-onyx-card border border-onyx-border/50 flex items-center justify-center text-foreground hover:border-gold/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
-      >
-        <Plus className="h-4 w-4" strokeWidth={1.5} />
-      </button>
-    </div>
-  )
-}
-
-// ── Full-Screen Manual Form ───────────────────────────────────
-
-function ManualBCForm({ onBack, onClose, prefillClient }: { onBack: () => void; onClose: () => void; prefillClient?: BCPrefillClient | null }) {
-  const [activeTab, setActiveTab] = useState<TabId>("form")
-  const now = useMemo(() => new Date(), [])
-  const brNumber = useMemo(() => generateBRNumber(), [])
-
-  // ── Form State ──
-  const [validity, setValidity] = useState<ValidityOption>("7j")
-  const [status, setStatus] = useState<StatusOption>("attente")
-
-  // Emetteur (Driver)
-  const [emetteurLogo, setEmetteurLogo] = useState<string | null>(null)
-  const [emetteurNom, setEmetteurNom] = useState("Jean Dupont Transport VTC")
-  const [emetteurAdresse, setEmetteurAdresse] = useState("15 rue des Lilas, 75011 Paris")
-  const [emetteurSiren, setEmetteurSiren] = useState("912 345 678")
-  const [emetteurTva, setEmetteurTva] = useState("")
-  const [emetteurEmail, setEmetteurEmail] = useState("jean.dupont@nox-vtc.fr")
-  const [emetteurTel, setEmetteurTel] = useState("+33 6 12 34 56 78")
-
-  // Client
-  const [clientType, setClientType] = useState<ClientType>("professionnel")
-  const [clientRaisonSociale, setClientRaisonSociale] = useState("")
-  const [clientSiren, setClientSiren] = useState("")
-  const [clientTvaIntra, setClientTvaIntra] = useState("")
-  const [clientAdresseFacturation, setClientAdresseFacturation] = useState("")
-  const [clientAdresseLivraison, setClientAdresseLivraison] = useState("")
-  const [clientAdresseSame, setClientAdresseSame] = useState(true)
-  const [clientContact, setClientContact] = useState("")
-  const [clientNom, setClientNom] = useState(prefillClient ? `${prefillClient.prenom} ${prefillClient.nom}` : "")
-  const [clientEmail, setClientEmail] = useState("")
-  const [clientTel, setClientTel] = useState(prefillClient?.tel || "")
-  const [clientAdresse, setClientAdresse] = useState("")
-
-  // Course
-  const [depart, setDepart] = useState("")
-  const [arrivee, setArrivee] = useState("")
-  const [stops, setStops] = useState<string[]>([])
+  // Form state
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [clientSearch, setClientSearch] = useState("")
+  const [clientDropdownOpen, setClientDropdownOpen] = useState(false)
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
+  const [departure, setDeparture] = useState("")
+  const [arrival, setArrival] = useState("")
+  const [stops, setStops] = useState<Stop[]>([])
   const [courseDate, setCourseDate] = useState("")
-  const [courseHeure, setCourseHeure] = useState("")
-  const [duree, setDuree] = useState("")
-  const [distance, setDistance] = useState("")
-  const [vehicule, setVehicule] = useState("Mercedes Classe E")
-  const [immatriculation, setImmatriculation] = useState("AA-123-BB")
-  const [categorie, setCategorie] = useState<VehicleCategory>("berline")
-  const [passagers, setPassagers] = useState(1)
-  const [bagages, setBagages] = useState(0)
+  const [courseTime, setCourseTime] = useState("")
+  const [passengers, setPassengers] = useState(1)
+  const [luggage, setLuggage] = useState(0)
   const [instructions, setInstructions] = useState("")
+  const [supplements, setSupplements] = useState<Supplement[]>(defaultSupplements)
+  const [customPrice, setCustomPrice] = useState<number | null>(null)
 
-  // Tarification
-  const [prestationDesc, setPrestationDesc] = useState("")
-  const [prestationHT, setPrestationHT] = useState("")
-  const [supplements, setSupplements] = useState<{ id: string; desc: string; montant: string }[]>([])
-  const [showRemise, setShowRemise] = useState(false)
-  const [remiseType, setRemiseType] = useState<"euro" | "percent">("euro")
-  const [remiseValue, setRemiseValue] = useState("")
-  const [showAcompte, setShowAcompte] = useState(false)
-  const [acompteType, setAcompteType] = useState<"euro" | "percent">("euro")
-  const [acompteValue, setAcompteValue] = useState("")
+  // Document metadata
+  const [brNumber] = useState(generateBRNumber())
+  const [creationDate] = useState(new Date())
 
-  // CGV
-  const [cgvAccepted, setCgvAccepted] = useState(false)
+  // Link sharing state
+  const [linkClientSearch, setLinkClientSearch] = useState("")
+  const [linkSelectedClient, setLinkSelectedClient] = useState<Client | null>(null)
+  const [linkFreeContact, setLinkFreeContact] = useState("")
+  const [linkSent, setLinkSent] = useState<"sms" | "whatsapp" | null>(null)
 
-  // Mentions légales
-  const [carteVTC, setCarteVTC] = useState("VTC-075-2024-00456")
-  const [policeRC, setPoliceRC] = useState("AXA-RC-2024-789456")
-
-  // ── Calculations ──
-  const montantHT = parseFloat(prestationHT) || 0
-  const supplementsTotal = supplements.reduce((sum, s) => sum + (parseFloat(s.montant) || 0), 0)
-  const subtotalHT = montantHT + supplementsTotal
+  // Calculations
+  const routeInfo = useMemo(() => simulateRoute(departure, arrival, stops), [departure, arrival, stops])
   
-  const remiseAmount = useMemo(() => {
-    if (!showRemise || !remiseValue) return 0
-    const val = parseFloat(remiseValue) || 0
-    return remiseType === "euro" ? val : (subtotalHT * val) / 100
-  }, [showRemise, remiseValue, remiseType, subtotalHT])
+  const calculatedPrice = useMemo(() => {
+    if (routeInfo.distance === 0) return tarifGrille.courseMinimum
+    const base = tarifGrille.priseEnCharge + (routeInfo.distance * tarifGrille.tarifKm)
+    return Math.max(base, tarifGrille.courseMinimum)
+  }, [routeInfo.distance])
 
-  const totalHT = subtotalHT - remiseAmount
+  const activeSupplements = supplements.filter(s => s.enabled)
+  const supplementsTotal = activeSupplements.reduce((sum, s) => sum + s.price, 0)
+  const totalHT = (customPrice ?? calculatedPrice) + supplementsTotal
   const tva = totalHT * 0.1
   const totalTTC = totalHT + tva
 
-  const acompteAmount = useMemo(() => {
-    if (!showAcompte || !acompteValue) return 0
-    const val = parseFloat(acompteValue) || 0
-    return acompteType === "euro" ? val : (totalTTC * val) / 100
-  }, [showAcompte, acompteValue, acompteType, totalTTC])
+  // Filtered clients for search
+  const filteredClients = useMemo(() => {
+    const search = clientSearch.toLowerCase()
+    if (!search) return allClients.slice(0, 5)
+    return allClients.filter(c => {
+      const name = c.type === "particulier" ? `${c.prenom} ${c.nom}` : c.raisonSociale
+      return name?.toLowerCase().includes(search) || c.email.toLowerCase().includes(search)
+    }).slice(0, 5)
+  }, [clientSearch])
 
-  const soldeRestant = totalTTC - acompteAmount
+  // Available vehicles (in service only)
+  const availableVehicles = allVehicles.filter(v => v.inService)
 
-  const expiryDate = getExpiryDate(validity, now)
-
-  // ── Handlers ──
-  function addSupplement(preset?: string) {
-    setSupplements([...supplements, { id: crypto.randomUUID(), desc: preset || "", montant: "" }])
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(`https://nox.vtc/book/${brNumber.toLowerCase()}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
-  function removeSupplement(id: string) {
-    setSupplements(supplements.filter((s) => s.id !== id))
+  const handleClose = () => {
+    setStep("menu")
+    setTab("formulaire")
+    onClose()
   }
 
-  function updateSupplement(id: string, field: "desc" | "montant", value: string) {
-    setSupplements(supplements.map((s) => (s.id === id ? { ...s, [field]: value } : s)))
+  const addStop = () => {
+    setStops([...stops, { id: Date.now().toString(), address: "" }])
   }
 
-  function addStop() {
-    setStops([...stops, ""])
+  const updateStop = (id: string, address: string) => {
+    setStops(stops.map(s => s.id === id ? { ...s, address } : s))
   }
 
-  function removeStop(index: number) {
-    setStops(stops.filter((_, i) => i !== index))
+  const removeStop = (id: string) => {
+    setStops(stops.filter(s => s.id !== id))
   }
 
-  function updateStop(index: number, value: string) {
-    setStops(stops.map((s, i) => (i === index ? value : s)))
+  const toggleSupplement = (id: string) => {
+    setSupplements(supplements.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s))
   }
 
-  function handleSaveDraft() {
+  const handleSendLink = (channel: "sms" | "whatsapp") => {
+    setLinkSent(channel)
+    toast.success(`Lien envoyé par ${channel === "sms" ? "SMS" : "WhatsApp"}`)
+    setTimeout(() => handleClose(), 1500)
+  }
+
+  const handleSaveDraft = () => {
     toast.success("Brouillon sauvegardé")
   }
 
-  function handleGenerate() {
-    if (!cgvAccepted) {
-      toast.error("Veuillez accepter les CGV")
-      return
-    }
-    toast.success("Bon de réservation généré ✓")
-    setActiveTab("preview")
+  const handleGenerate = () => {
+    setTab("apercu")
+    toast.success("Bon de réservation généré")
   }
 
-  // ── Render Form Tab ──
-  const renderFormTab = () => (
-    <div className="space-y-4 pb-40">
-      {/* SECTION 1: Métadonnées */}
-      <CollapsibleSection title="Informations du document" icon={<FileText className="h-4 w-4" strokeWidth={1.5} />}>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 rounded-xl bg-background border border-onyx-border/20">
-            <p className="text-[10px] text-muted-foreground mb-1">N° de bon</p>
-            <p className="text-sm font-mono font-semibold text-gold">{brNumber}</p>
-          </div>
-          <div className="p-3 rounded-xl bg-background border border-onyx-border/20">
-            <p className="text-[10px] text-muted-foreground mb-1">Date de création</p>
-            <p className="text-xs font-medium text-foreground">{formatDate(now)}</p>
-            <p className="text-[10px] text-muted-foreground">{formatTime(now)}</p>
-          </div>
-        </div>
+  if (!open) return null
 
-        <div>
-          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Validité</label>
-          <PillToggle
-            options={["24h", "48h", "7j", "30j"] as ValidityOption[]}
-            value={validity}
-            onChange={setValidity}
-            labels={{ "24h": "24h", "48h": "48h", "7j": "7 jours", "30j": "30 jours" }}
-          />
-          <p className="text-[10px] text-muted-foreground mt-1.5">
-            Expire le {formatDate(expiryDate)} à {formatTime(now)}
-          </p>
-        </div>
-
-        <div>
-          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Statut</label>
-          <div className="flex gap-2">
-            {(["attente", "confirme", "annule"] as StatusOption[]).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setStatus(s)}
-                className={cn(
-                  "px-3 py-2 rounded-xl text-xs font-semibold border transition-all active:scale-95",
-                  status === s
-                    ? s === "attente" ? "bg-gold/15 border-gold/40 text-gold"
-                      : s === "confirme" ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400"
-                      : "bg-rose-500/15 border-rose-500/40 text-rose-400"
-                    : "bg-secondary/30 border-onyx-border/50 text-muted-foreground"
-                )}
-              >
-                {s === "attente" ? "EN ATTENTE" : s === "confirme" ? "CONFIRMÉ" : "ANNULÉ"}
-              </button>
-            ))}
+  // ============================================================================
+  // STEP 1: MENU (Aiguillage)
+  // ============================================================================
+  if (step === "menu") {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center"
+        onClick={handleClose}
+      >
+        <motion.div
+          initial={{ y: "100%" }}
+          animate={{ y: 0 }}
+          exit={{ y: "100%" }}
+          transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-md bg-onyx-base rounded-t-3xl overflow-hidden"
+        >
+          <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mt-3" />
+          
+          <div className="px-5 pt-4 pb-2">
+            <h2 className="text-base font-bold text-foreground">Nouveau Bon de Réservation</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Choisissez votre méthode de création</p>
           </div>
-        </div>
-      </CollapsibleSection>
 
-      {/* SECTION 2: Émetteur */}
-      <CollapsibleSection title="Votre profil (Émetteur)" icon={<Briefcase className="h-4 w-4" strokeWidth={1.5} />}>
-        <div className="flex items-center gap-4 mb-4">
-          <div
-            onClick={() => document.getElementById("logo-upload")?.click()}
-            className="w-16 h-16 rounded-xl bg-gold/10 border-2 border-dashed border-gold/30 flex items-center justify-center cursor-pointer hover:bg-gold/15 transition-colors"
-          >
-            {emetteurLogo ? (
-              <img src={emetteurLogo} alt="Logo" className="w-full h-full object-cover rounded-xl" />
-            ) : (
-              <span className="text-lg font-bold text-gold">JD</span>
-            )}
+          <div className="px-5 pb-4 space-y-3">
+            {/* Option A: Saisie manuelle */}
+            <button
+              onClick={() => setStep("form")}
+              className="w-full flex items-center gap-4 p-4 rounded-xl bg-onyx-card border border-gold/20 hover:border-gold/40 active:scale-[0.98] transition-all text-left"
+            >
+              <div className="w-11 h-11 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center">
+                <Edit3 className="h-5 w-5 text-gold" strokeWidth={1.5} />
+              </div>
+              <div className="flex-1">
+                <span className="font-semibold text-sm text-foreground">Saisie du bon de réservation</span>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Vous remplissez les détails de la course</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+            </button>
+
+            {/* Option B: Lien client */}
+            <button
+              onClick={() => setStep("link")}
+              className="w-full flex items-center gap-4 p-4 rounded-xl bg-onyx-card border border-onyx-border/30 hover:border-onyx-border active:scale-[0.98] transition-all text-left"
+            >
+              <div className="w-11 h-11 rounded-xl bg-secondary flex items-center justify-center">
+                <Link2 className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
+              </div>
+              <div className="flex-1">
+                <span className="font-semibold text-sm text-foreground">Envoyer un lien de réservation</span>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Le client saisit lui-même les détails de la course</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+            </button>
+
+            {/* Info tip */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gold/5 border border-gold/15">
+              <Sparkles className="h-3.5 w-3.5 text-gold flex-shrink-0" strokeWidth={1.5} />
+              <p className="text-[10px] text-gold/80">Gain de temps : automatisez la saisie des données clients</p>
+            </div>
           </div>
-          <input
-            id="logo-upload"
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) setEmetteurLogo(URL.createObjectURL(file))
-            }}
-          />
+
+          <div className="px-5 pb-6">
+            <button onClick={handleClose} className="w-full py-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Annuler
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    )
+  }
+
+  // ============================================================================
+  // STEP 2: LINK SHARING
+  // ============================================================================
+  if (step === "link") {
+    const bookingLink = `nox.vtc/book/${brNumber.toLowerCase()}`
+    
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-onyx-base flex flex-col"
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/30">
+          <button onClick={() => setStep("menu")} className="p-2 -ml-2 rounded-lg hover:bg-white/5 active:scale-95 transition-all">
+            <ChevronLeft className="h-5 w-5 text-foreground" strokeWidth={1.5} />
+          </button>
           <div className="flex-1">
-            <p className="text-xs text-muted-foreground mb-1">Logo ou initiales</p>
-            {emetteurLogo && (
-              <button type="button" onClick={() => setEmetteurLogo(null)} className="text-[10px] text-rose-400 hover:underline">
-                Supprimer
-              </button>
-            )}
+            <h1 className="text-base font-bold text-foreground">Partage du lien</h1>
+            <p className="text-[10px] text-muted-foreground">Le client remplira lui-même sa réservation</p>
           </div>
-        </div>
-
-        <InputField label="Nom / Raison sociale" required value={emetteurNom} onChange={setEmetteurNom} placeholder="Jean Dupont Transport" />
-        <InputField label="Adresse complète" required value={emetteurAdresse} onChange={setEmetteurAdresse} rows={2} placeholder="15 rue des Lilas, 75011 Paris" />
-        <InputField label="SIREN" required tag="Factur-X requis" value={emetteurSiren} onChange={setEmetteurSiren} placeholder="123 456 789" info="Format : XXX XXX XXX (9 chiffres)" />
-        <InputField label="N° TVA intracommunautaire" tag="Si assujetti" tagColor="muted" value={emetteurTva} onChange={setEmetteurTva} placeholder="FR12 123456789" />
-        <div className="grid grid-cols-2 gap-3">
-          <InputField label="Email" value={emetteurEmail} onChange={setEmetteurEmail} type="email" placeholder="email@example.com" />
-          <InputField label="Téléphone" value={emetteurTel} onChange={setEmetteurTel} type="tel" placeholder="+33 6 12 34 56 78" />
-        </div>
-      </CollapsibleSection>
-
-      {/* SECTION 3: Client */}
-      <CollapsibleSection title="Client (Destinataire)" icon={<User className="h-4 w-4" strokeWidth={1.5} />}>
-        <div>
-          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Type de client</label>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setClientType("particulier")}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-medium border transition-all",
-                clientType === "particulier" ? "bg-gold/15 border-gold/40 text-gold" : "bg-secondary/30 border-onyx-border/50 text-muted-foreground"
-              )}
-            >
-              <User className="h-3.5 w-3.5" strokeWidth={1.5} />
-              Particulier
-            </button>
-            <button
-              type="button"
-              onClick={() => setClientType("professionnel")}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-medium border transition-all",
-                clientType === "professionnel" ? "bg-gold/15 border-gold/40 text-gold" : "bg-secondary/30 border-onyx-border/50 text-muted-foreground"
-              )}
-            >
-              <Building2 className="h-3.5 w-3.5" strokeWidth={1.5} />
-              Professionnel
-            </button>
-          </div>
-        </div>
-
-        {clientType === "professionnel" ? (
-          <>
-            <InputField label="Raison sociale" required value={clientRaisonSociale} onChange={setClientRaisonSociale} placeholder="Nom de l'entreprise" />
-            <InputField label="SIREN" tag="Factur-X requis" value={clientSiren} onChange={setClientSiren} placeholder="123 456 789" />
-            <InputField label="N° TVA intracommunautaire" value={clientTvaIntra} onChange={setClientTvaIntra} placeholder="FR12 123456789" />
-            <InputField label="Adresse de facturation" required value={clientAdresseFacturation} onChange={setClientAdresseFacturation} rows={2} placeholder="Adresse complète..." />
-            
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="same-address"
-                checked={clientAdresseSame}
-                onChange={(e) => setClientAdresseSame(e.target.checked)}
-                className="w-4 h-4 rounded border-onyx-border/50 bg-onyx-card text-gold focus:ring-gold/50"
-              />
-              <label htmlFor="same-address" className="text-xs text-muted-foreground">
-                Adresse de livraison identique
-              </label>
-            </div>
-
-            {!clientAdresseSame && (
-              <InputField label="Adresse de livraison" value={clientAdresseLivraison} onChange={setClientAdresseLivraison} rows={2} placeholder="Adresse de livraison..." />
-            )}
-
-            <InputField label="Nom du contact" value={clientContact} onChange={setClientContact} placeholder="Prénom Nom" />
-            <div className="grid grid-cols-2 gap-3">
-              <InputField label="Email" required value={clientEmail} onChange={setClientEmail} type="email" placeholder="email@entreprise.com" />
-              <InputField label="Téléphone" value={clientTel} onChange={setClientTel} type="tel" placeholder="+33 6 00 00 00 00" />
-            </div>
-          </>
-        ) : (
-          <>
-            <InputField label="Nom complet" required value={clientNom} onChange={setClientNom} placeholder="Prénom Nom" />
-            <div className="grid grid-cols-2 gap-3">
-              <InputField label="Email" required value={clientEmail} onChange={setClientEmail} type="email" placeholder="email@example.com" />
-              <InputField label="Téléphone" value={clientTel} onChange={setClientTel} type="tel" placeholder="+33 6 00 00 00 00" />
-            </div>
-            <InputField label="Adresse" value={clientAdresse} onChange={setClientAdresse} rows={2} placeholder="Adresse complète (optionnel)" />
-          </>
-        )}
-      </CollapsibleSection>
-
-      {/* SECTION 4: Détails de la course */}
-      <CollapsibleSection title="Détails de la course" icon={<Car className="h-4 w-4" strokeWidth={1.5} />}>
-        <InputField
-          label="Point de départ"
-          required
-          value={depart}
-          onChange={setDepart}
-          placeholder="Adresse de départ..."
-          icon={<MapPin className="h-4 w-4 text-emerald-400" strokeWidth={1.5} />}
-        />
-
-        {stops.map((stop, index) => (
-          <div key={index} className="flex items-start gap-2">
-            <div className="flex-1">
-              <InputField
-                label={`Étape ${index + 1}`}
-                value={stop}
-                onChange={(val) => updateStop(index, val)}
-                placeholder="Adresse de l'étape..."
-                icon={<CircleDot className="h-4 w-4 text-amber-400" strokeWidth={1.5} />}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => removeStop(index)}
-              className="mt-6 p-2 rounded-lg hover:bg-rose-500/10 text-rose-400 transition-colors"
-            >
-              <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-            </button>
-          </div>
-        ))}
-
-        <button
-          type="button"
-          onClick={addStop}
-          className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-gold/30 text-gold text-xs font-medium hover:bg-gold/5 transition-colors"
-        >
-          <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />
-          Ajouter une étape
-        </button>
-
-        <InputField
-          label="Point d'arrivée"
-          required
-          value={arrivee}
-          onChange={setArrivee}
-          placeholder="Adresse d'arrivée..."
-          icon={<MapPin className="h-4 w-4 text-rose-400" strokeWidth={1.5} />}
-        />
-
-        <div className="grid grid-cols-2 gap-3">
-          <InputField label="Date de la course" required value={courseDate} onChange={setCourseDate} type="date" />
-          <InputField label="Heure de prise en charge" required value={courseHeure} onChange={setCourseHeure} type="time" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <InputField label="Durée estimée" value={duree} onChange={setDuree} placeholder="45" suffix="min" inputMode="numeric" />
-          <InputField label="Distance estimée" value={distance} onChange={setDistance} placeholder="32" suffix="km" inputMode="numeric" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <InputField label="Véhicule" required value={vehicule} onChange={setVehicule} placeholder="Mercedes Classe E" />
-          <InputField label="Immatriculation" required value={immatriculation} onChange={setImmatriculation} placeholder="AA-123-BB" />
-        </div>
-
-        <div>
-          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Catégorie</label>
-          <PillToggle
-            options={["berline", "van", "monospace", "luxe"] as VehicleCategory[]}
-            value={categorie}
-            onChange={setCategorie}
-            labels={{ berline: "Berline", van: "Van", monospace: "Monospace", luxe: "Luxe" }}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
-              Passagers <span className="text-gold">*</span>
-            </label>
-            <Stepper value={passagers} onChange={setPassagers} min={1} max={8} />
-          </div>
-          <div>
-            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
-              Bagages
-            </label>
-            <Stepper value={bagages} onChange={setBagages} min={0} max={10} />
-          </div>
-        </div>
-
-        <InputField label="Instructions particulières" value={instructions} onChange={setInstructions} rows={3} placeholder="Ex : Accueil avec pancarte, bagages volumineux..." />
-      </CollapsibleSection>
-
-      {/* SECTION 5: Tarification */}
-      <CollapsibleSection title="Tarification" icon={<CreditCard className="h-4 w-4" strokeWidth={1.5} />}>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="col-span-2">
-            <InputField label="Prestation" required value={prestationDesc} onChange={setPrestationDesc} placeholder="Course aller CDG → Paris" />
-          </div>
-          <InputField label="Montant HT" required value={prestationHT} onChange={setPrestationHT} placeholder="0.00" suffix="€" inputMode="decimal" />
-        </div>
-
-        {/* Suppléments */}
-        {supplements.map((sup) => (
-          <div key={sup.id} className="flex items-start gap-2">
-            <div className="flex-1 grid grid-cols-3 gap-3">
-              <div className="col-span-2">
-                <InputField label="Supplément" value={sup.desc} onChange={(v) => updateSupplement(sup.id, "desc", v)} placeholder="Description..." />
-              </div>
-              <InputField label="Montant HT" value={sup.montant} onChange={(v) => updateSupplement(sup.id, "montant", v)} placeholder="0.00" suffix="€" inputMode="decimal" />
-            </div>
-            <button
-              type="button"
-              onClick={() => removeSupplement(sup.id)}
-              className="mt-6 p-2 rounded-lg hover:bg-rose-500/10 text-rose-400 transition-colors"
-            >
-              <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-            </button>
-          </div>
-        ))}
-
-        <button
-          type="button"
-          onClick={() => addSupplement()}
-          className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-gold/30 text-gold text-xs font-medium hover:bg-gold/5 transition-colors"
-        >
-          <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />
-          Ajouter un supplément
-        </button>
-
-        {/* Quick add chips */}
-        <div className="flex flex-wrap gap-2">
-          {["Attente", "Bagage", "Nuit/Dimanche", "Péage"].map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              onClick={() => addSupplement(preset)}
-              className="px-2.5 py-1.5 rounded-lg bg-secondary/30 border border-onyx-border/30 text-[10px] font-medium text-muted-foreground hover:border-gold/30 hover:text-gold transition-colors"
-            >
-              + {preset}
-            </button>
-          ))}
-        </div>
-
-        {/* Remise toggle */}
-        <div className="flex items-center justify-between">
-          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Remise</label>
-          <button
-            type="button"
-            onClick={() => setShowRemise(!showRemise)}
-            className={cn(
-              "w-10 h-5 rounded-full transition-colors relative",
-              showRemise ? "bg-gold" : "bg-onyx-border/50"
-            )}
-          >
-            <span className={cn(
-              "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform",
-              showRemise ? "translate-x-5" : "translate-x-0.5"
-            )} />
+          <button onClick={handleClose} className="p-2 rounded-lg hover:bg-white/5">
+            <X className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
           </button>
         </div>
 
-        {showRemise && (
-          <div className="flex gap-3">
-            <div className="flex gap-1">
-              <button
-                type="button"
-                onClick={() => setRemiseType("euro")}
-                className={cn(
-                  "px-3 py-2 rounded-l-xl text-xs font-medium border-y border-l transition-all",
-                  remiseType === "euro" ? "bg-gold/15 border-gold/40 text-gold" : "bg-secondary/30 border-onyx-border/50 text-muted-foreground"
-                )}
-              >
-                €
-              </button>
-              <button
-                type="button"
-                onClick={() => setRemiseType("percent")}
-                className={cn(
-                  "px-3 py-2 rounded-r-xl text-xs font-medium border-y border-r transition-all",
-                  remiseType === "percent" ? "bg-gold/15 border-gold/40 text-gold" : "bg-secondary/30 border-onyx-border/50 text-muted-foreground"
-                )}
-              >
-                %
-              </button>
-            </div>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={remiseValue}
-              onChange={(e) => setRemiseValue(e.target.value)}
-              placeholder="0"
-              className="flex-1 px-4 py-2 rounded-xl bg-[#1A1A1A] border border-onyx-border/30 text-sm text-foreground text-right focus:outline-none focus:border-gold/50"
-              style={{ fontSize: "16px" }}
-            />
-          </div>
-        )}
-
-        {/* Summary */}
-        <div className="p-4 rounded-xl bg-background border border-onyx-border/20 space-y-2">
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Total HT</span>
-            <span className="text-foreground tabular-nums">{formatAmount(totalHT)} €</span>
-          </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">TVA (10%)</span>
-            <span className="text-foreground tabular-nums">{formatAmount(tva)} €</span>
-          </div>
-          {remiseAmount > 0 && (
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Remise</span>
-              <span className="text-rose-400 tabular-nums">-{formatAmount(remiseAmount)} €</span>
-            </div>
-          )}
-          <div className="border-t border-onyx-border/20 pt-2 flex justify-between">
-            <span className="text-sm font-semibold text-foreground">TOTAL TTC</span>
-            <span className="text-lg font-bold text-gold tabular-nums">{formatAmount(totalTTC)} €</span>
-          </div>
-        </div>
-
-        <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-          <Info className="h-3 w-3" strokeWidth={1.5} />
-          TVA applicable : 10% — Transport de personnes (Art. 279-b du CGI)
-        </p>
-
-        {/* Acompte toggle */}
-        <div className="flex items-center justify-between">
-          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Acompte demandé</label>
-          <button
-            type="button"
-            onClick={() => setShowAcompte(!showAcompte)}
-            className={cn(
-              "w-10 h-5 rounded-full transition-colors relative",
-              showAcompte ? "bg-gold" : "bg-onyx-border/50"
-            )}
-          >
-            <span className={cn(
-              "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform",
-              showAcompte ? "translate-x-5" : "translate-x-0.5"
-            )} />
-          </button>
-        </div>
-
-        {showAcompte && (
-          <>
-            <div className="flex gap-3">
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => setAcompteType("euro")}
-                  className={cn(
-                    "px-3 py-2 rounded-l-xl text-xs font-medium border-y border-l transition-all",
-                    acompteType === "euro" ? "bg-gold/15 border-gold/40 text-gold" : "bg-secondary/30 border-onyx-border/50 text-muted-foreground"
-                  )}
-                >
-                  €
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAcompteType("percent")}
-                  className={cn(
-                    "px-3 py-2 rounded-r-xl text-xs font-medium border-y border-r transition-all",
-                    acompteType === "percent" ? "bg-gold/15 border-gold/40 text-gold" : "bg-secondary/30 border-onyx-border/50 text-muted-foreground"
-                  )}
-                >
-                  %
-                </button>
-              </div>
+        <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
+          {/* Client selector */}
+          <div className="space-y-2">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Destinataire</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
               <input
                 type="text"
-                inputMode="decimal"
-                value={acompteValue}
-                onChange={(e) => setAcompteValue(e.target.value)}
-                placeholder="0"
-                className="flex-1 px-4 py-2 rounded-xl bg-[#1A1A1A] border border-onyx-border/30 text-sm text-foreground text-right focus:outline-none focus:border-gold/50"
+                value={linkSelectedClient ? (linkSelectedClient.type === "particulier" ? `${linkSelectedClient.prenom} ${linkSelectedClient.nom}` : linkSelectedClient.raisonSociale) : linkFreeContact}
+                onChange={(e) => {
+                  setLinkSelectedClient(null)
+                  setLinkFreeContact(e.target.value)
+                }}
+                placeholder="Rechercher un client ou saisir email/téléphone..."
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-[#1A1A1A] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
                 style={{ fontSize: "16px" }}
               />
             </div>
-            {acompteAmount > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Solde restant : <span className="text-gold font-semibold">{formatAmount(soldeRestant)} €</span>
-              </p>
-            )}
-          </>
-        )}
-      </CollapsibleSection>
-
-      {/* SECTION 6: CGV */}
-      <CollapsibleSection title="Conditions générales" icon={<FileText className="h-4 w-4" strokeWidth={1.5} />}>
-        <div className="p-3 rounded-xl bg-background border border-onyx-border/20">
-          <ul className="space-y-1.5 text-[11px] text-muted-foreground">
-            <li>• Paiement exigé <strong className="text-foreground">avant</strong> l&apos;exécution de la course</li>
-            <li>• Annulation gratuite jusqu&apos;à <strong className="text-foreground">2h</strong> avant la prise en charge</li>
-            <li>• En cas d&apos;annulation tardive : facturation de <strong className="text-foreground">50%</strong> du montant TTC</li>
-            <li>• Temps d&apos;attente gratuit : <strong className="text-foreground">10 min</strong></li>
-            <li>• Au-delà : facturation de <strong className="text-foreground">0,50 €/min</strong></li>
-          </ul>
-        </div>
-
-        <div className="flex items-start gap-3 p-3 rounded-xl bg-gold/5 border border-gold/20">
-          <input
-            type="checkbox"
-            id="cgv-accept"
-            checked={cgvAccepted}
-            onChange={(e) => setCgvAccepted(e.target.checked)}
-            className="mt-0.5 w-4 h-4 rounded border-gold/30 bg-transparent text-gold focus:ring-gold/50"
-          />
-          <label htmlFor="cgv-accept" className="text-xs text-foreground leading-relaxed">
-            Le client a pris connaissance et accepté les présentes conditions générales de vente
-          </label>
-        </div>
-      </CollapsibleSection>
-
-      {/* SECTION 7: Mentions légales */}
-      <CollapsibleSection title="Mentions légales VTC" icon={<Shield className="h-4 w-4" strokeWidth={1.5} />}>
-        <p className="text-[10px] text-muted-foreground mb-3">
-          Informations requises par la réglementation VTC (Loi Thévenoud, Code des transports)
-        </p>
-
-        <InputField
-          label="N° Carte VTC"
-          required
-          tag="Obligatoire"
-          value={carteVTC}
-          onChange={setCarteVTC}
-          placeholder="VTC-075-XXXXXX"
-          info="Délivrée par la préfecture"
-        />
-
-        <InputField
-          label="N° Police d'assurance RC Pro"
-          required
-          tag="Obligatoire"
-          value={policeRC}
-          onChange={setPoliceRC}
-          placeholder="Numéro de votre contrat"
-          info="Assurance Responsabilité Civile Professionnelle obligatoire"
-        />
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 rounded-xl bg-background border border-onyx-border/20">
-            <p className="text-[10px] text-muted-foreground mb-1">SIREN</p>
-            <p className="text-xs font-medium text-foreground">{emetteurSiren || "—"}</p>
-            <p className="text-[9px] text-gold mt-1">Voir profil émetteur</p>
-          </div>
-          <div className="p-3 rounded-xl bg-background border border-onyx-border/20">
-            <p className="text-[10px] text-muted-foreground mb-1">Immatriculation</p>
-            <p className="text-xs font-medium text-foreground">{immatriculation || "—"}</p>
-            <p className="text-[9px] text-gold mt-1">Voir course</p>
-          </div>
-        </div>
-
-        <div className="p-3 rounded-xl bg-background border border-onyx-border/20">
-          <p className="text-[10px] text-muted-foreground mb-1">Capacité maximale</p>
-          <p className="text-xs font-medium text-foreground">{passagers} passager{passagers > 1 ? "s" : ""} maximum</p>
-        </div>
-      </CollapsibleSection>
-    </div>
-  )
-
-  // ── Render Preview Tab ──
-  const renderPreviewTab = () => (
-    <div className="p-4 pb-40">
-      <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-        {/* Document Header */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 flex items-center justify-center">
-                {emetteurLogo ? (
-                  <img src={emetteurLogo} alt="Logo" className="w-full h-full object-cover rounded-xl" />
-                ) : (
-                  <span className="text-lg font-bold text-amber-700">JD</span>
-                )}
+            {!linkSelectedClient && linkFreeContact.length > 0 && (
+              <div className="rounded-xl bg-onyx-card border border-onyx-border/30 overflow-hidden">
+                {allClients.filter(c => {
+                  const name = c.type === "particulier" ? `${c.prenom} ${c.nom}` : c.raisonSociale
+                  return name?.toLowerCase().includes(linkFreeContact.toLowerCase())
+                }).slice(0, 3).map(client => (
+                  <button
+                    key={client.id}
+                    onClick={() => {
+                      setLinkSelectedClient(client)
+                      setLinkFreeContact("")
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 border-b border-onyx-border/20 last:border-0"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center">
+                      {client.type === "professionnel" ? (
+                        <Building2 className="h-3.5 w-3.5 text-gold" strokeWidth={1.5} />
+                      ) : (
+                        <User className="h-3.5 w-3.5 text-gold" strokeWidth={1.5} />
+                      )}
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-medium text-foreground">
+                        {client.type === "particulier" ? `${client.prenom} ${client.nom}` : client.raisonSociale}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">{client.email}</p>
+                    </div>
+                  </button>
+                ))}
               </div>
-              <div>
-                <p className="font-bold text-gray-900">{emetteurNom}</p>
-                <p className="text-xs text-gray-500">{emetteurAdresse}</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <h1 className="text-lg font-bold text-gray-900">BON DE RÉSERVATION</h1>
-              <p className="text-sm font-mono text-amber-600 mt-1">{brNumber}</p>
-              <p className="text-xs text-gray-500 mt-1">Établi le {formatDate(now)} à {formatTime(now)}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Parties */}
-        <div className="grid grid-cols-2 gap-6 p-6 border-b border-gray-200">
-          <div>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Émetteur</p>
-            <p className="text-sm font-semibold text-gray-900">{emetteurNom}</p>
-            <p className="text-xs text-gray-600 mt-1">{emetteurAdresse}</p>
-            <p className="text-xs text-gray-600">{emetteurEmail}</p>
-            <p className="text-xs text-gray-600">{emetteurTel}</p>
-            <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 border border-amber-200">
-              <span className="text-[9px] font-semibold text-amber-700">SIREN</span>
-              <span className="text-[10px] font-mono text-amber-800">{emetteurSiren}</span>
-            </div>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Destinataire</p>
-            {clientType === "professionnel" ? (
-              <>
-                <p className="text-sm font-semibold text-gray-900">{clientRaisonSociale || "—"}</p>
-                <p className="text-xs text-gray-600 mt-1">{clientAdresseFacturation || "—"}</p>
-                {clientSiren && (
-                  <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 border border-amber-200">
-                    <span className="text-[9px] font-semibold text-amber-700">SIREN</span>
-                    <span className="text-[10px] font-mono text-amber-800">{clientSiren}</span>
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-semibold text-gray-900">{clientNom || "—"}</p>
-                <p className="text-xs text-gray-600 mt-1">{clientEmail}</p>
-                <p className="text-xs text-gray-600">{clientTel}</p>
-              </>
             )}
           </div>
-        </div>
 
-        {/* Course Details */}
-        <div className="p-6 border-b border-gray-200">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Détails de la course</p>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-3 h-3 rounded-full bg-emerald-500" />
-            <p className="text-sm text-gray-900">{depart || "Point de départ"}</p>
-          </div>
-          {stops.map((stop, i) => (
-            <div key={i} className="flex items-center gap-3 mb-3 pl-1">
-              <div className="w-2 h-2 rounded-full bg-amber-500" />
-              <p className="text-sm text-gray-600">{stop || `Étape ${i + 1}`}</p>
-            </div>
-          ))}
-          <div className="flex items-center gap-3">
-            <div className="w-3 h-3 rounded-full bg-rose-500" />
-            <p className="text-sm text-gray-900">{arrivee || "Point d'arrivée"}</p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100">
-            <div>
-              <p className="text-[10px] text-gray-400">Date & Heure</p>
-              <p className="text-xs font-medium text-gray-900">{courseDate || "—"} à {courseHeure || "—"}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-gray-400">Véhicule</p>
-              <p className="text-xs font-medium text-gray-900">{vehicule}</p>
-              <p className="text-[10px] text-gray-500">{immatriculation}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-gray-400">Passagers</p>
-              <p className="text-xs font-medium text-gray-900">{passagers} pax • {bagages} bagage{bagages > 1 ? "s" : ""}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Pricing */}
-        <div className="p-6 border-b border-gray-200">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Tarification</p>
+          {/* Link display */}
           <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-700">{prestationDesc || "Prestation"}</span>
-              <span className="font-mono text-gray-900">{formatAmount(montantHT)} €</span>
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Lien de réservation</label>
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-[#1A1A1A] border border-gold/20">
+              <Link2 className="h-4 w-4 text-gold flex-shrink-0" strokeWidth={1.5} />
+              <span className="flex-1 text-sm text-gold font-mono truncate">{bookingLink}</span>
+              <button
+                onClick={handleCopyLink}
+                className="p-2 rounded-lg bg-gold/10 border border-gold/20 hover:bg-gold/20 active:scale-95 transition-all"
+              >
+                {copied ? (
+                  <CheckCheck className="h-4 w-4 text-emerald-400" strokeWidth={1.5} />
+                ) : (
+                  <Copy className="h-4 w-4 text-gold" strokeWidth={1.5} />
+                )}
+              </button>
             </div>
-            {supplements.map((sup) => (
-              <div key={sup.id} className="flex justify-between text-sm">
-                <span className="text-gray-600">{sup.desc}</span>
-                <span className="font-mono text-gray-900">{formatAmount(parseFloat(sup.montant) || 0)} €</span>
-              </div>
-            ))}
-            {remiseAmount > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Remise</span>
-                <span className="font-mono text-rose-600">-{formatAmount(remiseAmount)} €</span>
-              </div>
+          </div>
+
+          {/* Info */}
+          <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-gold/5 border border-gold/15">
+            <Info className="h-3.5 w-3.5 text-gold flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+            <p className="text-[10px] text-gold/80 leading-relaxed">
+              Le client recevra un lien sécurisé pour remplir ses informations de trajet. Vous serez notifié dès la soumission.
+            </p>
+          </div>
+
+          {/* Success feedback */}
+          <AnimatePresence>
+            {linkSent && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20"
+              >
+                <CheckCheck className="h-5 w-5 text-emerald-400" strokeWidth={1.5} />
+                <p className="text-sm font-medium text-emerald-400">Lien envoyé avec succès</p>
+              </motion.div>
             )}
-          </div>
-          <div className="mt-4 pt-4 border-t border-gray-200 space-y-1">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Total HT</span>
-              <span className="font-mono text-gray-700">{formatAmount(totalHT)} €</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">TVA 10%</span>
-              <span className="font-mono text-gray-700">{formatAmount(tva)} €</span>
-            </div>
-            <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-200">
-              <span className="text-gray-900">TOTAL TTC</span>
-              <span className="text-amber-600">{formatAmount(totalTTC)} €</span>
-            </div>
-          </div>
+          </AnimatePresence>
         </div>
 
-        {/* Footer */}
-        <div className="p-6 bg-gray-50">
-          <div className="flex justify-between items-end">
-            <div className="text-[9px] text-gray-400 max-w-[200px]">
-              Les CGV sont fournies à titre indicatif. Validation juridique recommandée pour usage professionnel.
-            </div>
-            <div className="text-[8px] text-gray-400 text-right">
-              Document généré via NoX VTC
-            </div>
+        {/* Actions */}
+        <div className="px-4 py-4 border-t border-onyx-border/30 bg-onyx-base space-y-3">
+          <div className="flex gap-3">
+            <button 
+              onClick={() => handleSendLink("sms")}
+              disabled={!linkSelectedClient && !linkFreeContact}
+              className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl border border-gold/30 text-gold text-sm font-semibold hover:bg-gold/5 active:scale-[0.98] transition-all disabled:opacity-40"
+            >
+              <Phone className="h-4 w-4" strokeWidth={1.5} />
+              Par SMS
+            </button>
+            <button 
+              onClick={() => handleSendLink("whatsapp")}
+              disabled={!linkSelectedClient && !linkFreeContact}
+              className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gold text-onyx-base text-sm font-semibold hover:bg-gold/90 active:scale-[0.98] transition-all disabled:opacity-40"
+            >
+              <MessageSquare className="h-4 w-4" strokeWidth={1.5} />
+              Par WhatsApp
+            </button>
           </div>
+          <p className="text-[10px] text-center text-muted-foreground">
+            Le client recevra un lien sécurisé pour remplir ses informations de trajet.
+          </p>
         </div>
-      </div>
-    </div>
-  )
+      </motion.div>
+    )
+  }
 
+  // ============================================================================
+  // STEP 3: FORM (Saisie Manuelle NoX Intelligent)
+  // ============================================================================
   return (
     <motion.div
-      initial={{ opacity: 0, x: 40 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 40 }}
-      transition={{ duration: 0.25, ease: "easeInOut" }}
-      className="fixed inset-0 z-[70] bg-background flex flex-col"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-onyx-base flex flex-col"
     >
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-onyx-border/30">
-        <button
-          onClick={onBack}
-          className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 active:scale-95 transition-all"
-        >
-          <ChevronLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/30">
+        <button onClick={() => setStep("menu")} className="p-2 -ml-2 rounded-lg hover:bg-white/5 active:scale-95 transition-all">
+          <ChevronLeft className="h-5 w-5 text-foreground" strokeWidth={1.5} />
         </button>
         <div className="flex-1">
           <h1 className="text-base font-bold text-foreground">Nouveau Bon de Réservation</h1>
-          <p className="text-[10px] text-muted-foreground">Les champs marqués * sont obligatoires</p>
+          <p className="text-[10px] text-muted-foreground">{brNumber} • {formatDate(creationDate)}</p>
         </div>
-        <button
-          onClick={onClose}
-          className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 active:scale-95 transition-all"
-        >
-          <X className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+        <button onClick={handleClose} className="p-2 rounded-lg hover:bg-white/5">
+          <X className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 px-4 py-3 border-b border-onyx-border/30">
+      <div className="flex border-b border-onyx-border/30">
         <button
-          onClick={() => setActiveTab("form")}
+          onClick={() => setTab("formulaire")}
           className={cn(
-            "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all",
-            activeTab === "form" ? "bg-gold/15 text-gold" : "bg-onyx-card text-muted-foreground"
+            "flex-1 py-3 text-sm font-medium transition-colors relative",
+            tab === "formulaire" ? "text-gold" : "text-muted-foreground hover:text-foreground"
           )}
         >
-          <Edit3 className="h-3.5 w-3.5" strokeWidth={1.5} />
           Formulaire
+          {tab === "formulaire" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold" />}
         </button>
         <button
-          onClick={() => setActiveTab("preview")}
+          onClick={() => setTab("apercu")}
           className={cn(
-            "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all",
-            activeTab === "preview" ? "bg-gold/15 text-gold" : "bg-onyx-card text-muted-foreground"
+            "flex-1 py-3 text-sm font-medium transition-colors relative flex items-center justify-center gap-2",
+            tab === "apercu" ? "text-gold" : "text-muted-foreground hover:text-foreground"
           )}
         >
-          <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
+          <Eye className="h-4 w-4" strokeWidth={1.5} />
           Aperçu PDF
+          {tab === "apercu" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold" />}
         </button>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        {activeTab === "form" ? renderFormTab() : renderPreviewTab()}
+      <div className="flex-1 overflow-y-auto">
+        {tab === "formulaire" ? (
+          <div className="px-4 py-5 space-y-4">
+            {/* SECTION 1: ÉMETTEUR (Auto - Lecture seule) */}
+            <SectionCard
+              title="Émetteur"
+              subtitle="Données issues de votre profil"
+              icon={<Building2 className="h-4 w-4" strokeWidth={1.5} />}
+              badge={<span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">AUTO</span>}
+            >
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center">
+                    <span className="text-lg font-bold text-gold">{emetteurProfile.initials}</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-foreground">{emetteurProfile.denomination}</p>
+                    <p className="text-[11px] text-muted-foreground">SIREN {emetteurProfile.siren}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="px-3 py-2 rounded-lg bg-[#1A1A1A]">
+                    <p className="text-muted-foreground">TVA Intra</p>
+                    <p className="text-foreground font-mono">{emetteurProfile.tvaIntra}</p>
+                  </div>
+                  <div className="px-3 py-2 rounded-lg bg-[#1A1A1A]">
+                    <p className="text-muted-foreground">Carte VTC</p>
+                    <p className="text-foreground font-mono text-[10px]">{emetteurProfile.carteVTC}</p>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">{emetteurProfile.adresse}</p>
+              </div>
+            </SectionCard>
+
+            {/* SECTION 2: DESTINATAIRE (Base Clients) */}
+            <SectionCard
+              title="Destinataire"
+              subtitle="Sélectionnez depuis votre base clients"
+              icon={<User className="h-4 w-4" strokeWidth={1.5} />}
+            >
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                  <input
+                    type="text"
+                    value={selectedClient ? (selectedClient.type === "particulier" ? `${selectedClient.prenom} ${selectedClient.nom}` : selectedClient.raisonSociale || "") : clientSearch}
+                    onChange={(e) => {
+                      setSelectedClient(null)
+                      setClientSearch(e.target.value)
+                      setClientDropdownOpen(true)
+                    }}
+                    onFocus={() => setClientDropdownOpen(true)}
+                    placeholder="Rechercher un client..."
+                    className="w-full pl-10 pr-4 py-3 rounded-xl bg-[#1A1A1A] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
+                    style={{ fontSize: "16px" }}
+                  />
+                </div>
+
+                {/* Client dropdown */}
+                <AnimatePresence>
+                  {clientDropdownOpen && !selectedClient && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="rounded-xl bg-[#1A1A1A] border border-onyx-border/30 overflow-hidden max-h-48 overflow-y-auto"
+                    >
+                      {filteredClients.map(client => (
+                        <button
+                          key={client.id}
+                          onClick={() => {
+                            setSelectedClient(client)
+                            setClientSearch("")
+                            setClientDropdownOpen(false)
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 border-b border-onyx-border/20 last:border-0 text-left"
+                        >
+                          <div className="w-9 h-9 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center">
+                            {client.type === "professionnel" ? (
+                              <Building2 className="h-4 w-4 text-gold" strokeWidth={1.5} />
+                            ) : (
+                              <span className="text-xs font-bold text-gold">
+                                {client.prenom?.[0]}{client.nom?.[0]}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-foreground truncate">
+                                {client.type === "particulier" ? `${client.prenom} ${client.nom}` : client.raisonSociale}
+                              </p>
+                              {client.type === "professionnel" && (
+                                <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-blue-500/10 text-blue-400">PRO</span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground truncate">{client.email}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Selected client card */}
+                {selectedClient && (
+                  <div className="p-3 rounded-xl bg-gold/5 border border-gold/20 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center">
+                          {selectedClient.type === "professionnel" ? (
+                            <Building2 className="h-4 w-4 text-gold" strokeWidth={1.5} />
+                          ) : (
+                            <span className="text-sm font-bold text-gold">
+                              {selectedClient.prenom?.[0]}{selectedClient.nom?.[0]}
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            {selectedClient.type === "particulier" ? `${selectedClient.prenom} ${selectedClient.nom}` : selectedClient.raisonSociale}
+                          </p>
+                          {selectedClient.type === "professionnel" && selectedClient.siren && (
+                            <p className="text-[10px] text-muted-foreground font-mono">SIREN {selectedClient.siren}</p>
+                          )}
+                        </div>
+                      </div>
+                      <button onClick={() => setSelectedClient(null)} className="p-1.5 rounded-lg hover:bg-white/10 text-muted-foreground">
+                        <X className="h-4 w-4" strokeWidth={1.5} />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      <div>
+                        <span className="text-muted-foreground">Email:</span>
+                        <span className="ml-1 text-foreground">{selectedClient.email}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Tél:</span>
+                        <span className="ml-1 text-foreground">{selectedClient.phone}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+
+            {/* SECTION 3: TRAJET & CARTE */}
+            <SectionCard
+              title="Trajet"
+              subtitle="Itinéraire et calculs automatiques"
+              icon={<Route className="h-4 w-4" strokeWidth={1.5} />}
+            >
+              <div className="space-y-3">
+                {/* Departure */}
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                    <MapPin className="h-4 w-4 text-emerald-400" strokeWidth={1.5} />
+                  </div>
+                  <input
+                    type="text"
+                    value={departure}
+                    onChange={(e) => setDeparture(e.target.value)}
+                    placeholder="Adresse de départ..."
+                    className="flex-1 px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
+                    style={{ fontSize: "16px" }}
+                  />
+                </div>
+
+                {/* Stops */}
+                {stops.map((stop, index) => (
+                  <div key={stop.id} className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-amber-400">{index + 1}</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={stop.address}
+                      onChange={(e) => updateStop(stop.id, e.target.value)}
+                      placeholder={`Arrêt ${index + 1}...`}
+                      className="flex-1 px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
+                      style={{ fontSize: "16px" }}
+                    />
+                    <button onClick={() => removeStop(stop.id)} className="p-2 rounded-lg hover:bg-rose-500/10 text-rose-400">
+                      <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                    </button>
+                  </div>
+                ))}
+
+                {/* Add stop button */}
+                <button
+                  onClick={addStop}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-gold/30 text-gold text-[11px] font-medium hover:bg-gold/5 hover:border-gold/50 active:scale-[0.98] transition-all"
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  Ajouter un arrêt intermédiaire
+                </button>
+
+                {/* Arrival */}
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center flex-shrink-0">
+                    <Navigation className="h-4 w-4 text-rose-400" strokeWidth={1.5} />
+                  </div>
+                  <input
+                    type="text"
+                    value={arrival}
+                    onChange={(e) => setArrival(e.target.value)}
+                    placeholder="Adresse d'arrivée..."
+                    className="flex-1 px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
+                    style={{ fontSize: "16px" }}
+                  />
+                </div>
+
+                {/* Map simulation */}
+                <div className="h-32 rounded-xl bg-[#1A1A1A] border border-onyx-border/30 overflow-hidden relative">
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#1a2a1a] via-[#1a1a2a] to-[#2a1a1a] opacity-50" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    {departure && arrival ? (
+                      <div className="text-center">
+                        <div className="flex items-center justify-center gap-4 mb-2">
+                          <div className="flex items-center gap-1 text-emerald-400">
+                            <MapPin className="h-4 w-4" strokeWidth={1.5} />
+                            <span className="text-[10px] max-w-[80px] truncate">{departure}</span>
+                          </div>
+                          <div className="w-8 h-px bg-gold/50" />
+                          <div className="flex items-center gap-1 text-rose-400">
+                            <Navigation className="h-4 w-4" strokeWidth={1.5} />
+                            <span className="text-[10px] max-w-[80px] truncate">{arrival}</span>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Carte interactive (simulation)</p>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">Saisissez un trajet pour afficher la carte</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Auto-calculated values (NON MODIFIABLES) */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-[#1A1A1A] border border-onyx-border/30">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[10px] text-muted-foreground">Distance</p>
+                      <span className="px-1 py-0.5 rounded text-[7px] font-bold bg-emerald-500/10 text-emerald-400">AUTO</span>
+                    </div>
+                    <p className="text-lg font-bold text-gold tabular-nums">{routeInfo.distance} <span className="text-sm font-normal text-muted-foreground">km</span></p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-[#1A1A1A] border border-onyx-border/30">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[10px] text-muted-foreground">Durée</p>
+                      <span className="px-1 py-0.5 rounded text-[7px] font-bold bg-emerald-500/10 text-emerald-400">AUTO</span>
+                    </div>
+                    <p className="text-lg font-bold text-gold tabular-nums">{routeInfo.duration} <span className="text-sm font-normal text-muted-foreground">min</span></p>
+                  </div>
+                </div>
+
+                {/* Date & Time */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1 block">Date de course</label>
+                    <input
+                      type="date"
+                      value={courseDate}
+                      onChange={(e) => setCourseDate(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50"
+                      style={{ fontSize: "16px" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1 block">Heure de prise en charge</label>
+                    <input
+                      type="time"
+                      value={courseTime}
+                      onChange={(e) => setCourseTime(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50"
+                      style={{ fontSize: "16px" }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+
+            {/* SECTION 4: VÉHICULE (Garage) */}
+            <SectionCard
+              title="Véhicule"
+              subtitle="Sélectionnez depuis votre garage"
+              icon={<Car className="h-4 w-4" strokeWidth={1.5} />}
+            >
+              <div className="space-y-3">
+                {!selectedVehicle ? (
+                  <div className="space-y-2">
+                    {availableVehicles.map(vehicle => (
+                      <button
+                        key={vehicle.id}
+                        onClick={() => setSelectedVehicle(vehicle)}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-[#1A1A1A] border border-onyx-border/30 hover:border-gold/30 active:scale-[0.98] transition-all text-left"
+                      >
+                        <div
+                          className="w-10 h-10 rounded-lg border border-onyx-border/30 flex items-center justify-center"
+                          style={{ backgroundColor: vehicle.color }}
+                        >
+                          <Car className="h-5 w-5 text-white/80" strokeWidth={1.5} />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-foreground">{vehicle.model}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono">{vehicle.plate}</p>
+                        </div>
+                        <span className="px-2 py-1 rounded-lg bg-gold/10 text-gold text-[10px] font-medium capitalize">{vehicle.category}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-gold/5 border border-gold/20">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-10 h-10 rounded-lg border border-gold/30 flex items-center justify-center"
+                          style={{ backgroundColor: selectedVehicle.color }}
+                        >
+                          <Car className="h-5 w-5 text-white/80" strokeWidth={1.5} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{selectedVehicle.model}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono">{selectedVehicle.plate}</p>
+                        </div>
+                      </div>
+                      <button onClick={() => setSelectedVehicle(null)} className="p-1.5 rounded-lg hover:bg-white/10 text-muted-foreground">
+                        <X className="h-4 w-4" strokeWidth={1.5} />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <span className="px-2 py-1 rounded-lg bg-gold/10 text-gold capitalize">{selectedVehicle.category}</span>
+                      <span className="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400">4 places max</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Passengers & Luggage */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1 block">Passagers</label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setPassengers(Math.max(1, passengers - 1))}
+                        className="w-10 h-10 rounded-lg bg-[#1A1A1A] border border-onyx-border/30 flex items-center justify-center hover:bg-white/5 active:scale-95"
+                      >
+                        <span className="text-lg text-foreground">−</span>
+                      </button>
+                      <div className="flex-1 h-10 rounded-lg bg-[#1A1A1A] border border-onyx-border/30 flex items-center justify-center">
+                        <Users className="h-4 w-4 text-gold mr-2" strokeWidth={1.5} />
+                        <span className="text-sm font-semibold text-foreground">{passengers}</span>
+                      </div>
+                      <button
+                        onClick={() => setPassengers(Math.min(8, passengers + 1))}
+                        className="w-10 h-10 rounded-lg bg-[#1A1A1A] border border-onyx-border/30 flex items-center justify-center hover:bg-white/5 active:scale-95"
+                      >
+                        <span className="text-lg text-foreground">+</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1 block">Bagages</label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setLuggage(Math.max(0, luggage - 1))}
+                        className="w-10 h-10 rounded-lg bg-[#1A1A1A] border border-onyx-border/30 flex items-center justify-center hover:bg-white/5 active:scale-95"
+                      >
+                        <span className="text-lg text-foreground">−</span>
+                      </button>
+                      <div className="flex-1 h-10 rounded-lg bg-[#1A1A1A] border border-onyx-border/30 flex items-center justify-center">
+                        <Briefcase className="h-4 w-4 text-gold mr-2" strokeWidth={1.5} />
+                        <span className="text-sm font-semibold text-foreground">{luggage}</span>
+                      </div>
+                      <button
+                        onClick={() => setLuggage(Math.min(10, luggage + 1))}
+                        className="w-10 h-10 rounded-lg bg-[#1A1A1A] border border-onyx-border/30 flex items-center justify-center hover:bg-white/5 active:scale-95"
+                      >
+                        <span className="text-lg text-foreground">+</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Instructions */}
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1 block">Instructions particulières</label>
+                  <textarea
+                    value={instructions}
+                    onChange={(e) => setInstructions(e.target.value)}
+                    placeholder="Ex : Accueil avec pancarte, bagages volumineux..."
+                    rows={2}
+                    className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50 resize-none"
+                    style={{ fontSize: "16px" }}
+                  />
+                </div>
+              </div>
+            </SectionCard>
+
+            {/* SECTION 5: TARIFICATION */}
+            <SectionCard
+              title="Tarification"
+              subtitle="Prix basé sur votre grille tarifaire"
+              icon={<Euro className="h-4 w-4" strokeWidth={1.5} />}
+            >
+              <div className="space-y-4">
+                {/* Base price */}
+                <div className="flex items-center justify-between p-3 rounded-xl bg-[#1A1A1A] border border-onyx-border/30">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Prix de base</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {tarifGrille.priseEnCharge}€ + {routeInfo.distance} km × {tarifGrille.tarifKm}€
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={customPrice ?? calculatedPrice}
+                      onChange={(e) => setCustomPrice(parseFloat(e.target.value) || null)}
+                      className="w-20 px-2 py-2 rounded-lg bg-onyx-card border border-onyx-border/30 text-sm text-right text-foreground font-semibold focus:outline-none focus:border-gold/50"
+                      style={{ fontSize: "16px" }}
+                    />
+                    <span className="text-sm text-muted-foreground">€</span>
+                  </div>
+                </div>
+
+                {/* Supplements (only enabled ones from settings) */}
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Suppléments disponibles</p>
+                  <div className="space-y-2">
+                    {supplements.map(supp => (
+                      <button
+                        key={supp.id}
+                        onClick={() => toggleSupplement(supp.id)}
+                        className={cn(
+                          "w-full flex items-center justify-between p-3 rounded-xl border transition-all",
+                          supp.enabled
+                            ? "bg-gold/5 border-gold/30"
+                            : "bg-[#1A1A1A] border-onyx-border/30"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "w-5 h-5 rounded border flex items-center justify-center transition-colors",
+                            supp.enabled ? "bg-gold border-gold" : "border-onyx-border/50"
+                          )}>
+                            {supp.enabled && <Check className="h-3 w-3 text-onyx-base" strokeWidth={2} />}
+                          </div>
+                          <span className="text-sm text-foreground">{supp.label}</span>
+                        </div>
+                        <span className={cn("text-sm font-semibold", supp.enabled ? "text-gold" : "text-muted-foreground")}>+{supp.price}€</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Summary */}
+                <div className="p-4 rounded-xl bg-gold/5 border border-gold/20 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total HT</span>
+                    <span className="text-foreground tabular-nums">{formatCurrency(totalHT)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">TVA (10%)</span>
+                    <span className="text-foreground tabular-nums">{formatCurrency(tva)}</span>
+                  </div>
+                  <div className="border-t border-gold/20 pt-2 mt-2" />
+                  <div className="flex justify-between">
+                    <span className="text-sm font-semibold text-foreground">TOTAL TTC</span>
+                    <span className="text-xl font-bold text-gold tabular-nums">{formatCurrency(totalTTC)}</span>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-muted-foreground text-center">
+                  TVA applicable : 10% — Transport de personnes (Art. 279-b du CGI)
+                </p>
+              </div>
+            </SectionCard>
+
+            {/* SECTION 6: CGV (Affichage seul, pas de case à cocher) */}
+            <SectionCard
+              title="Conditions de vente"
+              subtitle="Configurées dans vos réglages"
+              icon={<FileText className="h-4 w-4" strokeWidth={1.5} />}
+              badge={<span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">AUTO</span>}
+            >
+              <div className="p-3 rounded-xl bg-[#1A1A1A] border border-onyx-border/30">
+                <div className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-line">
+                  {cgvContent}
+                </div>
+              </div>
+            </SectionCard>
+          </div>
+        ) : (
+          /* APERÇU PDF TAB */
+          <div className="p-4">
+            <div className="bg-white rounded-xl shadow-2xl overflow-hidden max-w-md mx-auto">
+              {/* PDF Header - Identité du chauffeur uniquement */}
+              <div className="p-5 border-b border-gray-200">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 flex items-center justify-center">
+                      <span className="text-xl font-bold text-amber-700">{emetteurProfile.initials}</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-900">{emetteurProfile.denomination}</p>
+                      <p className="text-[10px] text-gray-500">SIREN {emetteurProfile.siren}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-gray-900">BON DE RÉSERVATION</p>
+                    <p className="text-[10px] text-amber-600 font-mono">{brNumber}</p>
+                  </div>
+                </div>
+                {/* HORODATAGE CRUCIAL */}
+                <p className="text-[10px] text-gray-500 mt-3">
+                  Établi le {formatDate(creationDate)} à {formatTime(creationDate)}
+                </p>
+              </div>
+
+              {/* Parties */}
+              <div className="grid grid-cols-2 gap-4 p-5 border-b border-gray-200">
+                <div>
+                  <p className="text-[9px] uppercase tracking-wider text-gray-400 font-semibold mb-1">Émetteur</p>
+                  <p className="text-xs font-semibold text-gray-900">{emetteurProfile.denomination}</p>
+                  <p className="text-[10px] text-gray-600">{emetteurProfile.adresse}</p>
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className="px-1 py-0.5 rounded text-[7px] font-bold bg-amber-100 text-amber-700">SIREN</span>
+                    <span className="text-[9px] text-gray-500 font-mono">{emetteurProfile.siren}</span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[9px] uppercase tracking-wider text-gray-400 font-semibold mb-1">Destinataire</p>
+                  {selectedClient ? (
+                    <>
+                      <p className="text-xs font-semibold text-gray-900">
+                        {selectedClient.type === "particulier" ? `${selectedClient.prenom} ${selectedClient.nom}` : selectedClient.raisonSociale}
+                      </p>
+                      <p className="text-[10px] text-gray-600">{selectedClient.email}</p>
+                      {selectedClient.type === "professionnel" && selectedClient.siren && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className="px-1 py-0.5 rounded text-[7px] font-bold bg-amber-100 text-amber-700">SIREN</span>
+                          <span className="text-[9px] text-gray-500 font-mono">{selectedClient.siren}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-[10px] text-gray-400 italic">Non sélectionné</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Course */}
+              <div className="p-5 border-b border-gray-200">
+                <p className="text-[9px] uppercase tracking-wider text-gray-400 font-semibold mb-2">Détails de la course</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <MapPin className="h-3 w-3 text-emerald-600" strokeWidth={2} />
+                  </div>
+                  <p className="text-xs text-gray-900 flex-1">{departure || "Adresse de départ"}</p>
+                </div>
+                {stops.filter(s => s.address).map((stop, i) => (
+                  <div key={stop.id} className="flex items-center gap-2 mb-2 ml-2">
+                    <div className="w-4 h-4 rounded-full bg-amber-100 flex items-center justify-center">
+                      <span className="text-[8px] font-bold text-amber-600">{i + 1}</span>
+                    </div>
+                    <p className="text-[10px] text-gray-600 flex-1">{stop.address}</p>
+                  </div>
+                ))}
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-rose-100 flex items-center justify-center">
+                    <Navigation className="h-3 w-3 text-rose-600" strokeWidth={2} />
+                  </div>
+                  <p className="text-xs text-gray-900 flex-1">{arrival || "Adresse d'arrivée"}</p>
+                </div>
+                <div className="flex gap-4 mt-3 text-[10px] text-gray-500">
+                  <span>{courseDate ? new Date(courseDate).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : "Date à définir"}</span>
+                  <span>{courseTime ? courseTime.replace(":", "h") : "Heure à définir"}</span>
+                  <span>{routeInfo.distance} km</span>
+                  <span>{routeInfo.duration} min</span>
+                </div>
+              </div>
+
+              {/* Vehicle */}
+              {selectedVehicle && (
+                <div className="p-5 border-b border-gray-200">
+                  <p className="text-[9px] uppercase tracking-wider text-gray-400 font-semibold mb-2">Véhicule</p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                      <Car className="h-4 w-4 text-gray-600" strokeWidth={1.5} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-900">{selectedVehicle.model}</p>
+                      <p className="text-[10px] text-gray-500 font-mono">{selectedVehicle.plate}</p>
+                    </div>
+                    <span className="ml-auto px-2 py-1 rounded-lg bg-gray-100 text-gray-600 text-[9px] capitalize">{selectedVehicle.category}</span>
+                  </div>
+                  <div className="flex gap-3 mt-2 text-[10px] text-gray-500">
+                    <span>{passengers} passager{passengers > 1 ? "s" : ""}</span>
+                    <span>{luggage} bagage{luggage !== 1 ? "s" : ""}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Pricing */}
+              <div className="p-5 border-b border-gray-200">
+                <p className="text-[9px] uppercase tracking-wider text-gray-400 font-semibold mb-2">Tarification</p>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Course ({routeInfo.distance} km)</span>
+                    <span className="text-gray-900 tabular-nums">{formatCurrency(customPrice ?? calculatedPrice)}</span>
+                  </div>
+                  {activeSupplements.map(supp => (
+                    <div key={supp.id} className="flex justify-between">
+                      <span className="text-gray-600">{supp.label}</span>
+                      <span className="text-gray-900 tabular-nums">{formatCurrency(supp.price)}</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-gray-200 pt-2 mt-2" />
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Total HT</span>
+                    <span className="text-gray-900 tabular-nums">{formatCurrency(totalHT)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">TVA (10%)</span>
+                    <span className="text-gray-900 tabular-nums">{formatCurrency(tva)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span className="text-gray-900">TOTAL TTC</span>
+                    <span className="text-amber-600 tabular-nums">{formatCurrency(totalTTC)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Legal mentions */}
+              <div className="p-5 border-b border-gray-200">
+                <p className="text-[9px] uppercase tracking-wider text-gray-400 font-semibold mb-2">Mentions légales VTC</p>
+                <div className="grid grid-cols-2 gap-2 text-[9px]">
+                  <div>
+                    <span className="text-gray-400">Carte VTC</span>
+                    <p className="text-gray-600 font-mono">{emetteurProfile.carteVTC}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">RC Pro</span>
+                    <div className="flex items-center gap-1">
+                      <p className="text-gray-600 font-mono truncate">{emetteurProfile.rcProPolice}</p>
+                      {emetteurProfile.rcProValid && (
+                        <Shield className="h-3 w-3 text-emerald-500 flex-shrink-0" strokeWidth={2} />
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {emetteurProfile.rcProValid && (
+                  <div className="mt-2 flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-50 border border-emerald-200 w-fit">
+                    <Shield className="h-3 w-3 text-emerald-600" strokeWidth={2} />
+                    <span className="text-[8px] font-semibold text-emerald-700">Véhicule Assuré</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer - Mention NoX discrète */}
+              <div className="px-5 py-3 bg-gray-50">
+                <p className="text-[8px] text-gray-400 text-center">
+                  Document généré via NoX VTC
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Sticky Actions */}
-      <div className="px-4 py-4 border-t border-onyx-border/30 bg-background space-y-3">
+      {/* Bottom Actions */}
+      <div className="px-4 py-4 border-t border-onyx-border/30 bg-onyx-base space-y-3">
         <div className="flex gap-3">
-          <button
-            type="button"
+          <button 
             onClick={handleSaveDraft}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-onyx-card border border-onyx-border/50 text-sm font-medium text-muted-foreground hover:border-gold/30 active:scale-[0.98] transition-all"
+            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl border border-onyx-border/50 text-muted-foreground text-sm font-medium hover:bg-white/5 active:scale-[0.98] transition-all"
           >
             <Save className="h-4 w-4" strokeWidth={1.5} />
-            Brouillon
+            Enregistrer brouillon
           </button>
-          <button
-            type="button"
+          <button 
             onClick={handleGenerate}
-            disabled={!cgvAccepted}
-            className="flex-[2] flex items-center justify-center gap-2 py-3 rounded-2xl bg-gold text-primary-foreground text-sm font-semibold hover:bg-gold-light gold-glow-sm active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gold text-onyx-base text-sm font-semibold hover:bg-gold/90 active:scale-[0.98] transition-all"
           >
             <FileText className="h-4 w-4" strokeWidth={1.5} />
             Générer le bon
           </button>
         </div>
-        <div className="flex gap-2 justify-center">
-          <button className="px-3 py-1.5 text-[10px] text-muted-foreground hover:text-gold transition-colors flex items-center gap-1">
-            <Mail className="h-3 w-3" strokeWidth={1.5} />
+        <div className="flex justify-center gap-6 text-[11px] text-muted-foreground">
+          <button className="flex items-center gap-1.5 hover:text-foreground transition-colors">
+            <Send className="h-3.5 w-3.5" strokeWidth={1.5} />
             Envoyer par email
           </button>
-          <button className="px-3 py-1.5 text-[10px] text-muted-foreground hover:text-gold transition-colors flex items-center gap-1">
-            <Link2 className="h-3 w-3" strokeWidth={1.5} />
+          <button className="flex items-center gap-1.5 hover:text-foreground transition-colors">
+            <Share2 className="h-3.5 w-3.5" strokeWidth={1.5} />
             Copier le lien
           </button>
-          <button className="px-3 py-1.5 text-[10px] text-muted-foreground hover:text-gold transition-colors flex items-center gap-1">
-            <Download className="h-3 w-3" strokeWidth={1.5} />
+          <button className="flex items-center gap-1.5 hover:text-foreground transition-colors">
+            <Download className="h-3.5 w-3.5" strokeWidth={1.5} />
             Télécharger PDF
           </button>
         </div>
       </div>
     </motion.div>
-  )
-}
-
-// ── Main Export ───────────────────────────────────────────────
-
-export function CreateBCFlow({ open, onClose, prefillClient }: CreateBCProps) {
-  const [step, setStep] = useState<BCStep>("choose")
-
-  function handleClose() {
-    setStep("choose")
-    onClose()
-  }
-
-  if (!open) return null
-
-  return (
-    <AnimatePresence mode="wait">
-      {step === "choose" && (
-        <ChooseMethodSheet
-          key="choose"
-          onManual={() => setStep("manual")}
-          onLink={() => setStep("link")}
-          onClose={handleClose}
-        />
-      )}
-      {step === "manual" && (
-        <ManualBCForm
-          key="manual"
-          onBack={() => setStep("choose")}
-          onClose={handleClose}
-          prefillClient={prefillClient}
-        />
-      )}
-      {step === "link" && (
-        <ShareLinkScreen
-          key="link"
-          onBack={() => setStep("choose")}
-          onClose={handleClose}
-        />
-      )}
-    </AnimatePresence>
   )
 }
