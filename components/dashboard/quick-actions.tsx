@@ -80,7 +80,7 @@ export function QuickActions() {
       <div className="grid grid-cols-3 gap-2.5">
         <QuickActionTile
           icon={<FileText className="h-5 w-5" strokeWidth={1.5} />}
-          label="+ Bon de Commande"
+          label="+ Bon de Réservation"
           onClick={() => setShowBCFlow(true)}
         />
         <QuickActionTile

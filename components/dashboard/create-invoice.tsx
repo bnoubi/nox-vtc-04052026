@@ -158,7 +158,7 @@ function ChooseInvoiceSheet({
             <div className="text-left flex-1">
               <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">Facturer un trajet existant</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Convertir un Bon de Commande terminé
+                Convertir un Bon de Réservation terminé
               </p>
             </div>
             <ArrowRight className="h-4 w-4 text-muted-foreground/40 shrink-0 group-hover:text-gold/50 group-hover:translate-x-0.5 transition-all" strokeWidth={1.5} />
@@ -175,7 +175,7 @@ function ChooseInvoiceSheet({
             <div className="text-left flex-1">
               <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">Facturer un nouveau trajet</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Créer un Bon de Commande puis facturer
+                Créer un Bon de Réservation puis facturer
               </p>
             </div>
             <ArrowRight className="h-4 w-4 text-muted-foreground/40 shrink-0 group-hover:text-gold/50 group-hover:translate-x-0.5 transition-all" strokeWidth={1.5} />
@@ -256,7 +256,7 @@ function FromBCScreen({
         <div className="flex-1">
           <h1 className="text-base font-bold text-foreground">Facturer un trajet</h1>
           <p className="text-[10px] text-muted-foreground">
-            Bons de Commande non facturés
+            Bons de Réservation non facturés
           </p>
         </div>
         <button
@@ -373,9 +373,9 @@ function FromBCScreen({
             <div className="w-12 h-12 rounded-2xl bg-onyx-card border border-onyx-border/50 flex items-center justify-center mb-3">
               <FileText className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
             </div>
-            <p className="text-sm font-medium text-foreground mb-1">Aucun BC en attente</p>
+            <p className="text-sm font-medium text-foreground mb-1">Aucun BR en attente</p>
             <p className="text-[11px] text-muted-foreground">
-              Tous les Bons de Commande ont été facturés
+              Tous les Bons de Réservation ont été facturés
             </p>
           </div>
         )}
