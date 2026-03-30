@@ -303,13 +303,13 @@ export function CreateBCFlow({ open, onClose }: { open: boolean; onClose: () => 
   // ============================================================================
   if (step === "menu") {
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center"
-        onClick={handleClose}
-      >
+  <motion.div
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+  exit={{ opacity: 0 }}
+  className="fixed inset-0 z-[9999] bg-[#0d0d0d] flex items-end justify-center"
+  onClick={handleClose}
+  >
         <motion.div
           initial={{ y: "100%" }}
           animate={{ y: 0 }}
@@ -384,10 +384,10 @@ export function CreateBCFlow({ open, onClose }: { open: boolean; onClose: () => 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-onyx-base flex flex-col"
+        className="fixed inset-0 z-[9999] bg-[#0d0d0d] flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/30">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/30 bg-[#0d0d0d]">
           <button onClick={() => setStep("menu")} className="p-2 -ml-2 rounded-lg hover:bg-white/5 active:scale-95 transition-all">
             <ChevronLeft className="h-5 w-5 text-foreground" strokeWidth={1.5} />
           </button>
@@ -525,19 +525,19 @@ export function CreateBCFlow({ open, onClose }: { open: boolean; onClose: () => 
   // STEP 3: FORM (Saisie Manuelle NoX Intelligent)
   // ============================================================================
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-onyx-base flex flex-col"
-    >
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/30">
-        <button onClick={() => setStep("menu")} className="p-2 -ml-2 rounded-lg hover:bg-white/5 active:scale-95 transition-all">
-          <ChevronLeft className="h-5 w-5 text-foreground" strokeWidth={1.5} />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-base font-bold text-foreground">Nouveau Bon de Réservation</h1>
+  <motion.div
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+  exit={{ opacity: 0 }}
+  className="fixed inset-0 z-[9999] bg-[#0d0d0d] flex flex-col"
+  >
+  {/* Header */}
+  <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/30 bg-[#0d0d0d]">
+  <button onClick={() => setStep("menu")} className="p-2 -ml-2 rounded-lg hover:bg-white/5 active:scale-95 transition-all">
+  <ChevronLeft className="h-5 w-5 text-foreground" strokeWidth={1.5} />
+  </button>
+  <div className="flex-1">
+  <h1 className="text-base font-bold text-foreground">Nouveau Bon de Réservation</h1>
           <p className="text-[10px] text-muted-foreground">{brNumber} • {formatDate(creationDate)}</p>
         </div>
         <button onClick={handleClose} className="p-2 rounded-lg hover:bg-white/5">
