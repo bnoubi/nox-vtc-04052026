@@ -96,9 +96,9 @@ function Section({ title, icon: Icon, children, defaultOpen = true }: {
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
-interface CreateBCFlowProps { isOpen: boolean; onClose: () => void }
+interface CreateBCFlowProps { open: boolean; onClose: () => void }
 
-export function CreateBCFlow({ isOpen, onClose }: CreateBCFlowProps) {
+export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
   const [step, setStep] = useState<FlowStep>("menu")
   const [tab, setTab] = useState<FormTab>("formulaire")
   
@@ -189,7 +189,7 @@ export function CreateBCFlow({ isOpen, onClose }: CreateBCFlowProps) {
     toast.success("Bon de réservation généré")
   }
   
-  if (!isOpen) return null
+  if (!open) return null
   
   // ============================================================================
   // STEP 1: MENU
