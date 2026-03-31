@@ -4,9 +4,44 @@ export interface Driver {
   initials: string
   online: boolean
   carteProExpiration: string // ISO date string
+  carteProNumber?: string // Numero de carte professionnelle VTC
   apacExpiration: string // Attestation Préfectorale - ISO date string
   rcProExpiration: string // RC Professionnelle - ISO date string
+  phone?: string
 }
+
+// Forfait tarifaire (trajets fixes)
+export interface TarifForfait {
+  id: string
+  name: string
+  price: number
+}
+
+// Profil entreprise (emetteur des documents)
+export interface EnterpriseProfile {
+  denomination: string
+  siren: string
+  tvaIntra: string
+  adresse: string
+  email: string
+  phone: string
+}
+
+// Donnees entreprise par defaut (synchronisees avec les reglages)
+export const defaultEnterprise: EnterpriseProfile = {
+  denomination: "NoX VTC SAS",
+  siren: "912 345 678 00015",
+  tvaIntra: "FR12 912345678",
+  adresse: "42 Avenue des Champs-Elysees, 75008 Paris",
+  email: "contact@nox-vtc.fr",
+  phone: "+33 1 23 45 67 89"
+}
+
+// Forfaits tarifaires par defaut
+export const defaultForfaits: TarifForfait[] = [
+  { id: "1", name: "CDG → Paris Centre", price: 85.00 },
+  { id: "2", name: "Orly → Paris Centre", price: 65.00 },
+]
 
 export type MotorType = "diesel" | "essence" | "hybride" | "electrique"
 export type VehicleCategory = "citadine" | "berline" | "suv" | "van"
@@ -25,11 +60,11 @@ export interface Vehicle {
 }
 
 export const allDrivers: Driver[] = [
-  { id: "1", name: "Karim Benzari", initials: "KB", online: true, carteProExpiration: "2026-08-15", apacExpiration: "2026-12-31", rcProExpiration: "2026-09-15" },
-  { id: "2", name: "Sophie Martin", initials: "SM", online: false, carteProExpiration: "2026-04-02", apacExpiration: "2026-03-15", rcProExpiration: "2026-06-30" },
-  { id: "3", name: "Lucas Fernandez", initials: "LF", online: true, carteProExpiration: "2026-03-20", apacExpiration: "2026-11-20", rcProExpiration: "2026-04-10" },
-  { id: "4", name: "Amélie Rousseau", initials: "AR", online: true, carteProExpiration: "2027-01-10", apacExpiration: "2027-06-01", rcProExpiration: "2027-03-15" },
-  { id: "5", name: "Thomas Nguyen", initials: "TN", online: false, carteProExpiration: "2026-02-28", apacExpiration: "2026-02-15", rcProExpiration: "2026-01-20" },
+  { id: "1", name: "Karim Benzari", initials: "KB", online: true, carteProExpiration: "2026-08-15", carteProNumber: "VTC-075-2024-0001", apacExpiration: "2026-12-31", rcProExpiration: "2026-09-15", phone: "+33 6 12 34 56 78" },
+  { id: "2", name: "Sophie Martin", initials: "SM", online: false, carteProExpiration: "2026-04-02", carteProNumber: "VTC-075-2023-0042", apacExpiration: "2026-03-15", rcProExpiration: "2026-06-30", phone: "+33 6 23 45 67 89" },
+  { id: "3", name: "Lucas Fernandez", initials: "LF", online: true, carteProExpiration: "2026-03-20", carteProNumber: "VTC-075-2022-0183", apacExpiration: "2026-11-20", rcProExpiration: "2026-04-10", phone: "+33 6 34 56 78 90" },
+  { id: "4", name: "Amélie Rousseau", initials: "AR", online: true, carteProExpiration: "2027-01-10", carteProNumber: "VTC-075-2024-0099", apacExpiration: "2027-06-01", rcProExpiration: "2027-03-15", phone: "+33 6 45 67 89 01" },
+  { id: "5", name: "Thomas Nguyen", initials: "TN", online: false, carteProExpiration: "2026-02-28", carteProNumber: "VTC-075-2021-0512", apacExpiration: "2026-02-15", rcProExpiration: "2026-01-20", phone: "+33 6 56 78 90 12" },
 ]
 
 export const allVehicles: Vehicle[] = [
