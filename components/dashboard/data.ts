@@ -22,6 +22,7 @@ export interface EnterpriseProfile {
   denomination: string
   siren: string
   tvaIntra: string
+  evtcNumber: string // Numero de Registre VTC (EVTC) - obligatoire
   adresse: string
   email: string
   phone: string
@@ -32,6 +33,7 @@ export const defaultEnterprise: EnterpriseProfile = {
   denomination: "NoX VTC SAS",
   siren: "912 345 678 00015",
   tvaIntra: "FR12 912345678",
+  evtcNumber: "EVTC-075-2024-00001",
   adresse: "42 Avenue des Champs-Elysees, 75008 Paris",
   email: "contact@nox-vtc.fr",
   phone: "+33 1 23 45 67 89"
@@ -41,6 +43,38 @@ export const defaultEnterprise: EnterpriseProfile = {
 export const defaultForfaits: TarifForfait[] = [
   { id: "1", name: "CDG → Paris Centre", price: 85.00 },
   { id: "2", name: "Orly → Paris Centre", price: 65.00 },
+]
+
+// Tarif de base (synchronise avec les reglages de la grille tarifaire)
+export interface TarifBase {
+  priseEnCharge: number
+  prixKm: number
+  prixAttente: number // par minute
+  courseMinimum: number
+}
+
+export const defaultTarifBase: TarifBase = {
+  priseEnCharge: 2.50,
+  prixKm: 1.80,
+  prixAttente: 0.50,
+  courseMinimum: 15.00,
+}
+
+// Supplement tarifaire (filtre par enabled dans le formulaire)
+export interface TarifSupplement {
+  id: string
+  label: string
+  price: number
+  enabled: boolean // seuls les supplements enabled:true sont affiches
+}
+
+export const defaultSupplements: TarifSupplement[] = [
+  { id: "bagage", label: "Bagage volumineux", price: 5.00, enabled: true },
+  { id: "animal", label: "Animal de compagnie", price: 5.00, enabled: false },
+  { id: "siege", label: "Siege bebe / enfant", price: 10.00, enabled: true },
+  { id: "disposition", label: "Mise a disposition", price: 15.00, enabled: false },
+  { id: "terminal", label: "Supplement terminal", price: 5.00, enabled: true },
+  { id: "pancarte", label: "Accueil pancarte", price: 15.00, enabled: true },
 ]
 
 export type MotorType = "diesel" | "essence" | "hybride" | "electrique"
