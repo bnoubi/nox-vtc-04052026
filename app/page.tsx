@@ -1,38 +1,115 @@
-import { DashboardHeader } from "@/components/dashboard/header"
-import { QuickActions } from "@/components/dashboard/quick-actions"
-import { UpcomingTrips } from "@/components/dashboard/upcoming-trips"
-import { StatsWidget } from "@/components/dashboard/stats-widget"
-import { BottomNav } from "@/components/dashboard/bottom-nav"
+"use client"
+
+import { useState, useEffect } from "react"
+import { AnimatePresence, motion } from "framer-motion"
+import { BottomNav, type TabId } from "@/components/dashboard/bottom-nav"
 import { SecurityBadge } from "@/components/dashboard/security-badge"
+import { DashboardTab } from "@/components/dashboard/tab-dashboard"
+import { CalendarTab } from "@/components/dashboard/tab-calendar"
+import { DocumentsTab } from "@/components/dashboard/tab-documents"
+import { ClientsTab } from "@/components/dashboard/tab-clients"
+import { SettingsTab } from "@/components/dashboard/tab-settings"
+import { PlanProvider } from "@/components/dashboard/plan-context"
+import { NavProvider } from "@/components/dashboard/nav-context"
+import { WelcomeComponent } from "@/components/WelcomeComponent"
+import { AuthScreen } from "@/components/AuthScreen"
+import { Toaster } from "sonner"
 
-export default function DashboardPage() {
+const tabComponents: Record<TabId, React.ComponentType> = {
+  dashboard: DashboardTab,
+  calendar: CalendarTab,
+  documents: DocumentsTab,
+  clients: ClientsTab,
+  settings: SettingsTab,
+}
+
+type AppStep = "welcome" | "auth" | "dashboard"
+
+const WELCOME_SESSION_KEY = "nox_welcome_shown"
+
+export default function AppPage() {
+  const [activeTab, setActiveTab] = useState<TabId>("dashboard")
+  const [mounted, setMounted] = useState(false)
+  const [step, setStep] = useState<AppStep>("dashboard")
+
+  useEffect(() => {
+    const welcomeShown = sessionStorage.getItem(WELCOME_SESSION_KEY)
+    if (!welcomeShown) {
+      setStep("welcome")
+    }
+    setMounted(true)
+  }, [])
+
+  function handleWelcomeFinished() {
+    sessionStorage.setItem(WELCOME_SESSION_KEY, "true")
+    setStep("auth")
+  }
+
+  function handleAuthComplete() {
+    setStep("dashboard")
+  }
+
+  const ActiveComponent = tabComponents[activeTab]
+
+  if (!mounted) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
+      </main>
+    )
+  }
+
+  // Step 1: Welcome / Onboarding
+  if (step === "welcome") {
+    return <WelcomeComponent onFinished={handleWelcomeFinished} />
+  }
+
+  // Step 2: Authentication
+  if (step === "auth") {
+    return <AuthScreen onLoginSuccess={handleAuthComplete} />
+  }
+
+  function handleLogout() {
+    setStep("auth")
+  }
+
+  // Step 3: Dashboard
   return (
-    <main className="min-h-screen bg-background pb-36">
-      {/* Subtle gradient overlay */}
-      <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
-      
-      <div className="relative max-w-md mx-auto">
-        {/* Header */}
-        <DashboardHeader />
+    <PlanProvider>
+      <NavProvider onTabChange={setActiveTab} onLogout={handleLogout}>
+        <main className="min-h-screen bg-background overflow-x-hidden">
+          <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
 
-        {/* Content */}
-        <div className="space-y-6 pt-2">
-          {/* Quick Actions */}
-          <QuickActions />
+          <div className="relative max-w-md mx-auto h-screen flex flex-col pb-32 overflow-x-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+                className="flex-1 overflow-y-auto"
+              >
+                <ActiveComponent />
+              </motion.div>
+            </AnimatePresence>
+          </div>
 
-          {/* Upcoming Trips */}
-          <UpcomingTrips />
-
-          {/* Stats */}
-          <StatsWidget />
-        </div>
-      </div>
-
-      {/* Security Badge */}
-      <SecurityBadge />
-
-      {/* Bottom Navigation */}
-      <BottomNav />
-    </main>
+          <SecurityBadge />
+          <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+          <Toaster
+            position="top-center"
+            toastOptions={{
+              unstyled: true,
+              classNames: {
+                toast: "w-full max-w-md mx-auto flex items-center gap-3 px-4 py-3 rounded-2xl bg-[#141414]/95 backdrop-blur-xl border border-[#D4AF37]/30 shadow-2xl shadow-black/50",
+                title: "text-sm font-semibold text-[#F5F5F5]",
+                description: "text-[11px] text-[#A1A1AA]",
+              },
+            }}
+          />
+        </main>
+      </NavProvider>
+    </PlanProvider>
   )
 }
