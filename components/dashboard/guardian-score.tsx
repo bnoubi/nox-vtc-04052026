@@ -4,8 +4,8 @@ import { useState, useMemo } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { X, AlertTriangle, CheckCircle2, Clock, ShieldCheck, User, Car } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { allDrivers, allVehicles, type MotorType } from "./data"
-import { usePlan, PLAN_LIMITS } from "./plan-context"
+import { type MotorType, PLAN_LIMITS } from "./data"
+import { useNox } from "./nox-context"
 
 interface DocumentIssue {
   type: "expired" | "warning" | "critical"
@@ -18,6 +18,7 @@ interface DocumentIssue {
 }
 
 function getScoreColor(score: number): string {
+  if (score === -1) return "#333333" // Gray for N/A
   if (score >= 100) return "#10B981" // Emerald green
   if (score >= 70) return "#D4AF37" // Gold/Amber
   if (score > 0) return "#F59E0B" // Amber/Orange
@@ -25,6 +26,7 @@ function getScoreColor(score: number): string {
 }
 
 function getScoreMessage(score: number): string {
+  if (score === -1) return "Non renseigné. Ajoutez des chauffeurs/véhicules."
   if (score >= 100) return "Votre flotte est en parfaite conformité."
   if (score >= 70) return "Attention : Renouvellement proche."
   if (score > 0) return "Urgent : Document(s) expiré(s) !"
@@ -64,12 +66,12 @@ interface GuardianScoreProps {
 
 export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
   const [showDetails, setShowDetails] = useState(false)
-  const { plan } = usePlan()
-  const limits = PLAN_LIMITS[plan]
+  const { drivers, vehicles, plan } = useNox()
+  const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.SOLO
 
   // Get visible drivers/vehicles based on plan limits
-  const visibleDrivers = allDrivers.slice(0, limits.drivers)
-  const visibleVehicles = allVehicles.slice(0, limits.vehicles)
+  const visibleDrivers = drivers.slice(0, limits.drivers)
+  const visibleVehicles = vehicles.slice(0, limits.vehicles)
 
   // Calculate compliance score and issues
   const { score, issues } = useMemo(() => {
@@ -112,7 +114,7 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
     }
 
     // Check driver documents
-    visibleDrivers.forEach((driver) => {
+    visibleDrivers.forEach((driver: any) => {
       // Carte Pro
       checkDate(driver.carteProExpiration, `Carte Pro - ${driver.name}`, "Carte Pro VTC", "driver", driver.id, "carteProExpiration")
       
@@ -128,7 +130,7 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
     })
 
     // Check vehicle documents and age
-    visibleVehicles.forEach((vehicle) => {
+    visibleVehicles.forEach((vehicle: any) => {
       // Assurance Transport à Titre Onéreux
       checkDate(vehicle.assuranceTransportExpiration, `Assurance - ${vehicle.plate}`, "Assurance Transport à Titre Onéreux", "vehicle", vehicle.id, "assuranceTransportExpiration")
       
@@ -183,7 +185,9 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
     // - Véhicule thermique >= 7 ans
     let calculatedScore = 100
     
-    if (hasCritical) {
+    if (visibleDrivers.length === 0 && visibleVehicles.length === 0) {
+      calculatedScore = -1
+    } else if (hasCritical) {
       calculatedScore = 0
     } else if (hasExpired) {
       calculatedScore = 40
@@ -199,7 +203,7 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
        issue.documentType === "Assurance Transport à Titre Onéreux")
     )
     
-    if (criticalExpired) {
+    if (criticalExpired && calculatedScore !== -1) {
       calculatedScore = 0
     }
 
@@ -223,7 +227,8 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
   const strokeWidth = 8
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
-  const strokeDashoffset = circumference - (score / 100) * circumference
+  const progressScore = score === -1 ? 0 : score
+  const strokeDashoffset = circumference - (progressScore / 100) * circumference
 
   function handleIssueClick(issue: DocumentIssue) {
     if (onNavigateToEntity) {
@@ -283,7 +288,7 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, delay: 0.3 }}
             >
-              {score}%
+              {score === -1 ? "—" : `${score}%`}
             </motion.span>
             <span className="text-[10px] font-bold tracking-[0.2em] text-muted-foreground uppercase mt-1">
               SCORE NOX
@@ -301,7 +306,9 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
           transition={{ duration: 0.4, delay: 0.5 }}
           className="mt-4 flex items-center gap-2"
         >
-          {score >= 100 ? (
+          {score === -1 ? (
+            <AlertTriangle className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+          ) : score >= 100 ? (
             <ShieldCheck className="h-4 w-4 text-emerald-500" strokeWidth={1.5} />
           ) : score >= 70 ? (
             <Clock className="h-4 w-4 text-[#D4AF37]" strokeWidth={1.5} />
@@ -310,7 +317,7 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
           )}
           <p className={cn(
             "text-xs font-medium",
-            score >= 100 ? "text-emerald-500" : score >= 70 ? "text-[#D4AF37]" : "text-red-500"
+            score === -1 ? "text-muted-foreground" : score >= 100 ? "text-emerald-500" : score >= 70 ? "text-[#D4AF37]" : "text-red-500"
           )}>
             {scoreMessage}
           </p>
@@ -374,9 +381,11 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
                       Guardian NoX
                     </h3>
                     <p className="text-[11px] text-muted-foreground">
-                      {issues.length === 0
-                        ? "Tous vos documents sont à jour"
-                        : `${issues.length} document${issues.length > 1 ? "s" : ""} à surveiller`}
+                      {score === -1 
+                        ? "Veuillez ajouter votre flotte"
+                        : issues.length === 0
+                          ? "Tous vos documents sont à jour"
+                          : `${issues.length} document${issues.length > 1 ? "s" : ""} à surveiller`}
                     </p>
                   </div>
                 </div>
@@ -388,18 +397,25 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
                 </button>
               </div>
 
-              {/* Issues List */}
               <div className="px-5 pb-8 max-h-[50vh] overflow-y-auto space-y-3">
-                {issues.length === 0 ? (
+                {score === -1 ? (
+                  <div className="flex flex-col items-center py-8">
+                    <AlertTriangle className="h-12 w-12 text-muted-foreground/50 mb-3" strokeWidth={1} />
+                    <p className="text-sm text-[#F5F5F5] font-medium">Aucune donnée</p>
+                    <p className="text-xs text-muted-foreground mt-1 text-center">
+                      Ajoutez au moins un véhicule et un chauffeur pour calculer votre score de conformité.
+                    </p>
+                  </div>
+                ) : issues.length === 0 ? (
                   <div className="flex flex-col items-center py-8">
                     <CheckCircle2 className="h-12 w-12 text-emerald-500 mb-3" strokeWidth={1} />
                     <p className="text-sm text-[#F5F5F5] font-medium">Parfaite conformité</p>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-1 text-center">
                       Aucun document n&apos;expire dans les 30 prochains jours.
                     </p>
                   </div>
                 ) : (
-                  issues.map((issue, i) => (
+                  issues.map((issue: DocumentIssue, i: number) => (
                     <motion.button
                       key={i}
                       initial={{ opacity: 0, x: -20 }}

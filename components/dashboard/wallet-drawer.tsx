@@ -4,7 +4,7 @@ import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Coins, ShieldCheck, Loader2, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { usePlan } from "./plan-context"
+import { useNox } from "./nox-context"
 
 const PACKS = [
   { id: "decouverte", name: "D\u00e9couverte", tokens: 5, price: 5, unit: "1,00", badge: null },
@@ -15,7 +15,7 @@ const PACKS = [
 type PayState = "idle" | "loading" | "success"
 
 export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { tokens, addTokens } = usePlan()
+  const { tokens, addTokens } = useNox()
   const [selected, setSelected] = useState<string>("privilege")
   const [payState, setPayState] = useState<PayState>("idle")
 

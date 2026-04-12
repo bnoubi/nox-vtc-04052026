@@ -7,9 +7,9 @@ import {
   MapPin, Navigation, Car, Users, Euro, Eye, Building2, User, Search, Sparkles, Clock, Calendar, Percent, Tag,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useNox } from "./nox-context"
 import { 
-  allClients, allDrivers, allVehicles, defaultForfaits, defaultEnterprise, defaultTarifBase, defaultSupplements,
-  type Client, type Driver, type Vehicle, type TarifForfait, type TarifSupplement 
+  type Client, type Driver, type Vehicle, type TarifForfait, type TarifSupplement, type BCDocument, type EnterpriseProfile
 } from "./data"
 import { toast } from "sonner"
 
@@ -20,6 +20,13 @@ type FlowStep = "menu" | "link" | "form"
 type FormTab = "formulaire" | "apercu"
 type PricingMode = "forfait" | "calcul"
 type DiscountType = "percent" | "euro"
+
+export interface BCPrefillClient {
+  civilite: string
+  nom: string
+  prenom: string
+  tel: string
+}
 
 // Local supplement state (tracks which are selected)
 interface SupplementSelection { id: string; label: string; price: number; selected: boolean }
@@ -57,6 +64,19 @@ function formatTimeFrFromString(time: string): string {
   return time?.replace(":", "h") ?? ""
 }
 
+function generateCGVSummary(enterprise: EnterpriseProfile): string {
+  if (!enterprise.cgvMode || enterprise.cgvMode === "configurator") {
+    const config = enterprise.cgvConfig;
+    if (!config) return "Aucune condition générale n'a été spécifiée.";
+    
+    return `Conditions Générales de Vente :\n- Annulation : sans frais jusqu'à ${config.cancellationDelay} avant le départ. Passé ce délai, des frais de ${config.cancellationFee}% seront appliqués.\n- Attente : temps d'attente inclus de ${config.waitTime} minutes. Au-delà, facturation de ${config.waitFee}€/min.\n- No-Show (non-présentation) : pénalité de ${config.noShowFee}% appliquée.\n- Paiement : exigé au format ${config.paymentDelay} via ${config.paymentMethods.join(", ")}.`;
+  } else if (enterprise.cgvMode === "freetext") {
+    return enterprise.cgvText || "Aucune condition générale spécifiée.";
+  } else {
+    return "Les conditions générales relatives à cette prestation vous ont été remises en annexe ou sont consultables sur demande.";
+  }
+}
+
 // ============================================================================
 // COLLAPSIBLE SECTION
 // ============================================================================
@@ -87,9 +107,14 @@ function Section({ title, icon: Icon, children, defaultOpen = true }: {
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
-interface CreateBCFlowProps { open: boolean; onClose: () => void }
+interface CreateBCFlowProps { 
+  open: boolean; 
+  onClose: () => void;
+  prefillClient?: BCPrefillClient | null;
+}
 
-export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
+export function CreateBCFlow({ open, onClose, prefillClient }: CreateBCFlowProps) {
+  const { drivers, clients, vehicles, tariffSettings, enterprise, addBC } = useNox()
   const [step, setStep] = useState<FlowStep>("menu")
   const [tab, setTab] = useState<FormTab>("formulaire")
   
@@ -98,10 +123,13 @@ export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
   const [linkCopied, setLinkCopied] = useState(false)
   
   // Selections
-  const [selectedDriverId, setSelectedDriverId] = useState<string>(allDrivers?.[0]?.id ?? "")
+  const [selectedDriverId, setSelectedDriverId] = useState<string>(drivers?.[0]?.id ?? "")
   const [selectedClientId, setSelectedClientId] = useState<string>("")
   const [clientSearch, setClientSearch] = useState("")
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(allVehicles?.[0]?.id ?? "")
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(vehicles?.[0]?.id ?? "")
+  
+  // Manual client fields if not selected from list (prefilled)
+  const [manualClient, setManualClient] = useState<BCPrefillClient | null>(prefillClient || null)
   
   // Trip
   const [departure, setDeparture] = useState("")
@@ -114,14 +142,15 @@ export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
   
   // Pricing - Filter supplements to only show enabled ones from tariff settings
   const [pricingMode, setPricingMode] = useState<PricingMode>("calcul")
+  const [baseTvaRate, setBaseTvaRate] = useState<number>(10)
   const [selectedForfaitId, setSelectedForfaitId] = useState<string>("")
   const [distanceKm, setDistanceKm] = useState(25)
   const [editableBasePrice, setEditableBasePrice] = useState<number | null>(null)
   
   // Only show supplements that are enabled in tariff settings
   const availableSupplements = useMemo(() => 
-    (defaultSupplements ?? []).filter(s => s.enabled).map(s => ({ ...s, selected: false })),
-  [])
+    (tariffSettings.supplements ?? []).filter(s => s.enabled).map(s => ({ ...s, selected: false })),
+  [tariffSettings.supplements])
   const [supplements, setSupplements] = useState<SupplementSelection[]>(availableSupplements)
   
   const [discountType, setDiscountType] = useState<DiscountType>("percent")
@@ -132,27 +161,28 @@ export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
   const creationDate = useMemo(() => new Date(), [])
   
   // Computed with optional chaining
-  const selectedDriver = allDrivers?.find(d => d.id === selectedDriverId) ?? null
-  const selectedClient = allClients?.find(c => c.id === selectedClientId) ?? null
-  const selectedVehicle = allVehicles?.find(v => v.id === selectedVehicleId) ?? null
-  const selectedForfait = defaultForfaits?.find(f => f.id === selectedForfaitId) ?? null
+  const selectedDriver = drivers?.find(d => d.id === selectedDriverId) ?? null
+  const selectedClient = clients?.find(c => c.id === selectedClientId) ?? null
+  const selectedVehicle = vehicles?.find(v => v.id === selectedVehicleId) ?? null
+  const selectedForfait = tariffSettings.forfaits?.find(f => f.id === selectedForfaitId) ?? null
   
   const tarif = useMemo(() => detectTarif(tripTime, tripDate), [tripTime, tripDate])
   
   const filteredClients = useMemo(() => {
-    if (!clientSearch.trim()) return allClients ?? []
+    if (!clientSearch.trim()) return clients ?? []
     const search = clientSearch.toLowerCase()
-    return (allClients ?? []).filter(c => 
+    return (clients ?? []).filter(c => 
       (c.type === "particulier" ? `${c.prenom ?? ""} ${c.nom ?? ""}` : c.raisonSociale ?? "").toLowerCase().includes(search) ||
       (c.phone ?? "").includes(search) || (c.email ?? "").toLowerCase().includes(search)
     )
-  }, [clientSearch])
+  }, [clientSearch, clients])
   
   // Pricing calculation using real tariff values
   const pricing = useMemo(() => {
-    const priseEnCharge = defaultTarifBase?.priseEnCharge ?? 2.50
-    const prixKm = defaultTarifBase?.prixKm ?? 1.80
-    const courseMin = defaultTarifBase?.courseMinimum ?? 15.00
+    const { base, supplements: supplementsPriceList, forfaits } = tariffSettings
+    const priseEnCharge = base.priseEnCharge
+    const prixKm = base.prixKm
+    const courseMin = base.courseMinimum
     
     let baseHT = 0
     let calculDetail = ""
@@ -168,25 +198,53 @@ export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
     }
     
     const supplementsTotal = supplements.filter(s => s.selected).reduce((sum, s) => sum + s.price, 0)
-    const supplementsDetail = supplements.filter(s => s.selected).map(s => s.label).join(", ")
     
     const subtotalHT = baseHT + supplementsTotal
+    
+    // Distribute discount proportionally
     let discountAmount = 0
     if (discountValue > 0) {
       discountAmount = discountType === "percent" ? subtotalHT * (discountValue / 100) : discountValue
     }
+    const discountRatio = subtotalHT > 0 ? (discountAmount / subtotalHT) : 0
     
-    const totalHT = Math.max(0, subtotalHT - discountAmount)
-    const tva = totalHT * 0.10
+    const discountedBaseHT = baseHT * (1 - discountRatio)
+    const discountedSupplementsHT = supplementsTotal * (1 - discountRatio)
+    
+    const tva10Amount = (baseTvaRate === 10 ? discountedBaseHT : 0) + 0 // Assume food at 5.5% is not here yet
+    const tva20Amount = discountedSupplementsHT + (baseTvaRate === 20 ? discountedBaseHT : 0)
+    
+    const totalHT = discountedBaseHT + discountedSupplementsHT
+    
+    const tva10 = tva10Amount * 0.10
+    const tva20 = tva20Amount * 0.20
+    const tva = tva10 + tva20
     const totalTTC = totalHT + tva
+    
+    const originalTTC = (baseHT * (1 + baseTvaRate / 100)) + (supplementsTotal * 1.20)
     
     // Build full detail string
     let fullDetail = calculDetail
     if (supplementsTotal > 0) fullDetail += ` + Suppléments (${formatPrice(supplementsTotal)})`
     if (discountAmount > 0) fullDetail += ` - Remise (${formatPrice(discountAmount)})`
     
-    return { baseHT, supplementsTotal, subtotalHT, discountAmount, totalHT, tva, totalTTC, originalHT: subtotalHT, fullDetail }
-  }, [pricingMode, selectedForfait, distanceKm, tarif, supplements, discountType, discountValue, editableBasePrice])
+    return { 
+      baseHT, 
+      supplementsTotal, 
+      subtotalHT, 
+      discountAmount, 
+      discountedBaseHT,
+      discountedSupplementsHT,
+      totalHT, 
+      tva10,
+      tva20,
+      tva, 
+      totalTTC, 
+      originalHT: subtotalHT, 
+      originalTTC,
+      fullDetail 
+    }
+  }, [pricingMode, selectedForfait, distanceKm, tarif, supplements, discountType, discountValue, editableBasePrice, baseTvaRate])
   
   const handleClose = () => { setStep("menu"); onClose() }
   
@@ -198,8 +256,58 @@ export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
   }
   
   const handleGenerate = () => {
+    // Determine client name
+    const clientName = (selectedClient 
+      ? (selectedClient.type === "particulier" ? `${selectedClient.prenom} ${selectedClient.nom}` : selectedClient.raisonSociale)
+      : (manualClient ? `${manualClient.prenom} ${manualClient.nom}` : "Client Inconnu")) || "Client Inconnu"
+
+    const clientPhone = selectedClient 
+      ? selectedClient.phone 
+      : (manualClient ? manualClient.tel : undefined)
+
+    const cgvText = generateCGVSummary(enterprise)
+
+    const newBC: BCDocument = {
+      id: `bc-${Date.now()}`,
+      number: brNumber,
+      client: clientName ?? "Client Inconnu",
+      clientPhone,
+      amount: pricing.totalTTC,
+      amountHT: pricing.totalHT,
+      tva: pricing.tva,
+      // Record new split fields
+      baseHT: pricing.baseHT,
+      supplementsHT: pricing.supplementsTotal,
+      tva10Amount: pricing.tva10,
+      tva20Amount: pricing.tva20,
+      discountValue: discountValue,
+      discountType: discountType,
+      originalHT: pricing.originalHT,
+      originalTTC: pricing.originalTTC,
+      supplementsList: supplements.filter(s => s.selected).map(s => s.label),
+      date: new Date().toLocaleDateString("fr-FR"),
+      status: "en_attente",
+      type: "bc",
+      trajet: {
+        depart: departure || "Non renseigné",
+        arrivee: arrival || "Non renseigné",
+        distance: distanceKm,
+        date: tripDate,
+        time: tripTime,
+        passengers,
+        luggage
+      },
+      driverName: selectedDriver ? selectedDriver.name : undefined,
+      driverCarteVTC: selectedDriver ? selectedDriver.carteProNumber : undefined,
+      vehicleName: selectedVehicle ? selectedVehicle.model : undefined,
+      vehiclePlate: selectedVehicle ? selectedVehicle.plate : undefined,
+      notes: instructions || undefined,
+      cgvText
+    }
+
+    addBC(newBC)
     setTab("apercu")
-    toast.success("Bon de réservation généré")
+    toast.success("Bon de réservation généré et enregistré")
   }
   
   const toggleSupplement = (id: string) => {
@@ -322,37 +430,45 @@ export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
       {/* Form Content */}
       {tab === "formulaire" && (
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-32">
-          {/* SECTION: Émetteur & Chauffeur */}
-          <Section title="Émetteur & Chauffeur" icon={User}>
+          {/* SECTION: Émetteur & Entreprise */}
+          <Section title="Émetteur & Entreprise" icon={User}>
             <div className="p-3 rounded-xl bg-[#242424] border border-gold/20 space-y-1 mb-3">
               <p className="text-xs text-gold font-semibold">Émetteur du document</p>
-              <p className="text-sm font-semibold text-foreground">{defaultEnterprise?.denomination ?? "Entreprise"}</p>
-              <p className="text-[11px] text-muted-foreground">SIREN : {defaultEnterprise?.siren ?? ""}</p>
-              <p className="text-[11px] text-muted-foreground">TVA : {defaultEnterprise?.tvaIntra ?? ""}</p>
-              <p className="text-[11px] text-gold">Registre EVTC : {defaultEnterprise?.evtcNumber ?? ""}</p>
-              <p className="text-[11px] text-muted-foreground">{defaultEnterprise?.adresse ?? ""}</p>
+              <p className="text-sm font-semibold text-foreground">{enterprise?.denomination ?? "Entreprise"}</p>
+              <p className="text-[11px] text-muted-foreground">SIREN : {enterprise?.siren ?? ""}</p>
+              <p className="text-[11px] text-muted-foreground">TVA : {enterprise?.tvaIntra ?? ""}</p>
+              <p className="text-[11px] text-gold">Registre EVTC : {enterprise?.evtcNumber ?? ""}</p>
+              <p className="text-[11px] text-muted-foreground">{enterprise?.adresse ?? ""}</p>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Chauffeur assigné</label>
               <select value={selectedDriverId} onChange={e => setSelectedDriverId(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50" style={{ fontSize: "16px" }}>
-                {(allDrivers ?? []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                {(drivers ?? []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
-            {selectedDriver && (
-              <div className="p-3 rounded-xl bg-[#242424] space-y-1">
-                <p className="text-sm font-semibold text-foreground">{selectedDriver.name}</p>
-                <p className="text-[11px] text-gold">Carte VTC : {selectedDriver.carteProNumber ?? "Non renseigné"}</p>
-                <p className="text-[11px] text-muted-foreground">{selectedDriver.phone ?? ""}</p>
-              </div>
-            )}
           </Section>
           
           {/* SECTION: Client */}
           <Section title="Client" icon={Building2}>
+            {/* Prefilled Client Badge if available */}
+            {manualClient && !selectedClientId && (
+              <div className="p-3 rounded-xl bg-gold/10 border border-gold/30 space-y-1 mb-3 relative group">
+                <p className="text-[10px] text-gold font-bold uppercase tracking-tighter">Client pré-sélectionné</p>
+                <p className="text-sm font-semibold text-foreground">{manualClient.civilite} {manualClient.prenom} {manualClient.nom}</p>
+                <p className="text-[11px] text-muted-foreground">{manualClient.tel}</p>
+                <button 
+                  onClick={() => setManualClient(null)}
+                  className="absolute top-2 right-2 p-1.5 rounded-lg bg-gold/10 text-gold opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input type="text" value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Rechercher un client..."
+              <input type="text" value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Rechercher un client ou en changer..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50" style={{ fontSize: "16px" }} />
             </div>
             {clientSearch && filteredClients.length > 0 && !selectedClientId && (
@@ -449,7 +565,7 @@ export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
           <Section title="Véhicule" icon={Car}>
             <select value={selectedVehicleId} onChange={e => setSelectedVehicleId(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50" style={{ fontSize: "16px" }}>
-              {(allVehicles ?? []).filter(v => v.inService).map(v => (
+              {(vehicles ?? []).filter(v => v.inService).map(v => (
                 <option key={v.id} value={v.id}>{v.model} — {v.plate}</option>
               ))}
             </select>
@@ -463,23 +579,43 @@ export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
           
           {/* SECTION: Tarification */}
           <Section title="Tarification" icon={Euro}>
-            {/* Mode selector */}
-            <div className="flex gap-2">
-              <button onClick={() => { setPricingMode("calcul"); setEditableBasePrice(null) }}
-                className={cn("flex-1 py-2 rounded-xl text-xs font-semibold transition-all", pricingMode === "calcul" ? "bg-gold text-black" : "bg-[#242424] text-muted-foreground border border-onyx-border/30")}>
+            <div className="flex bg-secondary/30 border border-onyx-border/30 rounded-xl p-1 mt-3">
+              <button
+                className={cn("flex-1 text-xs py-2 rounded-lg font-medium transition-all text-center", pricingMode === "calcul" ? "bg-onyx-card shadow text-gold border border-gold/20" : "text-muted-foreground hover:text-foreground")}
+                onClick={() => { setPricingMode("calcul"); setBaseTvaRate(10) }}
+              >
                 Calcul au km
               </button>
-              <button onClick={() => { setPricingMode("forfait"); setEditableBasePrice(null) }}
-                className={cn("flex-1 py-2 rounded-xl text-xs font-semibold transition-all", pricingMode === "forfait" ? "bg-gold text-black" : "bg-[#242424] text-muted-foreground border border-onyx-border/30")}>
+              <button
+                className={cn("flex-1 text-xs py-2 rounded-lg font-medium transition-all text-center", pricingMode === "forfait" ? "bg-onyx-card shadow text-gold border border-gold/20" : "text-muted-foreground hover:text-foreground")}
+                onClick={() => { setPricingMode("forfait"); setBaseTvaRate(20) }}
+              >
                 Forfait fixe
               </button>
             </div>
             
             {pricingMode === "forfait" && (
+              <div className="mt-3 flex gap-2">
+                <button
+                  className={cn("flex-1 text-[10px] py-1.5 rounded border transition-colors", baseTvaRate === 10 ? "border-gold text-gold bg-gold/10" : "border-onyx-border/50 text-muted-foreground hover:bg-secondary/50")}
+                  onClick={() => setBaseTvaRate(10)}
+                >
+                  Transfert (TVA 10%)
+                </button>
+                <button
+                  className={cn("flex-1 text-[10px] py-1.5 rounded border transition-colors", baseTvaRate === 20 ? "border-gold text-gold bg-gold/10" : "border-onyx-border/50 text-muted-foreground hover:bg-secondary/50")}
+                  onClick={() => setBaseTvaRate(20)}
+                >
+                  Mise à dispo (TVA 20%)
+                </button>
+              </div>
+            )}
+            
+            {pricingMode === "forfait" && (
               <select value={selectedForfaitId} onChange={e => { setSelectedForfaitId(e.target.value); setEditableBasePrice(null) }}
                 className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50" style={{ fontSize: "16px" }}>
                 <option value="">Sélectionner un forfait...</option>
-                {(defaultForfaits ?? []).map(f => (
+                {(tariffSettings.forfaits ?? []).map(f => (
                   <option key={f.id} value={f.id}>{f.name} — {formatPrice(f.price)}</option>
                 ))}
               </select>
@@ -520,35 +656,43 @@ export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
             
             {/* Pricing Summary */}
             <div className="p-4 rounded-xl bg-[#242424] border border-gold/20 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Base HT</span>
-                <span className="text-foreground font-medium">{formatPrice(pricing.baseHT)}</span>
+              <div className="flex justify-between items-center text-[10px]">
+                 <span className="text-muted-foreground">Base HT</span>
+                 <span className="text-foreground">{formatPrice(pricing.baseHT)}</span>
               </div>
               {pricing.supplementsTotal > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Suppléments</span>
-                  <span className="text-foreground font-medium">+{formatPrice(pricing.supplementsTotal)}</span>
-                </div>
+                 <div className="flex justify-between items-center text-[10px]">
+                   <span className="text-muted-foreground">Suppléments HT</span>
+                   <span className="text-foreground">+{formatPrice(pricing.supplementsTotal)}</span>
+                 </div>
               )}
               {pricing.discountAmount > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Remise</span>
-                  <span className="text-red-400 font-medium">-{formatPrice(pricing.discountAmount)}</span>
-                </div>
+                 <div className="flex justify-between items-center text-[10px]">
+                   <span className="text-red-400">Remise commerciale</span>
+                   <span className="text-red-400">-{formatPrice(pricing.discountAmount)}</span>
+                 </div>
               )}
               <div className="border-t border-onyx-border/30 pt-2 flex justify-between text-sm">
                 <span className="text-muted-foreground">Total HT</span>
                 <span className="text-foreground font-medium">{formatPrice(pricing.totalHT)}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">TVA (10%)</span>
-                <span className="text-foreground font-medium">{formatPrice(pricing.tva)}</span>
-              </div>
-              <div className="border-t border-onyx-border/30 pt-2 flex justify-between">
+              {pricing.tva10 > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">TVA (10%)</span>
+                  <span className="text-foreground font-medium">{formatPrice(pricing.tva10)}</span>
+                </div>
+              )}
+              {pricing.tva20 > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">TVA (20%)</span>
+                  <span className="text-foreground font-medium">{formatPrice(pricing.tva20)}</span>
+                </div>
+              )}
+              <div className="border-t border-onyx-border/30 pt-2 flex justify-between items-end">
                 <span className="text-foreground font-bold">Total TTC</span>
                 {pricing.discountAmount > 0 ? (
                   <div className="text-right">
-                    <span className="text-muted-foreground line-through text-sm mr-2">{formatPrice(pricing.originalHT * 1.1)}</span>
+                    <span className="text-muted-foreground line-through text-xs mr-2">{formatPrice(pricing.originalTTC)}</span>
                     <span className="text-gold font-bold text-lg">{formatPrice(pricing.totalTTC)}</span>
                   </div>
                 ) : (
@@ -556,7 +700,7 @@ export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
                 )}
               </div>
               {/* Calculation detail */}
-              <div className="pt-2 border-t border-onyx-border/20">
+              <div className="pt-2 border-t border-onyx-border/30">
                 <p className="text-[9px] text-muted-foreground leading-relaxed">
                   Détail : {pricing.fullDetail}
                 </p>
@@ -574,11 +718,11 @@ export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
               {/* Header - Entreprise only (no NoX branding) */}
               <div className="flex justify-between items-start border-b border-gray-200 pb-4">
                 <div>
-                  <p className="text-lg font-bold text-gray-900">{defaultEnterprise?.denomination ?? ""}</p>
-                  <p className="text-[10px] text-gray-500">{defaultEnterprise?.adresse ?? ""}</p>
-                  <p className="text-[10px] text-gray-500">SIREN : {defaultEnterprise?.siren ?? ""}</p>
-                  <p className="text-[10px] text-gray-500">TVA : {defaultEnterprise?.tvaIntra ?? ""}</p>
-                  <p className="text-[10px] text-amber-600 font-medium">EVTC : {defaultEnterprise?.evtcNumber ?? ""}</p>
+                  <p className="text-lg font-bold text-gray-900">{enterprise?.denomination ?? ""}</p>
+                  <p className="text-[10px] text-gray-500">{enterprise?.adresse ?? ""}</p>
+                  <p className="text-[10px] text-gray-500">SIREN : {enterprise?.siren ?? ""}</p>
+                  <p className="text-[10px] text-gray-500">TVA : {enterprise?.tvaIntra ?? ""}</p>
+                  <p className="text-[10px] text-amber-600 font-medium">EVTC : {enterprise?.evtcNumber ?? ""}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs font-bold text-gray-900">BON DE RÉSERVATION</p>
@@ -603,6 +747,11 @@ export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
                         {selectedClient.type === "particulier" ? `${selectedClient.prenom ?? ""} ${selectedClient.nom ?? ""}` : (selectedClient.raisonSociale ?? "")}
                       </p>
                       <p className="text-gray-500">{selectedClient.phone ?? ""}</p>
+                    </>
+                  ) : manualClient ? (
+                    <>
+                      <p className="text-gray-900">{manualClient.civilite} {manualClient.prenom} {manualClient.nom}</p>
+                      <p className="text-gray-500">{manualClient.tel}</p>
                     </>
                   ) : <p className="text-gray-400">Non sélectionné</p>}
                 </div>
@@ -653,6 +802,11 @@ export function CreateBCFlow({ open, onClose }: CreateBCFlowProps) {
                   <span className="text-gray-900">TOTAL TTC</span>
                   <span className="text-amber-600">{formatPrice(pricing.totalTTC)}</span>
                 </div>
+              </div>
+              {/* CGV Preview */}
+              <div className="border-t border-gray-200 pt-3 mt-3 text-[10px] text-gray-500 max-h-[120px] overflow-y-auto w-full whitespace-pre-wrap">
+                <p className="font-bold text-gray-700 mb-1">CONDITIONS GÉNÉRALES</p>
+                {generateCGVSummary(enterprise)}
               </div>
               
               {/* Footer */}

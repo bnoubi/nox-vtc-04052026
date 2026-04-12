@@ -16,9 +16,11 @@ import {
   User,
   FilePlus2,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { existingClients } from "./data"
+import { useNox } from "./nox-context"
+import { type BCDocument, type InvoiceDocument, type Client } from "./data"
 import { CreateBCFlow } from "./create-bc"
+import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -38,42 +40,7 @@ interface CreateInvoiceProps {
   onClose: () => void
 }
 
-// ── Unbilled BC data ──────────────────────────────────────────
-
-const unbilledBCs: BCItem[] = [
-  {
-    id: "bc3",
-    number: "BC-2026-003",
-    client: "M. Moreau",
-    amount: 520,
-    date: "04/02/2026",
-    trajet: { depart: "Gare de Lyon", arrivee: "Hôtel Plaza Athénée" },
-  },
-  {
-    id: "bc2",
-    number: "BC-2026-002",
-    client: "Mme Beaumont",
-    amount: 180,
-    date: "05/02/2026",
-    trajet: { depart: "Le Bristol Paris", arrivee: "Opéra Garnier" },
-  },
-  {
-    id: "bc5",
-    number: "BC-2026-005",
-    client: "Mme Garcia",
-    amount: 310,
-    date: "03/02/2026",
-    trajet: { depart: "7 Rue de Passy", arrivee: "Aéroport Orly, Terminal 1" },
-  },
-  {
-    id: "bc6",
-    number: "BC-2026-006",
-    client: "M. Petit",
-    amount: 145,
-    date: "01/02/2026",
-    trajet: { depart: "Gare du Nord", arrivee: "22 Rue de la Paix" },
-  },
-]
+// Note: Mock data removed, now using bcs from useNox()
 
 // ── Success Toast ─────────────────────────────────────────────
 
@@ -214,12 +181,18 @@ function FromBCScreen({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { bcs, invoices, addInvoice } = useNox()
   const [search, setSearch] = useState("")
   const [converting, setConverting] = useState<string | null>(null)
   const [tvaRate, setTvaRate] = useState<Record<string, number>>({})
 
+  // Only show BCs that are signed and NOT yet in any invoice
+  const unbilledBCs = bcs.filter(bc => 
+    bc.status === "signe" && !invoices.some(inv => inv.bcRef === bc.number)
+  )
+
   const filtered = unbilledBCs.filter(
-    (bc) =>
+    (bc: BCDocument) =>
       bc.client.toLowerCase().includes(search.toLowerCase()) ||
       bc.number.toLowerCase().includes(search.toLowerCase()),
   )
@@ -228,10 +201,48 @@ function FromBCScreen({
     return tvaRate[bcId] ?? 10
   }
 
-  function handleConvert(bc: BCItem) {
-    // Simulate generation
+  function handleConvert(bc: BCDocument) {
     setConverting(bc.id)
+    
     setTimeout(() => {
+      const mHT = bc.amountHT ?? bc.amount
+      const rate = getTva(bc.id)
+      const tva = (mHT * rate) / 100
+      const ttc = mHT + tva
+      const nextNum = invoices.length + 1
+      const padded = String(nextNum).padStart(3, "0")
+
+      // Calculate J+30 echeance
+      const today = new Date()
+      const echeance = new Date(today)
+      echeance.setDate(echeance.getDate() + 30)
+      const fmtDate = (d: Date) =>
+        `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`
+
+      const newInvoice: InvoiceDocument = {
+        id: `fac-gen-${Date.now()}`,
+        number: `F-2026-${padded}`,
+        client: bc.client,
+        clientPhone: bc.clientPhone,
+        amount: Math.round(ttc * 100) / 100,
+        amountHT: Math.round(mHT * 100) / 100,
+        tva: Math.round(tva * 100) / 100,
+        tvaRate: rate,
+        date: fmtDate(today),
+        echeance: fmtDate(echeance),
+        status: "brouillon",
+        type: "facture",
+        bcRef: bc.number,
+        trajet: bc.trajet,
+        driverName: bc.driverName,
+        driverCarteVTC: bc.driverCarteVTC,
+        vehicleName: bc.vehicleName,
+        vehiclePlate: bc.vehiclePlate,
+        notes: bc.notes,
+        cgvText: bc.cgvText,
+      }
+
+      addInvoice(newInvoice)
       setConverting(null)
       onSuccess()
     }, 600)
@@ -317,7 +328,7 @@ function FromBCScreen({
                   <button
                     key={r}
                     type="button"
-                    onClick={() => setTvaRate((prev) => ({ ...prev, [bc.id]: r }))}
+                    onClick={() => setTvaRate((prev: Record<string, number>) => ({ ...prev, [bc.id]: r }))}
                     className={cn(
                       "flex-1 py-2 rounded-xl text-[11px] font-medium border transition-all",
                       rate === r
@@ -395,35 +406,126 @@ function FactureLibreForm({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { clients, invoices, addInvoice } = useNox()
   const [form, setForm] = useState({
     clientMode: "existing" as "existing" | "libre",
     clientId: "",
     clientLibre: "",
     objet: "",
-    montantHT: "",
-    tvaRate: 20,
     notes: "",
   })
+  
+  const [items, setItems] = useState([{ id: `item-${Date.now()}`, designation: "", amountHT: "", tvaRate: 20 }])
+  const [discountValue, setDiscountValue] = useState<number>(0)
+  const [discountType, setDiscountType] = useState<"percent" | "amount">("percent")
+
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false)
 
-  const clientOptions = existingClients.map((c) => ({
+  const clientOptions = clients.map((c: Client) => ({
     value: c.id,
-    label: `${c.title} ${c.name}`,
+    label: (c.type === "particulier" ? `${c.prenom} ${c.nom}` : c.raisonSociale) ?? "Client Inconnu",
     sub: c.phone,
   }))
 
-  const selectedClient = clientOptions.find((o) => o.value === form.clientId)
+  const selectedClient = clientOptions.find((o: { value: string; label: string }) => o.value === form.clientId)
 
   function update(field: string, value: string | number) {
-    setForm((prev) => ({ ...prev, [field]: value }))
+    setForm((prev: any) => ({ ...prev, [field]: value }))
   }
 
-  const montant = parseFloat(form.montantHT) || 0
-  const tva = (montant * form.tvaRate) / 100
-  const ttc = montant + tva
+  const addItem = () => setItems([...items, { id: `item-${Date.now()}`, designation: "", amountHT: "", tvaRate: 20 }])
+  const removeItem = (id: string) => setItems(items.filter(i => i.id !== id))
+  const updateItem = (id: string, field: string, value: any) => {
+    setItems(items.map(i => i.id === id ? { ...i, [field]: value } : i))
+  }
+
+  // Calculations
+  const subtotalHT = items.reduce((sum, item) => sum + (parseFloat(item.amountHT as string) || 0), 0)
+  let discountAmount = 0
+  if (discountValue > 0) {
+    discountAmount = discountType === "percent" ? subtotalHT * (discountValue / 100) : discountValue
+  }
+  const discountRatio = subtotalHT > 0 ? discountAmount / subtotalHT : 0
+
+  let tva10Amount = 0
+  let tva20Amount = 0
+  let tva55Amount = 0
+
+  items.forEach(item => {
+    const discountedHT = (parseFloat(item.amountHT as string) || 0) * (1 - discountRatio)
+    if (item.tvaRate === 10) tva10Amount += discountedHT
+    else if (item.tvaRate === 20) tva20Amount += discountedHT
+    else if (item.tvaRate === 5.5) tva55Amount += discountedHT
+  })
+
+  const totalHT = tva10Amount + tva20Amount + tva55Amount
+  const tva10 = tva10Amount * 0.10
+  const tva20 = tva20Amount * 0.20
+  const tva55 = tva55Amount * 0.055
+  const tvaTotal = tva10 + tva20 + tva55
+  const totalTTC = totalHT + tvaTotal
+  
+  const originalTTC = items.reduce((sum, item) => sum + ((parseFloat(item.amountHT as string) || 0) * (1 + item.tvaRate / 100)), 0)
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (form.clientMode === "existing" && !form.clientId) {
+      toast.error("Veuillez sélectionner un client")
+      return
+    }
+    if (form.clientMode === "libre" && !form.clientLibre) {
+      toast.error("Veuillez saisir le nom du client")
+      return
+    }
+    if (items.some(i => !i.designation || !i.amountHT)) {
+      toast.error("Toutes les lignes doivent avoir une désignation et un montant")
+      return
+    }
+
+    const nextNum = invoices.length + 1
+    const padded = String(nextNum).padStart(3, "0")
+    const today = new Date()
+    const echeance = new Date(today)
+    echeance.setDate(echeance.getDate() + 30)
+    const fmtDate = (d: Date) =>
+      `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`
+
+    const clientName = form.clientMode === "existing" 
+      ? clientOptions.find(o => o.value === form.clientId)?.label ?? "Inconnu"
+      : form.clientLibre
+
+    const formattedItems = items.map(i => ({
+      id: i.id,
+      designation: i.designation,
+      amountHT: parseFloat(i.amountHT as string) || 0,
+      tvaRate: i.tvaRate
+    }))
+
+    const newInvoice: InvoiceDocument = {
+      id: `fac-libre-${Date.now()}`,
+      number: `F-2026-${padded}`,
+      client: clientName,
+      amount: Math.round(totalTTC * 100) / 100,
+      amountHT: Math.round(totalHT * 100) / 100,
+      tva: Math.round(tvaTotal * 100) / 100,
+      date: fmtDate(today),
+      echeance: fmtDate(echeance),
+      status: "brouillon",
+      type: "facture",
+      bcRef: form.objet || "Facture Libre",
+      notes: form.notes,
+      
+      items: formattedItems,
+      discountValue: discountValue > 0 ? discountValue : undefined,
+      discountType: discountValue > 0 ? discountType : undefined,
+      originalHT: subtotalHT,
+      originalTTC: originalTTC,
+      tva10Amount: tva10Amount > 0 ? tva10 : undefined,
+      tva20Amount: tva20Amount > 0 ? tva20 : undefined,
+      tva55Amount: tva55Amount > 0 ? tva55 : undefined,
+    }
+
+    addInvoice(newInvoice)
     onSuccess()
   }
 
@@ -554,119 +656,173 @@ function FactureLibreForm({
           )}
         </section>
 
-        {/* Objet */}
+        {/* Lignes de Facture */}
         <section>
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-            <FileText className="h-3.5 w-3.5" strokeWidth={1.5} />
-            Objet de la facture
-          </p>
-          <input
-            type="text"
-            placeholder="Ex : Frais d'attente, supplément nettoyage..."
-            value={form.objet}
-            onChange={(e) => update("objet", e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
-          />
-        </section>
-
-        {/* Montant & TVA */}
-        <section>
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-            <Receipt className="h-3.5 w-3.5" strokeWidth={1.5} />
-            Montant et TVA
-          </p>
-
-          <div className="relative mb-3">
-            <input
-              type="number"
-              placeholder="0.00"
-              min="0"
-              step="0.01"
-              value={form.montantHT}
-              onChange={(e) => update("montantHT", e.target.value)}
-              className="w-full px-4 py-3 pr-16 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
-            />
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-gold">
-              EUR HT
-            </div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <Receipt className="h-3.5 w-3.5" strokeWidth={1.5} />
+              Détail des Prestations
+            </p>
           </div>
-
-          <div className="flex gap-2 mb-4">
-            {[10, 20].map((rate) => (
-              <button
-                key={rate}
-                type="button"
-                onClick={() => update("tvaRate", rate)}
-                className={cn(
-                  "flex-1 py-3 rounded-xl text-sm font-medium border transition-all",
-                  form.tvaRate === rate
-                    ? "bg-gold/15 border-gold/40 text-gold"
-                    : "bg-onyx-card border-onyx-border/50 text-muted-foreground hover:border-onyx-border",
+          
+          <div className="space-y-3">
+            {items.map((item, index) => (
+              <div key={item.id} className="p-3 bg-[#242424] border border-onyx-border/30 rounded-xl relative group">
+                <input
+                  type="text"
+                  placeholder="Désignation (ex: Supplément attente, etc.)"
+                  value={item.designation}
+                  onChange={e => updateItem(item.id, "designation", e.target.value)}
+                  className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none mb-3"
+                />
+                <div className="flex gap-2">
+                   <div className="relative flex-1">
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        min="0"
+                        step="0.01"
+                        value={item.amountHT}
+                        onChange={(e) => updateItem(item.id, "amountHT", e.target.value)}
+                        className="w-full px-3 py-2 pr-10 rounded-lg bg-black text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border focus:border-gold border border-onyx-border/50"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">EUR HT</span>
+                   </div>
+                   <select 
+                     value={item.tvaRate} 
+                     onChange={e => updateItem(item.id, "tvaRate", Number(e.target.value))}
+                     className="px-3 py-2 rounded-lg bg-black text-sm text-foreground border border-onyx-border/50 focus:outline-none focus:border-gold"
+                   >
+                     <option value={20}>20% (Standard)</option>
+                     <option value={10}>10% (Transport)</option>
+                     <option value={5.5}>5.5% (Autre)</option>
+                   </select>
+                </div>
+                {items.length > 1 && (
+                  <button 
+                    type="button"
+                    onClick={() => removeItem(item.id)}
+                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
                 )}
-              >
-                {rate}%
-                <span className="text-[10px] block mt-0.5 opacity-70">
-                  {rate === 10 ? "Transport" : "Standard"}
-                </span>
-              </button>
+              </div>
             ))}
           </div>
-
-          {/* Live preview */}
-          {montant > 0 && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              className="p-4 rounded-2xl bg-onyx-card border border-gold/20"
-            >
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-2.5">
-                Aperçu
-              </p>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">HT</span>
-                  <span className="text-sm text-foreground tabular-nums">
-                    {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(montant)} &euro;
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">TVA ({form.tvaRate}%)</span>
-                  <span className="text-sm text-foreground tabular-nums">
-                    {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(tva)} &euro;
-                  </span>
-                </div>
-                <div className="h-px bg-onyx-border/30 my-1" />
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-foreground">TTC</span>
-                  <span className="text-lg font-bold text-gold tabular-nums">
-                    {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(ttc)} &euro;
-                  </span>
-                </div>
-              </div>
-            </motion.div>
-          )}
+          <button
+            type="button"
+            onClick={addItem}
+            className="mt-3 w-full py-2 rounded-xl text-xs font-semibold text-muted-foreground border border-dashed border-onyx-border hover:text-foreground hover:border-onyx-border/80 transition-all flex items-center justify-center gap-2"
+          >
+            <PlusCircle className="h-4 w-4" />
+            Ajouter une ligne
+          </button>
         </section>
 
-        {/* Notes */}
-        <section>
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-            <StickyNote className="h-3.5 w-3.5" strokeWidth={1.5} />
-            Notes complémentaires
-          </p>
-          <textarea
-            rows={3}
-            value={form.notes}
-            onChange={(e) => update("notes", e.target.value)}
-            placeholder="Informations supplémentaires pour le client..."
-            className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors resize-none"
-          />
+        {/* Remise & Notes */}
+        <section className="space-y-4">
+           <div className="space-y-2">
+             <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Remise commerciale</label>
+             <div className="flex gap-2">
+               <div className="flex-1 flex items-center gap-2">
+                 <input type="number" inputMode="decimal" value={discountValue || ""} onChange={e => setDiscountValue(Number(e.target.value) || 0)} placeholder="0"
+                   className="flex-1 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50" style={{ fontSize: "16px" }} />
+               </div>
+               <div className="flex">
+                 <button type="button" onClick={() => setDiscountType("percent")}
+                   className={cn("px-3 py-2 rounded-l-xl text-xs font-semibold", discountType === "percent" ? "bg-gold text-black" : "bg-[#242424] text-muted-foreground border border-onyx-border/30")}>%</button>
+                 <button type="button" onClick={() => setDiscountType("amount")}
+                   className={cn("px-3 py-2 rounded-r-xl text-xs font-semibold", discountType === "amount" ? "bg-gold text-black" : "bg-[#242424] text-muted-foreground border border-onyx-border/30")}>€</button>
+               </div>
+             </div>
+           </div>
+
+          <div>
+             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+               <StickyNote className="h-3.5 w-3.5" strokeWidth={1.5} />
+               Référence et notes
+             </p>
+             <input
+               type="text"
+               value={form.objet}
+               onChange={(e) => update("objet", e.target.value)}
+               placeholder="Référence (ex: Prestation ponctuelle)"
+               className="w-full px-4 py-2 mb-2 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40"
+             />
+             <textarea
+               rows={2}
+               value={form.notes}
+               onChange={(e) => update("notes", e.target.value)}
+               placeholder="Informations supplémentaires pour le client..."
+               className="w-full px-4 py-2 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 resize-none"
+             />
+          </div>
         </section>
+
+        {/* Live preview */}
+        {subtotalHT > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="p-4 rounded-2xl bg-onyx-card border border-gold/20 space-y-1.5"
+          >
+             <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-2.5">
+               Total Aperçu
+             </p>
+             <div className="flex items-center justify-between text-xs">
+               <span className="text-muted-foreground">Base HT</span>
+               <span className="text-foreground">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(subtotalHT)} &euro;</span>
+             </div>
+             {discountAmount > 0 && (
+               <div className="flex items-center justify-between text-xs">
+                 <span className="text-red-400">Remise</span>
+                 <span className="text-red-400">-{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(discountAmount)} &euro;</span>
+               </div>
+             )}
+             <div className="h-px bg-onyx-border/30 my-1" />
+             <div className="flex items-center justify-between text-xs">
+               <span className="text-muted-foreground">Total HT</span>
+               <span className="text-foreground font-medium">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(totalHT)} &euro;</span>
+             </div>
+             {tva10Amount > 0 && (
+               <div className="flex items-center justify-between text-xs">
+                 <span className="text-muted-foreground">TVA (10%)</span>
+                 <span className="text-foreground">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(tva10)} &euro;</span>
+               </div>
+             )}
+             {tva20Amount > 0 && (
+               <div className="flex items-center justify-between text-xs">
+                 <span className="text-muted-foreground">TVA (20%)</span>
+                 <span className="text-foreground">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(tva20)} &euro;</span>
+               </div>
+             )}
+             {tva55Amount > 0 && (
+               <div className="flex items-center justify-between text-xs">
+                 <span className="text-muted-foreground">TVA (5.5%)</span>
+                 <span className="text-foreground">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(tva55)} &euro;</span>
+               </div>
+             )}
+             <div className="h-px bg-onyx-border/30 my-1" />
+             <div className="flex items-center justify-between">
+               <span className="text-xs font-semibold text-foreground">TOTAL TTC</span>
+               {discountAmount > 0 ? (
+                 <div className="text-right">
+                   <span className="text-muted-foreground line-through text-xs mr-2">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(originalTTC)} &euro;</span>
+                   <span className="text-lg font-bold text-gold">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(totalTTC)} &euro;</span>
+                 </div>
+               ) : (
+                 <span className="text-lg font-bold text-gold">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(totalTTC)} &euro;</span>
+               )}
+             </div>
+          </motion.div>
+        )}
       </form>
 
       {/* Fixed bottom CTA */}
       <div className="px-4 py-4 border-t border-onyx-border/30 bg-background">
         <button
-          type="submit"
+          type="button"
           onClick={handleSubmit}
           className="w-full py-4 rounded-2xl bg-gold text-primary-foreground font-bold hover:bg-gold-light active:scale-[0.98] transition-all gold-glow flex flex-col items-center justify-center gap-0.5"
         >
@@ -674,8 +830,8 @@ function FactureLibreForm({
             <Receipt className="h-4 w-4" strokeWidth={1.5} />
             Générer la Facture
           </span>
-          <span className="text-xs font-medium text-primary-foreground/70">
-            (Conforme Factur-X)
+          <span className="text-xs font-medium text-primary-foreground/80">
+            {items.length} ligne(s) • Conforme Factur-X
           </span>
         </button>
       </div>
@@ -704,7 +860,6 @@ export function CreateInvoiceFlow({ open, onClose }: CreateInvoiceProps) {
       <AnimatePresence>
         {open && step === "choose" && (
           <ChooseInvoiceSheet
-            key="choose-invoice"
             onFromBC={() => setStep("fromBC")}
             onNewBC={() => setStep("newBC")}
             onLibre={() => setStep("libre")}
@@ -713,7 +868,6 @@ export function CreateInvoiceFlow({ open, onClose }: CreateInvoiceProps) {
         )}
         {open && step === "fromBC" && (
           <FromBCScreen
-            key="from-bc"
             onBack={() => setStep("choose")}
             onClose={handleClose}
             onSuccess={handleSuccess}
@@ -721,7 +875,6 @@ export function CreateInvoiceFlow({ open, onClose }: CreateInvoiceProps) {
         )}
         {open && step === "libre" && (
           <FactureLibreForm
-            key="libre"
             onBack={() => setStep("choose")}
             onClose={handleClose}
             onSuccess={handleSuccess}

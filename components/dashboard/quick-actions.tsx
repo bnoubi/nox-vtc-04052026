@@ -8,7 +8,8 @@ import { DriverDrawer } from "./driver-drawer"
 import { VehicleDrawer } from "./vehicle-drawer"
 import { CreateBCFlow } from "./create-bc"
 import { CreateInvoiceFlow } from "./create-invoice"
-import { usePlan, PLAN_LIMITS } from "./plan-context"
+import { useNox } from "./nox-context"
+import { PLAN_LIMITS } from "./data"
 import { useNav } from "./nav-context"
 import { LimitAlertModal } from "./limit-alert-modal"
 
@@ -66,7 +67,7 @@ export function QuickActions() {
   const [showBCFlow, setShowBCFlow] = useState(false)
   const [showInvoiceFlow, setShowInvoiceFlow] = useState(false)
   const [limitAlert, setLimitAlert] = useState<{ open: boolean; label: string }>({ open: false, label: "" })
-  const { plan, driverCount, vehicleCount } = usePlan()
+  const { plan, driverCount, vehicleCount } = useNox()
   const { navigateToSubscription } = useNav()
   const limits = PLAN_LIMITS[plan]
   const driversFull = driverCount >= limits.drivers

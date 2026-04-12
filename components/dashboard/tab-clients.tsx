@@ -26,8 +26,9 @@ import {
 import { cn } from "@/lib/utils"
 import { AddClientModal } from "./add-client-modal"
 import { CreateBCFlow, type BCPrefillClient } from "./create-bc"
-import { allClients, type Client, type ClientContact } from "./data"
+import { useNox } from "./nox-context"
 import { useNav } from "./nav-context"
+import type { Client, ClientContact } from "./data"
 
 // ── Helper: Get display name ─────────────────────────────────
 
@@ -184,7 +185,19 @@ function ClientDetail({
   }
 
   function handleSaveEdit() {
-    // In real app, would save to database
+    const { updateClient } = useNox()
+    updateClient(client.id, {
+      phone: editPhone,
+      email: editEmail,
+      notes: editNotes,
+      preferences: editPreferences,
+      contacts: editContacts,
+      billingAddress: {
+        rue: editRue,
+        codePostal: editCodePostal,
+        ville: editVille
+      }
+    })
     setIsEditing(false)
   }
 
@@ -629,6 +642,7 @@ function ClientDetail({
 // ── Clients Tab ──────────────────────────────────────────────
 
 export function ClientsTab() {
+  const { clients } = useNox()
   const [search, setSearch] = useState("")
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -645,7 +659,7 @@ export function ClientsTab() {
     setBcPrefill(null)
   }
 
-  const filtered = allClients.filter((c) => {
+  const filtered = clients.filter((c) => {
     const searchLower = search.toLowerCase()
     const displayName = getClientDisplayName(c).toLowerCase()
     return displayName.includes(searchLower) || c.email.toLowerCase().includes(searchLower)

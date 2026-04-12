@@ -4,31 +4,69 @@ import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Mail, Lock, Eye, EyeOff } from "lucide-react"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 
-interface AuthScreenProps {
-  onLoginSuccess: () => void
-}
-
-export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
+export function AuthScreen() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [forgotSent, setForgotSent] = useState(false)
 
-  function handleLogin(e: React.FormEvent) {
+  const router = useRouter()
+  const supabase = createClient()
+
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    initiateLogin()
-  }
-
-  function handleSocialLogin() {
-    initiateLogin()
-  }
-
-  function initiateLogin() {
     setIsLoading(true)
-    setTimeout(() => {
-      onLoginSuccess()
-    }, 1500)
+    setError(null)
+    setForgotSent(false)
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+
+    if (error) {
+      setError("Identifiants incorrects. Vérifiez votre email et mot de passe.")
+      setIsLoading(false)
+      return
+    }
+
+    router.push("/")
+    router.refresh()
+  }
+
+  async function handleGoogleLogin() {
+    setError(null)
+    setForgotSent(false)
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+    if (error) {
+      setError("Connexion Google indisponible. Veuillez réessayer.")
+    }
+  }
+
+  // Apple & Facebook : hors périmètre MVP — réactivation prévue
+  // Pour réactiver : remplacer le div par un <button> appelant handleSocialLogin("apple" | "facebook")
+  // function handleSocialLogin(provider: "apple" | "facebook") { ... }
+
+  async function handleForgotPassword() {
+    setError(null)
+    setForgotSent(false)
+    if (!email) {
+      setError("Entrez votre email ci-dessus pour réinitialiser votre mot de passe.")
+      return
+    }
+    setIsLoading(true)
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+    })
+    setIsLoading(false)
+    setForgotSent(true)
   }
 
   return (
@@ -116,11 +154,32 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
           {/* Login Button */}
           <button
             type="submit"
-            className="w-full h-14 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20"
+            disabled={isLoading}
+            className="w-full h-14 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 disabled:opacity-60"
           >
             Se connecter
           </button>
         </motion.form>
+
+        {/* Error / Forgot sent feedback */}
+        <AnimatePresence>
+          {(error || forgotSent) && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className={`mt-4 px-4 py-3 rounded-lg text-center text-[12px] tracking-wide leading-relaxed ${
+                forgotSent
+                  ? "bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37]"
+                  : "bg-red-500/10 border border-red-500/20 text-red-400"
+              }`}
+            >
+              {forgotSent
+                ? "Email de réinitialisation envoyé. Vérifiez votre boîte mail."
+                : error}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Divider */}
         <motion.div
@@ -141,11 +200,12 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
           transition={{ duration: 0.6, delay: 0.4 }}
           className="flex items-center justify-center gap-5"
         >
-          {/* Google - Official multicolor */}
+          {/* Google — Actif */}
           <button
             type="button"
-            onClick={handleSocialLogin}
-            className="w-14 h-14 rounded-full bg-[#0A0A0A] flex items-center justify-center hover:bg-[#1A1A1A] active:scale-95 transition-all"
+            onClick={handleGoogleLogin}
+            title="Se connecter avec Google"
+            className="w-14 h-14 rounded-full bg-[#0A0A0A] border border-[#D4AF37]/10 flex items-center justify-center hover:bg-[#1A1A1A] hover:border-[#D4AF37]/25 active:scale-95 transition-all"
           >
             <svg className="w-6 h-6" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -155,27 +215,35 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
             </svg>
           </button>
 
-          {/* Apple - Pure white */}
-          <button
-            type="button"
-            onClick={handleSocialLogin}
-            className="w-14 h-14 rounded-full bg-[#0A0A0A] flex items-center justify-center hover:bg-[#1A1A1A] active:scale-95 transition-all"
+          {/* Apple — Bientôt disponible (hors périmètre MVP) */}
+          <div
+            aria-disabled="true"
+            title="Bientôt disponible"
+            className="relative group w-14 h-14 rounded-full bg-[#0A0A0A] border border-white/5 flex items-center justify-center"
+            style={{ cursor: "not-allowed" }}
           >
-            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="#FFFFFF">
+            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="#FFFFFF" style={{ opacity: 0.25, filter: "grayscale(1)" }}>
               <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
             </svg>
-          </button>
+            <span className="pointer-events-none absolute -bottom-6 left-1/2 -translate-x-1/2 text-[9px] text-[#555555] tracking-wide whitespace-nowrap">
+              Bientôt
+            </span>
+          </div>
 
-          {/* Facebook - Official blue */}
-          <button
-            type="button"
-            onClick={handleSocialLogin}
-            className="w-14 h-14 rounded-full bg-[#0A0A0A] flex items-center justify-center hover:bg-[#1A1A1A] active:scale-95 transition-all"
+          {/* Facebook — Bientôt disponible (hors périmètre MVP) */}
+          <div
+            aria-disabled="true"
+            title="Bientôt disponible"
+            className="relative group w-14 h-14 rounded-full bg-[#0A0A0A] border border-white/5 flex items-center justify-center"
+            style={{ cursor: "not-allowed" }}
           >
-            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="#1877F2">
+            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="#1877F2" style={{ opacity: 0.25, filter: "grayscale(1)" }}>
               <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
             </svg>
-          </button>
+            <span className="pointer-events-none absolute -bottom-6 left-1/2 -translate-x-1/2 text-[9px] text-[#555555] tracking-wide whitespace-nowrap">
+              Bientôt
+            </span>
+          </div>
         </motion.div>
 
         {/* Footer Links */}
@@ -185,10 +253,18 @@ export function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
           transition={{ duration: 0.6, delay: 0.5 }}
           className="mt-10 flex flex-col items-center gap-3"
         >
-          <button className="text-[12px] text-[#FFFFFF] hover:text-[#D4AF37] transition-colors duration-300 py-2 px-4">
+          <button
+            type="button"
+            onClick={handleForgotPassword}
+            className="text-[12px] text-[#FFFFFF] hover:text-[#D4AF37] transition-colors duration-300 py-2 px-4"
+          >
             Mot de passe oublié ?
           </button>
-          <button className="text-[12px] text-[#FFFFFF] hover:text-[#D4AF37] transition-colors duration-300 py-2 px-4">
+          <button
+            type="button"
+            onClick={() => router.push("/register")}
+            className="text-[12px] text-[#FFFFFF] hover:text-[#D4AF37] transition-colors duration-300 py-2 px-4"
+          >
             Devenir Membre
           </button>
         </motion.div>

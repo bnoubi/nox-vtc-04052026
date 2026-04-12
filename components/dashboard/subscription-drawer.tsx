@@ -4,7 +4,8 @@ import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, ShieldCheck, Loader2, CheckCircle2, Crown, Coins } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { usePlan, type Plan } from "./plan-context"
+import { useNox } from "./nox-context"
+import type { Plan } from "./data"
 import { toast } from "sonner"
 
 type PayState = "idle" | "loading" | "success"
@@ -43,7 +44,7 @@ interface SubscriptionDrawerProps {
 }
 
 export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDrawerProps) {
-  const { tokens, upgrade } = usePlan()
+  const { tokens, upgrade } = useNox()
   const [payState, setPayState] = useState<PayState>("idle")
 
   const planInfo = targetPlan ? PLAN_DETAILS[targetPlan] : null

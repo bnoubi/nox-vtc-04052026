@@ -15,153 +15,19 @@ import {
   X,
   Check,
   Coins,
+  Mail,
+  CheckCircle2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { usePlan } from "./plan-context"
 import { useNav } from "./nav-context"
 import { CreateBCFlow } from "./create-bc"
-
-// ── Types ────────────────────────────────────────────────────────
+import { useNox } from "./nox-context"
+import { type BCDocument, type InvoiceDocument, type BCStatus, type InvoiceStatus, type EnterpriseProfile } from "./data"
+import { generateInvoicePDF, generateBCPDF } from "@/lib/pdf-generator"
 
 type DocType = "bc" | "facture"
-type BCStatus = "signe" | "en_attente" | "brouillon" | "annule"
-type InvoiceStatus = "brouillon" | "envoyee" | "payee"
 
-interface BCDocument {
-  id: string
-  number: string
-  client: string
-  amount: number
-  date: string
-  status: BCStatus
-  type: "bc"
-  trajet?: { depart: string; arrivee: string }
-  notes?: string
-}
-
-interface InvoiceDocument {
-  id: string
-  number: string
-  client: string
-  amount: number
-  amountHT: number
-  tva: number
-  tvaRate: number
-  date: string
-  echeance: string
-  status: InvoiceStatus
-  type: "facture"
-  bcRef: string
-}
-
-type Document = BCDocument | InvoiceDocument
-
-// ── Initial Data ─────────────────────────────────────────────────
-
-const initialBCs: BCDocument[] = [
-  {
-    id: "bc1",
-    number: "BC-2026-001",
-    client: "M. Laurent",
-    amount: 350,
-    date: "06/02/2026",
-    status: "signe",
-    type: "bc",
-    trajet: { depart: "8 Rue de Rivoli, Paris 1er", arrivee: "Aéroport CDG, Terminal 2E" },
-    notes: "Accueil pancarte",
-  },
-  {
-    id: "bc2",
-    number: "BC-2026-002",
-    client: "Mme Beaumont",
-    amount: 180,
-    date: "05/02/2026",
-    status: "en_attente",
-    type: "bc",
-    trajet: { depart: "Le Bristol Paris", arrivee: "Opéra Garnier" },
-  },
-  {
-    id: "bc3",
-    number: "BC-2026-003",
-    client: "M. Moreau",
-    amount: 520,
-    date: "04/02/2026",
-    status: "signe",
-    type: "bc",
-    trajet: { depart: "Gare de Lyon", arrivee: "Hôtel Plaza Athénée" },
-    notes: "Siège bébé requis",
-  },
-  {
-    id: "bc4",
-    number: "BC-2026-004",
-    client: "Mme Dubois",
-    amount: 95,
-    date: "03/02/2026",
-    status: "brouillon",
-    type: "bc",
-    trajet: { depart: "16 Av. Montaigne", arrivee: "Gare Montparnasse" },
-  },
-]
-
-const initialInvoices: InvoiceDocument[] = [
-  {
-    id: "fac1",
-    number: "F-2026-001",
-    client: "M. Laurent",
-    amount: 385,
-    amountHT: 350,
-    tva: 35,
-    tvaRate: 10,
-    date: "06/02/2026",
-    echeance: "08/03/2026",
-    status: "payee",
-    type: "facture",
-    bcRef: "BC-2026-001",
-  },
-  {
-    id: "fac2",
-    number: "F-2026-002",
-    client: "Mme Beaumont",
-    amount: 704,
-    amountHT: 640,
-    tva: 64,
-    tvaRate: 10,
-    date: "31/01/2026",
-    echeance: "02/03/2026",
-    status: "payee",
-    type: "facture",
-    bcRef: "BC-2025-048",
-  },
-  {
-    id: "fac3",
-    number: "F-2026-003",
-    client: "M. Moreau",
-    amount: 231,
-    amountHT: 210,
-    tva: 21,
-    tvaRate: 10,
-    date: "29/01/2026",
-    echeance: "28/02/2026",
-    status: "envoyee",
-    type: "facture",
-    bcRef: "BC-2025-047",
-  },
-  {
-    id: "fac4",
-    number: "F-2026-004",
-    client: "Mme Martin",
-    amount: 192.5,
-    amountHT: 175,
-    tva: 17.5,
-    tvaRate: 10,
-    date: "28/01/2026",
-    echeance: "27/02/2026",
-    status: "brouillon",
-    type: "facture",
-    bcRef: "BC-2025-046",
-  },
-]
 
 // ── Status configs ───────────────────────────────────────────────
 
@@ -201,105 +67,429 @@ const invoiceStatusConfig: Record<InvoiceStatus, { label: string; className: str
 
 // ── Invoice Detail Modal ─────────────────────────────────────────
 
-function InvoiceDetail({
-  invoice,
+// ── BC Detail Modal ──────────────────────────────────────────────
+
+function BCDetail({
+  bc,
+  enterprise,
   onClose,
 }: {
-  invoice: InvoiceDocument
+  bc: BCDocument
+  enterprise: EnterpriseProfile
   onClose: () => void
 }) {
-  const status = invoiceStatusConfig[invoice.status]
+  const { updateBC } = useNox()
+  const status = bcStatusConfig[bc.status]
+
+  function handleCancel() {
+    updateBC(bc.id, { status: "annule" })
+    toast.success("Bon de commande annulé")
+    onClose()
+  }
+
+  function handleDownload() {
+    toast.promise(
+      new Promise((resolve) => {
+        setTimeout(() => {
+          generateBCPDF(bc, enterprise)
+          resolve(true)
+        }, 800)
+      }),
+      {
+        loading: "Préparation du document...",
+        success: "Bon de commande prêt !",
+        error: "Erreur lors de la génération",
+      }
+    )
+  }
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center"
+      className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
     >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
       <motion.div
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
         exit={{ y: "100%" }}
-        transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-        className="relative w-full max-w-md bg-background rounded-t-3xl sm:rounded-3xl border border-onyx-border/50 overflow-hidden max-h-[85vh]"
+        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+        className="relative w-full max-w-md bg-background rounded-t-[2.5rem] sm:rounded-[2rem] border border-onyx-border/50 overflow-hidden shadow-2xl"
       >
         <div className="flex justify-center pt-3 sm:hidden">
-          <div className="w-10 h-1 rounded-full bg-onyx-border/50" />
+          <div className="w-10 h-1 rounded-full bg-onyx-border/30" />
         </div>
 
-        <div className="flex items-center justify-between px-5 pt-4 pb-3">
+        <div className="px-6 pt-5 pb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-bold text-foreground">{invoice.number}</h2>
-            <p className="text-[11px] text-muted-foreground">
-              Réf. {invoice.bcRef}
-            </p>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={cn("px-2 py-0.5 text-[9px] font-bold rounded-full border uppercase tracking-wider", status.className)}>
+                {status.label}
+              </span>
+              <h2 className="text-sm font-mono text-muted-foreground">{bc.number}</h2>
+            </div>
+            <h1 className="text-xl font-bold text-foreground">Bon de Commande</h1>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 transition-colors"
+            className="w-10 h-10 rounded-2xl bg-onyx-card border border-onyx-border/50 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
           >
-            <X className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="mx-5 h-px bg-onyx-border/30" />
-
-        <div className="p-5 space-y-4 overflow-y-auto">
-          {/* Client & Dates */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl bg-onyx-card border border-onyx-border/50">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Client</p>
-              <p className="text-sm font-medium text-foreground">{invoice.client}</p>
+        <div className="px-6 pb-8 space-y-6 overflow-y-auto max-h-[70vh]">
+          <div className="p-5 rounded-3xl bg-onyx-card/50 border border-onyx-border/30 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Client</p>
+                <p className="text-sm font-semibold text-foreground">{bc.client}</p>
+                {bc.clientPhone && <p className="text-[10px] text-muted-foreground">{bc.clientPhone}</p>}
+              </div>
+              <div className="space-y-1 text-right">
+                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Date</p>
+                <p className="text-sm font-medium text-foreground">{bc.date}</p>
+              </div>
+              
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Chauffeur</p>
+                <p className="text-sm font-semibold text-foreground">{bc.driverName ?? "Non spécifié"}</p>
+              </div>
+              <div className="space-y-1 text-right">
+                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Véhicule</p>
+                <p className="text-sm font-medium text-foreground">{bc.vehicleName ?? "Non spécifié"}</p>
+              </div>
             </div>
-            <div className="p-3 rounded-xl bg-onyx-card border border-onyx-border/50">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Statut</p>
-              <span className={cn("px-2 py-0.5 text-[10px] font-medium rounded-full border", status.className)}>
+
+            {bc.trajet && (
+              <div className="pt-3 border-t border-onyx-border/20">
+                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mb-2">Trajet</p>
+                <div className="space-y-1 text-xs">
+                  <div className="flex items-center gap-2"><span className="text-emerald-500 text-[8px]">●</span><span className="truncate">{bc.trajet.depart}</span></div>
+                  <div className="flex items-center gap-2"><span className="text-red-500 text-[8px]">●</span><span className="truncate">{bc.trajet.arrivee}</span></div>
+                </div>
+                {(bc.trajet.distance || bc.trajet.passengers || bc.trajet.time) && (
+                  <div className="flex gap-4 mt-2 text-[10px] text-muted-foreground">
+                    {bc.trajet.time && <span>Heure : {bc.trajet.time}</span>}
+                    {bc.trajet.distance && <span>{bc.trajet.distance} km</span>}
+                    {bc.trajet.passengers && <span>{bc.trajet.passengers} passager(s)</span>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-onyx-border/20">
+              <div className="space-y-1 mb-3">
+                 <div className="flex justify-between items-center text-[10px]">
+                   <span className="text-muted-foreground">Total HT</span>
+                   <span className="text-foreground">{bc.amountHT ? new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.amountHT) : "—"} &euro;</span>
+                 </div>
+                 {bc.discountValue && bc.discountValue > 0 && (
+                   <div className="flex justify-between items-center text-[10px]">
+                     <span className="text-red-400">Remise ({bc.discountType === "percent" ? `${bc.discountValue}%` : `${bc.discountValue}€`})</span>
+                     <span className="text-red-400">-{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format((bc.originalHT || bc.amountHT || 0) * (bc.discountType === "percent" ? bc.discountValue / 100 : 0) || bc.discountValue)} &euro;</span>
+                   </div>
+                 )}
+                 {bc.tva10Amount !== undefined && bc.tva10Amount > 0 && (
+                   <div className="flex justify-between items-center text-[10px]">
+                     <span className="text-muted-foreground">TVA (10%)</span>
+                     <span className="text-foreground">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.tva10Amount)} &euro;</span>
+                   </div>
+                 )}
+                 {bc.tva20Amount !== undefined && bc.tva20Amount > 0 && (
+                   <div className="flex justify-between items-center text-[10px]">
+                     <span className="text-muted-foreground">TVA (20%)</span>
+                     <span className="text-foreground">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.tva20Amount)} &euro;</span>
+                   </div>
+                 )}
+                 {bc.tva55Amount !== undefined && bc.tva55Amount > 0 && (
+                   <div className="flex justify-between items-center text-[10px]">
+                     <span className="text-muted-foreground">TVA (5.5%)</span>
+                     <span className="text-foreground">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.tva55Amount)} &euro;</span>
+                   </div>
+                 )}
+                 {(!bc.tva10Amount && !bc.tva20Amount && !bc.tva55Amount) && (
+                   <div className="flex justify-between items-center text-[10px]">
+                     <span className="text-muted-foreground">TVA ({bc.tvaRate ?? 10}%)</span>
+                     <span className="text-foreground">{bc.tva ? new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.tva) : "—"} &euro;</span>
+                   </div>
+                 )}
+              </div>
+              <div className="flex justify-between items-end pt-2 border-t border-onyx-border/10">
+                <div className="space-y-1">
+                  <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Total TTC</p>
+                  <div>
+                    {bc.discountValue && bc.originalTTC && bc.discountValue > 0 && (
+                      <span className="text-xs text-muted-foreground line-through mr-2">
+                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.originalTTC)} &euro;
+                      </span>
+                    )}
+                    <span className="text-2xl font-black text-gold">
+                      {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.amount)} <span className="text-lg">&euro;</span>
+                    </span>
+                  </div>
+                </div>
+                <button 
+                  onClick={handleDownload}
+                  className="px-4 py-2 rounded-xl bg-gold/10 border border-gold/30 text-gold text-[11px] font-bold uppercase tracking-wider hover:bg-gold/20 transition-all flex items-center gap-2"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  Télécharger
+                </button>
+              </div>
+            </div>
+
+            {bc.cgvText && (
+              <div className="pt-3 border-t border-onyx-border/20">
+                <p className="text-[9px] text-muted-foreground/70 uppercase font-black tracking-widest mb-1">Conditions associées</p>
+                <div className="text-[9px] text-muted-foreground max-h-16 overflow-y-auto whitespace-pre-wrap scrollbar-hide">
+                  {bc.cgvText}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3">
+             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest ml-1">Actions</p>
+             <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={handleCancel}
+                  disabled={bc.status === "annule" || bc.status === "signe"}
+                  className="flex items-center justify-center gap-2 p-4 rounded-2xl bg-secondary/50 border border-onyx-border/50 text-xs font-semibold text-foreground hover:bg-secondary transition-all disabled:opacity-50"
+                >
+                  <X className="h-4 w-4" />
+                  Annuler
+                </button>
+                <button className="flex items-center justify-center gap-2 p-4 rounded-2xl bg-secondary/50 border border-onyx-border/50 text-xs font-semibold text-foreground hover:bg-secondary transition-all">
+                  <Share2 className="h-4 w-4" />
+                  Partager
+                </button>
+             </div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function InvoiceDetail({
+  invoice,
+  enterprise,
+  onClose,
+}: {
+  invoice: InvoiceDocument
+  enterprise: EnterpriseProfile
+  onClose: () => void
+}) {
+  const { updateInvoice } = useNox()
+  const status = invoiceStatusConfig[invoice.status]
+
+  function handleMarkAsPaid() {
+    updateInvoice(invoice.id, { status: "payee" })
+    toast.success("Facture marquée comme payée")
+  }
+
+  function handleSend() {
+    toast.promise(
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+      {
+        loading: "Envoi de la facture par e-mail...",
+        success: "Facture envoyée avec succès à " + invoice.client,
+        error: "Échec de l'envoi",
+      }
+    )
+    if (invoice.status === "brouillon") {
+      updateInvoice(invoice.id, { status: "envoyee" })
+    }
+  }
+
+  function handleDownload() {
+    toast.promise(
+      new Promise((resolve) => {
+        setTimeout(() => {
+          generateInvoicePDF(invoice, enterprise)
+          resolve(true)
+        }, 1000)
+      }),
+      {
+        loading: "Génération du PDF...",
+        success: "Facture téléchargée !",
+        error: "Échec du téléchargement",
+      }
+    )
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
+    >
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
+      <motion.div
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+        className="relative w-full max-w-md bg-background rounded-t-[2.5rem] sm:rounded-[2rem] border border-onyx-border/50 overflow-hidden shadow-2xl"
+      >
+        <div className="flex justify-center pt-3 sm:hidden">
+          <div className="w-10 h-1 rounded-full bg-onyx-border/30" />
+        </div>
+
+        <div className="px-6 pt-5 pb-4 flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={cn("px-2 py-0.5 text-[9px] font-bold rounded-full border uppercase tracking-wider", status.className)}>
                 {status.label}
               </span>
+              <h2 className="text-sm font-mono text-muted-foreground">{invoice.number}</h2>
             </div>
+            <h1 className="text-xl font-bold text-foreground">Facture</h1>
           </div>
+          <button
+            onClick={onClose}
+            className="w-10 h-10 rounded-2xl bg-onyx-card border border-onyx-border/50 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
+        <div className="px-6 pb-8 space-y-6 overflow-y-auto max-h-[75vh]">
+          <div className="p-6 rounded-[2rem] bg-gradient-to-br from-onyx-card to-onyx-card/40 border border-onyx-border/30 space-y-6">
+            <div className="flex justify-between items-start">
+              <div className="space-y-1.5">
+                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-[0.2em]">Destinataire</p>
+                <p className="text-base font-bold text-foreground leading-tight">{invoice.client}</p>
+                {invoice.clientPhone && <p className="text-[11px] text-muted-foreground">{invoice.clientPhone}</p>}
+                <p className="text-[11px] text-muted-foreground mt-1">Réf: {invoice.bcRef}</p>
+              </div>
+              <div className="text-right space-y-1.5">
+                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-[0.2em]">Échéance</p>
+                <p className="text-sm font-bold text-foreground tracking-wide">{invoice.echeance}</p>
+                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-[0.2em] mt-3">Date</p>
+                <p className="text-sm font-medium text-foreground tracking-wide">{invoice.date}</p>
+              </div>
+            </div>
+
+            {(invoice.driverName || invoice.vehicleName || invoice.trajet) && (
+              <div className="pt-4 border-t border-onyx-border/20 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  {invoice.driverName && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Chauffeur</p>
+                      <p className="text-sm font-semibold text-foreground">{invoice.driverName}</p>
+                    </div>
+                  )}
+                  {invoice.vehicleName && (
+                    <div className="space-y-1 text-right">
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Véhicule</p>
+                      <p className="text-sm font-medium text-foreground">{invoice.vehicleName}</p>
+                    </div>
+                  )}
+                </div>
+
+                {invoice.trajet && (
+                  <div className="pt-3 border-t border-onyx-border/10">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mb-2">Trajet</p>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex items-center gap-2"><span className="text-emerald-500 text-[8px]">●</span><span className="truncate">{invoice.trajet.depart}</span></div>
+                      <div className="flex items-center gap-2"><span className="text-red-500 text-[8px]">●</span><span className="truncate">{invoice.trajet.arrivee}</span></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-3 pt-6 border-t border-onyx-border/20">
+               <div className="flex justify-between items-center text-[11px]">
+                 <span className="text-muted-foreground font-medium uppercase tracking-wider">Montant HT</span>
+                 <span className="text-foreground font-semibold tabular-nums">{invoice.amountHT ? new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.amountHT) : "—"} &euro;</span>
+               </div>
+               {invoice.discountValue && invoice.discountValue > 0 && (
+                 <div className="flex justify-between items-center text-[11px]">
+                   <span className="text-red-400 font-medium uppercase tracking-wider">Remise</span>
+                   <span className="text-red-400 font-semibold tabular-nums">-{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format((invoice.originalHT || invoice.amountHT || 0) * (invoice.discountType === "percent" ? invoice.discountValue / 100 : 0) || invoice.discountValue)} &euro;</span>
+                 </div>
+               )}
+               {invoice.tva10Amount !== undefined && invoice.tva10Amount > 0 && (
+                 <div className="flex justify-between items-center text-[11px]">
+                   <span className="text-muted-foreground font-medium uppercase tracking-wider">TVA (10%)</span>
+                   <span className="text-foreground font-semibold tabular-nums">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.tva10Amount)} &euro;</span>
+                 </div>
+               )}
+               {invoice.tva20Amount !== undefined && invoice.tva20Amount > 0 && (
+                 <div className="flex justify-between items-center text-[11px]">
+                   <span className="text-muted-foreground font-medium uppercase tracking-wider">TVA (20%)</span>
+                   <span className="text-foreground font-semibold tabular-nums">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.tva20Amount)} &euro;</span>
+                 </div>
+               )}
+               {invoice.tva55Amount !== undefined && invoice.tva55Amount > 0 && (
+                 <div className="flex justify-between items-center text-[11px]">
+                   <span className="text-muted-foreground font-medium uppercase tracking-wider">TVA (5.5%)</span>
+                   <span className="text-foreground font-semibold tabular-nums">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.tva55Amount)} &euro;</span>
+                 </div>
+               )}
+               {(!invoice.tva10Amount && !invoice.tva20Amount && !invoice.tva55Amount) && (
+                 <div className="flex justify-between items-center text-[11px]">
+                   <span className="text-muted-foreground font-medium uppercase tracking-wider">TVA ({invoice.tvaRate ?? 10}%)</span>
+                   <span className="text-foreground font-semibold tabular-nums">{invoice.tva ? new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.tva) : "—"} &euro;</span>
+                 </div>
+               )}
+               <div className="pt-4 border-t border-onyx-border/10 flex justify-between items-end">
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-muted-foreground uppercase font-black tracking-[0.2em]">Total TTC</p>
+                    <div>
+                      {invoice.discountValue && invoice.originalTTC && invoice.discountValue > 0 && (
+                        <span className="text-sm text-muted-foreground line-through mr-2">
+                          {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.originalTTC)} &euro;
+                        </span>
+                      )}
+                      <span className="text-3xl font-black text-gold leading-none">
+                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.amount)}<span className="text-xl ml-1">&euro;</span>
+                      </span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleDownload}
+                    className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gold text-primary-foreground text-xs font-black uppercase tracking-widest gold-glow hover:bg-gold-light active:scale-[0.98] transition-all"
+                  >
+                    <FileText className="h-4 w-4" />
+                    PDF
+                  </button>
+               </div>
+            </div>
+            
+            {invoice.cgvText && (
+              <div className="pt-4 border-t border-onyx-border/20">
+                <p className="text-[9px] text-muted-foreground/70 uppercase font-black tracking-widest mb-1">Conditions associées</p>
+                <div className="text-[9px] text-muted-foreground max-h-16 overflow-y-auto whitespace-pre-wrap scrollbar-hide">
+                  {invoice.cgvText}
+                </div>
+              </div>
+            )}
+          </div>
+          
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl bg-onyx-card border border-onyx-border/50">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Date émission</p>
-              <p className="text-sm font-medium text-foreground">{invoice.date}</p>
-            </div>
-            <div className="p-3 rounded-xl bg-onyx-card border border-onyx-border/50">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Échéance (J+30)</p>
-              <p className="text-sm font-medium text-foreground">{invoice.echeance}</p>
-            </div>
-          </div>
-
-          {/* TVA Detail */}
-          <div className="p-4 rounded-2xl bg-onyx-card border border-gold/20">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-3">
-              Détail TVA
-            </p>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Montant HT</span>
-                <span className="text-sm font-medium text-foreground tabular-nums">
-                  {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.amountHT)} &euro;
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">
-                  TVA ({invoice.tvaRate}%)
-                </span>
-                <span className="text-sm font-medium text-foreground tabular-nums">
-                  {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.tva)} &euro;
-                </span>
-              </div>
-              <div className="h-px bg-onyx-border/30 my-1" />
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-foreground">Montant TTC</span>
-                <span className="text-lg font-bold text-gold tabular-nums">
-                  {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.amount)} &euro;
-                </span>
-              </div>
-            </div>
+             <button 
+               onClick={handleSend}
+               disabled={invoice.status === "payee"}
+               className="flex flex-col items-center gap-1 p-4 rounded-2xl bg-secondary/40 border border-onyx-border/50 hover:bg-secondary/60 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+             >
+                <Mail className="h-5 w-5 text-muted-foreground group-hover:text-gold transition-colors" />
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">Envoyer</span>
+             </button>
+             <button 
+               onClick={handleMarkAsPaid}
+               disabled={invoice.status === "payee"}
+               className="flex flex-col items-center gap-1 p-4 rounded-2xl bg-secondary/40 border border-onyx-border/50 hover:bg-secondary/60 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+             >
+                <CheckCircle2 className="h-5 w-5 text-muted-foreground group-hover:text-emerald-400 transition-colors" />
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">Payée</span>
+             </button>
           </div>
         </div>
       </motion.div>
@@ -312,13 +502,28 @@ function InvoiceDetail({
 function BCCard({
   doc,
   onInvoice,
+  onView,
 }: {
   doc: BCDocument
   onInvoice: (bc: BCDocument) => void
+  onView: (bc: BCDocument) => void
 }) {
+  const { updateBC } = useNox()
   const [menuOpen, setMenuOpen] = useState(false)
   const status = bcStatusConfig[doc.status]
   const canInvoice = doc.status === "signe"
+
+  const handleAction = (label: string) => {
+    setMenuOpen(false)
+    if (label === "Annuler") {
+      updateBC(doc.id, { status: "annule" })
+      toast.success("Bon de commande annulé")
+    } else if (label === "Partager") {
+      toast.info("Lien de partage copié dans le presse-papier")
+    } else if (label === "Voir") {
+      onView(doc)
+    }
+  }
 
   return (
     <div className="relative p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 hover:border-gold/20 transition-colors">
@@ -378,7 +583,7 @@ function BCCard({
             ].map((action) => (
               <button
                 key={action.label}
-                onClick={() => setMenuOpen(false)}
+                onClick={() => handleAction(action.label)}
                 className={cn(
                   "flex items-center gap-2.5 w-full px-3.5 py-2.5 text-xs hover:bg-secondary/50 transition-colors",
                   action.destructive ? "text-red-400" : "text-foreground",
@@ -407,8 +612,19 @@ function InvoiceCard({
   doc: InvoiceDocument
   onView: (inv: InvoiceDocument) => void
 }) {
+  const { updateInvoice } = useNox()
   const [menuOpen, setMenuOpen] = useState(false)
   const status = invoiceStatusConfig[doc.status]
+
+  const handleAction = (label: string) => {
+    setMenuOpen(false)
+    if (label === "Marquer payée") {
+      updateInvoice(doc.id, { status: "payee" })
+      toast.success("Facture marquée comme payée")
+    } else if (label === "Envoyer") {
+      toast.success("Facture envoyée au client")
+    }
+  }
 
   return (
     <div
@@ -451,8 +667,8 @@ function InvoiceCard({
 
       {/* TVA summary */}
       <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-        <span>HT: {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(doc.amountHT)}&euro;</span>
-        <span>TVA {doc.tvaRate}%: {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(doc.tva)}&euro;</span>
+        <span>HT: {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(doc.amountHT || 0)}&euro;</span>
+        <span>TVA {doc.tvaRate ?? 10}%: {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(doc.tva || 0)}&euro;</span>
         <span>Éch. {doc.echeance}</span>
       </div>
 
@@ -470,7 +686,7 @@ function InvoiceCard({
                 key={action.label}
                 onClick={(e) => {
                   e.stopPropagation()
-                  setMenuOpen(false)
+                  handleAction(action.label)
                 }}
                 className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-xs text-foreground hover:bg-secondary/50 transition-colors"
               >
@@ -623,14 +839,14 @@ function GenerateInvoiceModal({
 // ── Main Documents Tab ───────────────────────────────────────────
 
 export function DocumentsTab() {
+  const { bcs, invoices, addInvoice, enterprise, plan, tokens, spendToken } = useNox()
   const [activeType, setActiveType] = useState<DocType>("bc")
   const [search, setSearch] = useState("")
   const [showBCFlow, setShowBCFlow] = useState(false)
-  const [invoices, setInvoices] = useState<InvoiceDocument[]>(initialInvoices)
   const [invoicingBC, setInvoicingBC] = useState<BCDocument | null>(null)
+  const [viewingBC, setViewingBC] = useState<BCDocument | null>(null)
   const [viewingInvoice, setViewingInvoice] = useState<InvoiceDocument | null>(null)
   const [showNoTokens, setShowNoTokens] = useState(false)
-  const { plan, tokens, spendToken } = usePlan()
   const { openWallet } = useNav()
   const isUnlimited = plan === "DUO" || plan === "TEAM"
 
@@ -681,19 +897,19 @@ export function DocumentsTab() {
       bcRef: bc.number,
     }
 
-    setInvoices((prev) => [newInvoice, ...prev])
+    addInvoice(newInvoice)
     setInvoicingBC(null)
     setActiveType("facture")
   }
 
-  const filteredBCs = initialBCs.filter(
-    (d) =>
+  const filteredBCs = bcs.filter(
+    (d: BCDocument) =>
       d.number.toLowerCase().includes(search.toLowerCase()) ||
       d.client.toLowerCase().includes(search.toLowerCase()),
   )
 
   const filteredInvoices = invoices.filter(
-    (d) =>
+    (d: InvoiceDocument) =>
       d.number.toLowerCase().includes(search.toLowerCase()) ||
       d.client.toLowerCase().includes(search.toLowerCase()),
   )
@@ -704,7 +920,7 @@ export function DocumentsTab() {
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 pt-2 pb-4">
-        <h1 className="text-lg font-bold text-foreground mb-3">Bons de Cde & Factures</h1>
+        <h1 className="text-lg font-bold text-foreground mb-3">Réservations & Factures</h1>
 
         {/* Type Tabs */}
         <div className="flex gap-2 mb-3">
@@ -776,12 +992,12 @@ export function DocumentsTab() {
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-20">
         {currentDocs.length > 0 ? (
           activeType === "bc" ? (
-            filteredBCs.map((doc) => (
-              <BCCard key={doc.id} doc={doc} onInvoice={(bc) => setInvoicingBC(bc)} />
+            filteredBCs.map((doc: BCDocument) => (
+              <BCCard key={doc.id} doc={doc} onInvoice={(bc: BCDocument) => setInvoicingBC(bc)} onView={(bc: BCDocument) => setViewingBC(bc)} />
             ))
           ) : (
-            filteredInvoices.map((doc) => (
-              <InvoiceCard key={doc.id} doc={doc} onView={(inv) => setViewingInvoice(inv)} />
+            filteredInvoices.map((doc: InvoiceDocument) => (
+              <InvoiceCard key={doc.id} doc={doc} onView={(inv: InvoiceDocument) => setViewingInvoice(inv)} />
             ))
           )
         ) : (
@@ -806,11 +1022,23 @@ export function DocumentsTab() {
         )}
       </AnimatePresence>
 
+      {/* BC Detail Modal */}
+      <AnimatePresence mode="wait">
+        {viewingBC && (
+          <BCDetail
+            bc={viewingBC}
+            enterprise={enterprise}
+            onClose={() => setViewingBC(null)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Invoice Detail Modal */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {viewingInvoice && (
           <InvoiceDetail
             invoice={viewingInvoice}
+            enterprise={enterprise}
             onClose={() => setViewingInvoice(null)}
           />
         )}

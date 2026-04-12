@@ -44,11 +44,11 @@ import {
   X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { usePlan } from "./plan-context"
+import { toast } from "sonner"
 import { useNav } from "./nav-context"
 import { LimitAlertModal } from "./limit-alert-modal"
 import { GoldConfetti } from "./gold-confetti"
-import { allDrivers, allVehicles } from "./data"
+import { defaultTarifBase, defaultForfaits, defaultSupplements } from "./data"
 import { DriverDrawer } from "./driver-drawer"
 import { VehicleDrawer } from "./vehicle-drawer"
 import { WalletDrawer } from "./wallet-drawer"
@@ -56,8 +56,33 @@ import { SubscriptionDrawer } from "./subscription-drawer"
 import { ComplianceDot, getDriverComplianceStatus, getVehicleComplianceStatus } from "./compliance-dot"
 import { CGVSettings } from "./cgv-settings"
 import { TarifsSettings } from "./tarifs-settings"
-import { toast } from "sonner"
-import type { Driver, Vehicle } from "./data"
+import { useNox } from "./nox-context"
+import { createClient } from "@/lib/supabase/client"
+import type { Driver, Vehicle, Client, BCDocument, InvoiceDocument, BCStatus, InvoiceStatus } from "./data"
+
+class SettingsErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) { console.error("Settings ErrorBoundary caught error:", error, errorInfo); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center p-8 text-center h-full">
+          <AlertTriangle className="h-10 w-10 text-red-500 mb-4" />
+          <h2 className="text-lg font-bold text-white mb-2">Erreur d&apos;affichage</h2>
+          <p className="text-sm text-gray-400 mb-4 whitespace-pre-wrap">{this.state.error?.message}</p>
+          <button onClick={() => this.setState({ hasError: false })} className="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors">
+            Réessayer
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const SOLO_LIMIT = 1
 const DUO_LIMIT = 2
@@ -194,9 +219,49 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
   const [editing, setEditing] = useState(false)
   const [socials, setSocials] = useState([
     { name: "Google", connected: true, color: "bg-red-500/10 border-red-500/20 text-red-400", hoverColor: "hover:bg-red-500/20 hover:border-red-500/30" },
-    { name: "Apple", connected: true, color: "bg-white/5 border-white/10 text-foreground", hoverColor: "hover:bg-white/10 hover:border-white/20" },
-    { name: "LinkedIn", connected: false, color: "bg-blue-500/10 border-blue-500/20 text-blue-400", hoverColor: "hover:bg-blue-500/20 hover:border-blue-500/30" },
+    { name: "Facebook", connected: false, color: "bg-blue-600/10 border-blue-600/20 text-blue-500", hoverColor: "hover:bg-blue-600/20 hover:border-blue-600/30" },
+    { name: "Apple", connected: false, color: "bg-white/5 border-white/10 text-foreground", hoverColor: "hover:bg-white/10 hover:border-white/20" },
   ])
+  const [userMetadata, setUserMetadata] = useState<{ displayName: string; initials: string; email: string; phone: string }>({ displayName: "", initials: "—", email: "", phone: "" })
+
+  useEffect(() => {
+    async function loadUser() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const fullName = user.user_metadata?.full_name || user.user_metadata?.name || ""
+      const firstName = user.user_metadata?.given_name || ""
+      const lastName = user.user_metadata?.family_name || ""
+      const userEmail = user.email || ""
+
+      let nameToDisplay = ""
+      let initialsToDisplay = "—"
+
+      if (fullName) {
+        nameToDisplay = fullName
+        const parts = fullName.trim().split(" ")
+        initialsToDisplay = parts.length >= 2
+          ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+          : fullName.substring(0, 2).toUpperCase()
+      } else if (firstName || lastName) {
+        nameToDisplay = `${firstName} ${lastName}`.trim()
+        initialsToDisplay = `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase() || "—"
+      } else if (userEmail) {
+        nameToDisplay = userEmail.split("@")[0]
+        initialsToDisplay = nameToDisplay.substring(0, 2).toUpperCase()
+      }
+
+      let phoneToDisplay = user.phone || user.user_metadata?.phone || ""
+      try {
+        const { data: acc } = await supabase.from("user_accounts").select("phone").eq("id", user.id).single()
+        if (acc?.phone) phoneToDisplay = acc.phone
+      } catch (e) {}
+
+      setUserMetadata({ displayName: nameToDisplay, initials: initialsToDisplay, email: userEmail, phone: phoneToDisplay })
+    }
+    loadUser()
+  }, [])
 
   function toggleSocial(name: string) {
     setSocials((prev) =>
@@ -215,14 +280,14 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
               onClick={() => setEditing(!editing)}
               className="w-20 h-20 rounded-full bg-gradient-to-br from-gold/30 via-gold/15 to-gold/5 border-2 border-gold/40 flex items-center justify-center hover:border-gold/70 hover:from-gold/40 active:scale-95 transition-all"
             >
-              <span className="text-2xl font-bold font-heading text-gold">JD</span>
+              <span className="text-2xl font-bold font-heading text-gold">{userMetadata.initials}</span>
             </button>
             <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-gold flex items-center justify-center border-2 border-background">
               <BadgeCheck className="h-3.5 w-3.5 text-primary-foreground" strokeWidth={2} />
             </div>
           </div>
-          <h2 className="text-lg font-bold font-heading text-foreground">Jean Dupont</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Chauffeur VTC Professionnel</p>
+          <h2 className="text-lg font-bold font-heading text-foreground">{userMetadata.displayName || "Non renseigné"}</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Utilisateur NoX VTC</p>
         </div>
 
         {/* Contact Info */}
@@ -232,19 +297,23 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
             <div className="p-4 space-y-3">
               <input
                 type="email"
-                defaultValue="jean.dupont@nox-vtc.fr"
+                value={userMetadata.email}
+                onChange={(e) => setUserMetadata({ ...userMetadata, email: e.target.value })}
+                placeholder="Votre email"
                 className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
               />
               <input
                 type="tel"
-                defaultValue="+33 6 12 34 56 78"
+                value={userMetadata.phone}
+                onChange={(e) => setUserMetadata({ ...userMetadata, phone: e.target.value })}
+                placeholder="+33 6 00 00 00 00"
                 className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
               />
             </div>
           ) : (
             <>
-              <InfoCard icon={<Mail className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Email" value="jean.dupont@nox-vtc.fr" />
-              <InfoCard icon={<Phone className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Téléphone" value="+33 6 12 34 56 78" />
+              <InfoCard icon={<Mail className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Email" value={userMetadata.email || "Non renseigné"} />
+              <InfoCard icon={<Phone className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Téléphone" value={userMetadata.phone || "Non renseigné"} />
             </>
           )}
         </GlassCard>
@@ -273,7 +342,22 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
         {/* Edit / Save button */}
         <div className="px-4">
           <button
-            onClick={() => setEditing(!editing)}
+            onClick={async () => {
+              if (editing) {
+                // Save to Supabase backend
+                const supabase = createClient()
+                const { data: { user } } = await supabase.auth.getUser()
+                if (user) {
+                  await supabase
+                    .from('user_accounts')
+                    .update({ phone: userMetadata.phone })
+                    .eq('id', user.id)
+                }
+                setEditing(false)
+              } else {
+                setEditing(true)
+              }
+            }}
             className={cn(
               "w-full py-3 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-all",
               editing
@@ -312,27 +396,28 @@ const BRAND_COLORS = [
 ]
 
 function EnterpriseScreen({ onBack }: { onBack: () => void }) {
+  const { enterprise, updateEnterprise } = useNox()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [saved, setSaved] = useState(false)
 
   // Identité visuelle
-  const [logoPreview, setLogoPreview] = useState<string | null>(null)
-  const [logoName, setLogoName] = useState("")
-  const [brandColor, setBrandColor] = useState("#C5A059")
+  const [logoPreview, setLogoPreview] = useState<string | null>(enterprise.logo || null)
+  const [logoName, setLogoName] = useState(enterprise.logo ? "logo_actuel.png" : "")
+  const [brandColor, setBrandColor] = useState(enterprise.brandColor || "#C5A059")
 
   // Informations legales
   const [legal, setLegal] = useState({
-    denomination: "NoX VTC SAS",
-    siren: "912 345 678 00015",
-    tvaIntra: "FR12 912345678",
-    adresse: "42 Avenue des Champs-Élysées, 75008 Paris",
+    denomination: enterprise.name || "",
+    siren: enterprise.siren || "",
+    tvaIntra: enterprise.tva || "",
+    adresse: enterprise.adresse || "",
   })
 
   // Conformité VTC
   const [compliance, setCompliance] = useState({
-    registreVTC: "EVTC-2024-75-001234",
-    dateRegistre: "2027-03-15",
-    dateAssurance: "2026-09-30",
+    registreVTC: enterprise.registreVTC || "",
+    dateRegistre: enterprise.dateRegistre || "",
+    dateAssurance: enterprise.dateAssurance || "",
   })
 
   function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -340,11 +425,25 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
     if (!file) return
     setLogoName(file.name)
     const reader = new FileReader()
-    reader.onload = (ev) => setLogoPreview(ev.target?.result as string)
+    reader.onload = (ev) => {
+      const b64 = ev.target?.result as string
+      setLogoPreview(b64)
+    }
     reader.readAsDataURL(file)
   }
 
   function handleSave() {
+    updateEnterprise({
+      name: legal.denomination,
+      siren: legal.siren,
+      tva: legal.tvaIntra,
+      adresse: legal.adresse,
+      brandColor,
+      logo: logoPreview || undefined,
+      registreVTC: compliance.registreVTC,
+      dateRegistre: compliance.dateRegistre,
+      dateAssurance: compliance.dateAssurance
+    })
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
   }
@@ -353,9 +452,9 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
   const assuranceStatus = getExpirationStatus(compliance.dateAssurance)
 
   return (
-    <motion.div key="enterprise" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
+    <motion.div key="enterprise" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full relative">
       <SubScreenHeader title="Profil Entreprise" onBack={onBack} />
-      <div className="flex-1 overflow-y-auto pb-20">
+      <div className="flex-1 overflow-y-auto pb-6">
 
         {/* ── Section 1: Identite Visuelle ── */}
         <SectionLabel>Identite visuelle</SectionLabel>
@@ -615,7 +714,8 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* ── Fixed Save Button ── */}
-      <div className="absolute bottom-0 left-0 right-0 px-4 py-4 bg-gradient-to-t from-background via-background to-transparent">
+      {/* ── Fixed Save Button ── */}
+      <div className="shrink-0 px-4 py-4 border-t border-onyx-border/20 bg-background z-10 w-full">
         <button
           onClick={handleSave}
           disabled={saved}
@@ -643,12 +743,23 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
 // ── Infos Bancaires Screen ─────────────────────────────────────
 
 function BankingScreen({ onBack }: { onBack: () => void }) {
+  const { enterprise, updateEnterprise } = useNox()
   const [editing, setEditing] = useState(false)
   const [bank, setBank] = useState({
-    banque: "BNP Paribas",
-    iban: "FR76 3000 4028 3700 0100 0466 854",
-    bic: "BNPAFRPPXXX",
+    banque: enterprise.bankName || "À renseigner",
+    iban: enterprise.iban || "À renseigner",
+    bic: enterprise.bic || "À renseigner",
   })
+
+  function handleSave() {
+    updateEnterprise({
+      bankName: bank.banque,
+      iban: bank.iban,
+      bic: bank.bic
+    })
+    setEditing(false)
+    toast.success("Coordonnées bancaires mises à jour")
+  }
 
   return (
     <motion.div key="banking" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
@@ -707,7 +818,7 @@ function BankingScreen({ onBack }: { onBack: () => void }) {
 
         <div className="px-4">
           <button
-            onClick={() => setEditing(!editing)}
+            onClick={() => editing ? handleSave() : setEditing(true)}
             className={cn(
               "w-full py-3 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-all",
               editing
@@ -726,7 +837,7 @@ function BankingScreen({ onBack }: { onBack: () => void }) {
 // ── Abonnement Screen ──────────────────────────────────────────
 
 function SubscriptionScreen({ onBack }: { onBack: () => void }) {
-  const { plan, upgrade, tokens } = usePlan()
+  const { plan, upgrade, tokens } = useNox()
   const isTeam = plan === "TEAM"
   const isDuo = plan === "DUO"
   const [showConfetti, setShowConfetti] = useState(false)
@@ -999,7 +1110,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
 // ── Locked Slot ───────────────────────────────────────────────
 
 function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => void }) {
-  const { plan, upgrade } = usePlan()
+  const { plan, upgrade } = useNox()
   const limitLabel = type === "driver" ? "chauffeurs" : "vehicules"
   const currentLimit = plan === "SOLO" ? SOLO_LIMIT : DUO_LIMIT
   return (
@@ -1050,10 +1161,10 @@ function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => voi
 // ── Team Screen ────────────────────────────────────────────────
 
 function TeamScreen({ onBack }: { onBack: () => void }) {
-  const { plan, upgrade, driverCount, setDriverCount } = usePlan()
+  const { drivers, addDriver, updateDriver, deleteDriver, plan, upgrade, driverCount } = useNox()
   const isTeam = plan === "TEAM"
   const limit = plan === "SOLO" ? SOLO_LIMIT : plan === "DUO" ? DUO_LIMIT : TEAM_LIMIT
-  const visibleDrivers = allDrivers.slice(0, limit)
+  const visibleDrivers = drivers.slice(0, limit)
   const maxSlots = limit
   const isFull = driverCount >= limit
   const [showConfetti, setShowConfetti] = useState(false)
@@ -1065,25 +1176,45 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
   // Deep link: open driver drawer if pending navigation
   useEffect(() => {
     if (pendingEntityNavigation && pendingEntityNavigation.entityType === "driver") {
-      const driver = allDrivers.find(d => d.id === pendingEntityNavigation.entityId)
+      const driver = drivers.find(d => d.id === pendingEntityNavigation.entityId)
       if (driver) {
         setDrawerDriver(driver)
       }
       clearPendingEntityNavigation()
     }
-  }, [pendingEntityNavigation, clearPendingEntityNavigation])
+  }, [pendingEntityNavigation, clearPendingEntityNavigation, drivers])
 
   function handleUpgrade() {
     setShowConfetti(true)
     setTimeout(() => upgrade(), 300)
   }
 
-  function handleDriverSave() {
+  function handleDriverSave(data: any) {
+    if (drawerDriver) {
+      // Edit mode
+      updateDriver(drawerDriver.id, {
+        name: `${data.prenom} ${data.nom}`,
+        carteProExpiration: data.expirationCarte,
+        apacExpiration: data.apacExpiration,
+        rcProExpiration: data.rcProExpiration
+      })
+    } else {
+      // Add mode
+      const newDriver: Driver = {
+        id: `drv-${Date.now()}`,
+        name: `${data.prenom} ${data.nom}`,
+        initials: (data.prenom[0] + data.nom[0]).toUpperCase(),
+        carteProExpiration: data.expirationCarte,
+        apacExpiration: data.apacExpiration,
+        rcProExpiration: data.rcProExpiration
+      }
+      addDriver(newDriver)
+    }
     setDrawerDriver(null)
   }
 
   function handleDriverDelete(driver: Driver) {
-    setDriverCount(Math.max(0, driverCount - 1))
+    deleteDriver(driver.id)
     setDrawerDriver(null)
   }
 
@@ -1164,10 +1295,10 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
 // ── Fleet Screen ───────────────────────────────────────────────
 
 function FleetScreen({ onBack }: { onBack: () => void }) {
-  const { plan, upgrade, vehicleCount, setVehicleCount } = usePlan()
+  const { vehicles, addVehicle, updateVehicle, deleteVehicle, plan, upgrade, vehicleCount } = useNox()
   const isTeam = plan === "TEAM"
   const limit = plan === "SOLO" ? SOLO_LIMIT : plan === "DUO" ? DUO_LIMIT : TEAM_LIMIT
-  const visibleVehicles = allVehicles.slice(0, limit)
+  const visibleVehicles = vehicles.slice(0, limit)
   const maxSlots = limit
   const isFull = vehicleCount >= limit
   const [showConfetti, setShowConfetti] = useState(false)
@@ -1179,25 +1310,45 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   // Deep link: open vehicle drawer if pending navigation
   useEffect(() => {
     if (pendingEntityNavigation && pendingEntityNavigation.entityType === "vehicle") {
-      const vehicle = allVehicles.find(v => v.id === pendingEntityNavigation.entityId)
+      const vehicle = vehicles.find(v => v.id === pendingEntityNavigation.entityId)
       if (vehicle) {
         setDrawerVehicle(vehicle)
       }
       clearPendingEntityNavigation()
     }
-  }, [pendingEntityNavigation, clearPendingEntityNavigation])
+  }, [pendingEntityNavigation, clearPendingEntityNavigation, vehicles])
 
   function handleUpgrade() {
     setShowConfetti(true)
     setTimeout(() => upgrade(), 300)
   }
 
-  function handleVehicleSave() {
+  function handleVehicleSave(data: any) {
+    if (drawerVehicle) {
+      // Edit mode
+      updateVehicle(drawerVehicle.id, {
+        model: data.model,
+        plate: data.plate,
+        assuranceTransportExpiration: data.assuranceTransportExpiration,
+        controleTechniqueExpiration: data.controleTechniqueExpiration
+      })
+    } else {
+      // Add mode
+      const newVehicle: Vehicle = {
+        id: `vhc-${Date.now()}`,
+        model: data.model,
+        plate: data.plate,
+        type: "Berline", // Par défaut
+        assuranceTransportExpiration: data.assuranceTransportExpiration,
+        controleTechniqueExpiration: data.controleTechniqueExpiration
+      }
+      addVehicle(newVehicle)
+    }
     setDrawerVehicle(null)
   }
 
   function handleVehicleDelete(vehicle: Vehicle) {
-    setVehicleCount(Math.max(0, vehicleCount - 1))
+    deleteVehicle(vehicle.id)
     setDrawerVehicle(null)
   }
 
@@ -1521,17 +1672,36 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
 // ── Main Settings ────────���────────────────────────────────────
 
 function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => void }) {
-  const { plan, tokens, driverCount, vehicleCount } = usePlan()
+  const { plan, tokens, driverCount, vehicleCount, enterprise } = useNox()
   const { logout } = useNav()
   const isTeam = plan === "TEAM"
   const [walletOpen, setWalletOpen] = useState(false)
+  const [userInfo, setUserInfo] = useState({ name: "Chargement...", email: "" })
+
+  useEffect(() => {
+    async function loadUser() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const fullName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || ""
+        setUserInfo({ name: fullName, email: user.email || "" })
+      } else {
+        setUserInfo({ name: "Non renseigné", email: "" })
+      }
+    }
+    loadUser()
+  }, [])
+
+  const enterpriseDesc = enterprise.name 
+    ? `${enterprise.name}${enterprise.siren ? ` \u2022 SIRET ${enterprise.siren}` : ""}`
+    : "Non renseignée"
 
   const accountSettings: SettingItem[] = [
-    { icon: <User className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Profil", description: "Jean Dupont, jean.dupont@nox-vtc.fr", screen: "profile" },
-    { icon: <Building2 className="h-4 w-4" strokeWidth={1.5} />, label: "Profil Entreprise", description: "NoX VTC SAS \u2022 SIRET 912 345 678", screen: "enterprise" },
+    { icon: <User className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Profil", description: `${userInfo.name}${userInfo.email ? `, ${userInfo.email}` : ""}`, screen: "profile" },
+    { icon: <Building2 className="h-4 w-4" strokeWidth={1.5} />, label: "Profil Entreprise", description: enterpriseDesc, screen: "enterprise" },
     { icon: <FileText className="h-4 w-4" strokeWidth={1.5} />, label: "Mes Conditions de Vente", description: "CGV rattachées à vos documents", screen: "cgv" },
     { icon: <Calculator className="h-4 w-4" strokeWidth={1.5} />, label: "Mes Grilles Tarifaires", description: "Tarifs, suppléments et forfaits", screen: "tarifs" },
-    { icon: <Landmark className="h-4 w-4" strokeWidth={1.5} />, label: "Infos Bancaires", description: "IBAN \u2022\u2022\u2022\u2022 4668", badge: "AES-256", screen: "banking" },
+    { icon: <Landmark className="h-4 w-4" strokeWidth={1.5} />, label: "Infos Bancaires", description: "Non renseigné", badge: "AES-256", screen: "banking" },
     { icon: <Crown className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Abonnement", description: isTeam ? "Offre TEAM active" : plan === "DUO" ? "Offre DUO active" : "Offre SOLO active", screen: "subscription" },
   ]
 
@@ -1668,20 +1838,22 @@ export function SettingsTab() {
   }, [registerSettingsNavigator])
 
   return (
-    <div className="h-full overflow-hidden">
-      <AnimatePresence mode="wait">
-        {screen === "main" && <MainSettings key="main" onNavigate={setScreen} />}
-        {screen === "team" && <TeamScreen key="team" onBack={() => setScreen("main")} />}
-        {screen === "fleet" && <FleetScreen key="fleet" onBack={() => setScreen("main")} />}
-        {screen === "profile" && <ProfileScreen key="profile" onBack={() => setScreen("main")} />}
-        {screen === "enterprise" && <EnterpriseScreen key="enterprise" onBack={() => setScreen("main")} />}
-        {screen === "banking" && <BankingScreen key="banking" onBack={() => setScreen("main")} />}
-        {screen === "subscription" && <SubscriptionScreen key="subscription" onBack={() => setScreen("main")} />}
-        {screen === "notifications" && <NotificationsScreen key="notifications" onBack={() => setScreen("main")} />}
-{screen === "security" && <SecurityScreen key="security" onBack={() => setScreen("main")} />}
-  {screen === "cgv" && <CGVSettings key="cgv" onBack={() => setScreen("main")} />}
-  {screen === "tarifs" && <TarifsSettings key="tarifs" onBack={() => setScreen("main")} />}
-  </AnimatePresence>
-    </div>
+    <SettingsErrorBoundary>
+      <div className="h-full overflow-hidden">
+        <AnimatePresence mode="wait">
+          {screen === "main" && <MainSettings key="main" onNavigate={setScreen} />}
+          {screen === "team" && <TeamScreen key="team" onBack={() => setScreen("main")} />}
+          {screen === "fleet" && <FleetScreen key="fleet" onBack={() => setScreen("main")} />}
+          {screen === "profile" && <ProfileScreen key="profile" onBack={() => setScreen("main")} />}
+          {screen === "enterprise" && <EnterpriseScreen key="enterprise" onBack={() => setScreen("main")} />}
+          {screen === "banking" && <BankingScreen key="banking" onBack={() => setScreen("main")} />}
+          {screen === "subscription" && <SubscriptionScreen key="subscription" onBack={() => setScreen("main")} />}
+          {screen === "notifications" && <NotificationsScreen key="notifications" onBack={() => setScreen("main")} />}
+          {screen === "security" && <SecurityScreen key="security" onBack={() => setScreen("main")} />}
+          {screen === "cgv" && <CGVSettings key="cgv" onBack={() => setScreen("main")} />}
+          {screen === "tarifs" && <TarifsSettings key="tarifs" onBack={() => setScreen("main")} />}
+        </AnimatePresence>
+      </div>
+    </SettingsErrorBoundary>
   )
 }

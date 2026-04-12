@@ -21,6 +21,8 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { useNox } from "./nox-context"
+import { TarifBase, TarifForfait, TarifSupplement, TrancheHoraire as TrancheStore } from "./data"
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -269,39 +271,45 @@ function formatPriceUnit(value: number, unit: string): string {
 // ─────────────────────────────────────────────────────────────
 
 export function TarifsSettings({ onBack }: { onBack: () => void }) {
-  // Base rates
+  const { tarifBase: storeBase, forfaits: storeForfaits, supplements: storeSupplements, tranches: storeTranches, applyWeekend: storeAW, applyHolidays: storeAH, updateTarifs } = useNox()
+
+  // Base rates mapping
   const [baseRate, setBaseRate] = useState<BaseRate>({
-    priseEnCharge: 2.50,
-    tarifKm: 1.80,
-    tarifAttente: 0.50,
-    courseMinimum: 8.00
+    priseEnCharge: storeBase.priseEnCharge,
+    tarifKm: storeBase.prixKm,
+    tarifAttente: storeBase.prixAttente,
+    courseMinimum: storeBase.courseMinimum
   })
 
   // Tranches horaires
   const [tranchesEnabled, setTranchesEnabled] = useState(true)
-  const [tranches, setTranches] = useState<TrancheHoraire[]>([
-    { id: "a", name: "Tarif A — Journée", startTime: "07:00", endTime: "20:59", coefficient: 1.00 },
-    { id: "b", name: "Tarif B — Nuit", startTime: "21:00", endTime: "06:59", coefficient: 1.25 },
-    { id: "c", name: "Tarif C — Week-end & Fériés", startTime: "00:00", endTime: "23:59", coefficient: 1.50 }
-  ])
-  const [applyWeekend, setApplyWeekend] = useState(true)
-  const [applyHolidays, setApplyHolidays] = useState(true)
+  const [tranches, setTranches] = useState<TrancheHoraire[]>(storeTranches)
+  const [applyWeekend, setApplyWeekend] = useState(storeAW)
+  const [applyHolidays, setApplyHolidays] = useState(storeAH)
 
-  // Suppléments
-  const [supplements, setSupplements] = useState<Supplement[]>([
-    { id: "bagage", icon: <Briefcase className="h-4 w-4" strokeWidth={1.5} />, label: "Bagage volumineux", help: "Valise de soute, équipement sportif...", enabled: false, price: 5.00 },
-    { id: "animal", icon: <Heart className="h-4 w-4" strokeWidth={1.5} />, label: "Animal de compagnie", enabled: false, price: 5.00 },
-    { id: "siege", icon: <Baby className="h-4 w-4" strokeWidth={1.5} />, label: "Siège bébé / enfant", help: "Sur demande préalable", enabled: false, price: 10.00 },
-    { id: "disposition", icon: <Clock className="h-4 w-4" strokeWidth={1.5} />, label: "Mise à disposition", help: "Départ repoussé de plus de 30 min", enabled: false, price: 15.00 },
-    { id: "terminal", icon: <Building2 className="h-4 w-4" strokeWidth={1.5} />, label: "Supplément terminal / gare", help: "Frais d'accès zone de dépose", enabled: false, price: 5.00 },
-    { id: "pancarte", icon: <UserCheck className="h-4 w-4" strokeWidth={1.5} />, label: "Accueil avec pancarte", enabled: false, price: 8.00 }
-  ])
+  // Suppléments mapping
+  const [supplements, setSupplements] = useState<Supplement[]>(() => {
+    // Icons mapping for store elements
+    const iconsMap: Record<string, React.ReactNode> = {
+      bagage: <Briefcase className="h-4 w-4" strokeWidth={1.5} />,
+      animal: <Heart className="h-4 w-4" strokeWidth={1.5} />,
+      siege: <Baby className="h-4 w-4" strokeWidth={1.5} />,
+      disposition: <Clock className="h-4 w-4" strokeWidth={1.5} />,
+      terminal: <Building2 className="h-4 w-4" strokeWidth={1.5} />,
+      pancarte: <UserCheck className="h-4 w-4" strokeWidth={1.5} />
+    }
+    
+    return storeSupplements.map(s => ({
+      id: s.id,
+      label: s.label,
+      enabled: s.enabled,
+      price: s.price,
+      icon: iconsMap[s.id] || <Calculator className="h-4 w-4" strokeWidth={1.5} />
+    }))
+  })
 
   // Forfaits fixes
-  const [forfaits, setForfaits] = useState<Forfait[]>([
-    { id: "1", name: "CDG → Paris Centre", price: 85.00 },
-    { id: "2", name: "Orly → Paris Centre", price: 65.00 }
-  ])
+  const [forfaits, setForfaits] = useState<Forfait[]>(storeForfaits)
 
   // Estimator
   const [estimatorOpen, setEstimatorOpen] = useState(false)
@@ -315,7 +323,7 @@ export function TarifsSettings({ onBack }: { onBack: () => void }) {
   }
 
   const updateTranche = (id: string, key: keyof TrancheHoraire, value: string | number) => {
-    setTranches(prev => prev.map(t => t.id === id ? { ...t, [key]: value } : t))
+    setTranches(prev => prev.map(t => t.id === id ? { ...t, [key]: value } as TrancheHoraire : t))
   }
 
   const toggleSupplement = (id: string) => {
@@ -332,7 +340,7 @@ export function TarifsSettings({ onBack }: { onBack: () => void }) {
   }
 
   const updateForfait = (id: string, key: keyof Forfait, value: string | number) => {
-    setForfaits(prev => prev.map(f => f.id === id ? { ...f, [key]: value } : f))
+    setForfaits(prev => prev.map(f => f.id === id ? { ...f, [key]: value } as Forfait : f))
   }
 
   const deleteForfait = (id: string) => {
@@ -367,6 +375,27 @@ export function TarifsSettings({ onBack }: { onBack: () => void }) {
   }, [baseRate, tranches, tranchesEnabled, estimatorDistance, estimatorTranche, estimatorSupplements, supplements])
 
   const handleSave = () => {
+    const base: TarifBase = {
+      priseEnCharge: baseRate.priseEnCharge,
+      prixKm: baseRate.tarifKm,
+      prixAttente: baseRate.tarifAttente,
+      courseMinimum: baseRate.courseMinimum
+    }
+    
+    const f: TarifForfait[] = forfaits.map(item => ({
+      id: item.id,
+      name: item.name,
+      price: item.price
+    }))
+
+    const s: TarifSupplement[] = supplements.map(item => ({
+      id: item.id,
+      label: item.label,
+      price: item.price,
+      enabled: item.enabled
+    }))
+
+    updateTarifs(base, f, s, tranches, applyWeekend, applyHolidays)
     toast.success("✓ Grille tarifaire sauvegardée", { duration: 2000 })
   }
 

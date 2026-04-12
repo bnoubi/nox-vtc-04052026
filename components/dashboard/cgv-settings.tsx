@@ -17,29 +17,22 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { useNox } from "./nox-context"
+import { 
+  CGVMode, 
+  CGVConfig, 
+  EnterpriseProfile,
+  PaymentTiming,
+  PaymentMethod,
+  CancellationDelay,
+  CancellationFee,
+  WaitTime,
+  WaitFee,
+  NoShowFee,
+  PaymentDelay
+} from "./data"
 
-// ── Types ─────────────────────────────────────────────────────
-
-type CGVMode = "configurator" | "freetext" | "import"
-type PaymentTiming = "before" | "after"
-type PaymentMethod = "cb" | "applepay" | "googlepay" | "paypal" | "virement" | "especes"
-type CancellationDelay = "1h" | "2h" | "4h" | "24h"
-type CancellationFee = "0" | "25" | "50" | "100"
-type WaitTime = "5" | "10" | "15" | "20"
-type WaitFee = "0.25" | "0.50" | "0.75" | "1.00"
-type NoShowFee = "0" | "50" | "100"
-type PaymentDelay = "comptant" | "15j" | "30j"
-
-interface CGVConfig {
-  paymentTiming: PaymentTiming
-  paymentMethods: PaymentMethod[]
-  cancellationDelay: CancellationDelay
-  cancellationFee: CancellationFee
-  waitTime: WaitTime
-  waitFee: WaitFee
-  noShowFee: NoShowFee
-  paymentDelay: PaymentDelay
-}
+// Note: Types moved to data.ts for global persistence and reusability
 
 // ── Default Config ────────────────────────────────────────────
 
@@ -240,9 +233,11 @@ function getPaymentDelayText(delay: PaymentDelay): string {
 // ── Main Component ────────────────────────────────────────────
 
 export function CGVSettings({ onBack }: { onBack: () => void }) {
-  const [mode, setMode] = useState<CGVMode>("configurator")
-  const [config, setConfig] = useState<CGVConfig>(defaultConfig)
-  const [freeText, setFreeText] = useState("")
+  const { enterprise, updateEnterprise } = useNox()
+  
+  const [mode, setMode] = useState<CGVMode>(enterprise.cgvMode || "configurator")
+  const [config, setConfig] = useState<CGVConfig>(enterprise.cgvConfig || defaultConfig)
+  const [freeText, setFreeText] = useState(enterprise.cgvText || "")
   const [importedFile, setImportedFile] = useState<File | null>(null)
 
   const updateConfig = useCallback(<K extends keyof CGVConfig>(key: K, value: CGVConfig[K]) => {
@@ -257,6 +252,31 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
   }
 
   const handleSave = () => {
+    // Determine the text to save based on mode
+    let cgvToSave = ""
+    if (mode === "configurator") {
+      const paymentTimingText = config.paymentTiming === "before" ? "avant" : "après"
+      const methodsText = getPaymentMethodsText(config.paymentMethods)
+      const cancellationDelayText = formatDuration(config.cancellationDelay)
+      const waitTimeText = formatDuration(config.waitTime + "min").replace("min", "")
+      
+      cgvToSave = `1. RÉSERVATION ET PAIEMENT: Paiement exigé ${paymentTimingText} l'exécution de la course (${methodsText}). Délai: ${getPaymentDelayText(config.paymentDelay)}.
+2. ANNULATION: Gratuite jusqu'à ${cancellationDelayText}. Moins de ${cancellationDelayText}: ${config.cancellationFee}% du montant TTC.
+3. ATTENTE: ${waitTimeText} min offertes. Au-delà: ${config.waitFee}€/min.
+4. NO-SHOW: ${config.noShowFee}% du montant TTC.`
+    } else if (mode === "freetext") {
+      cgvToSave = freeText
+    } else if (mode === "import" && importedFile) {
+      cgvToSave = `CGV Importées: ${importedFile.name}`
+    }
+
+    updateEnterprise({
+      cgv: cgvToSave,
+      cgvMode: mode,
+      cgvConfig: config,
+      cgvText: freeText
+    })
+
     toast.success("✓ CGV enregistrées et rattachées à vos futurs documents", {
       duration: 3000,
     })

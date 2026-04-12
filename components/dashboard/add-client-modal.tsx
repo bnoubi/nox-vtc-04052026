@@ -4,7 +4,9 @@ import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { X, UserRoundPlus, Building2, Plus, Trash2, Contact } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { ClientType, ClientContact } from "./data"
+import { useNox } from "./nox-context"
+import { toast } from "sonner"
+import type { ClientType, ClientContact, Client } from "./data"
 
 interface AddClientModalProps {
   open: boolean
@@ -12,6 +14,7 @@ interface AddClientModalProps {
 }
 
 export function AddClientModal({ open, onClose }: AddClientModalProps) {
+  const { addClient } = useNox()
   const [clientType, setClientType] = useState<ClientType>("particulier")
   
   // Particulier fields
@@ -52,8 +55,33 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    
+    const newClient: Client = {
+      id: `client-${Date.now()}`,
+      type: clientType,
+      civilite: clientType === "particulier" ? civilite : undefined,
+      nom: clientType === "particulier" ? nom : undefined,
+      prenom: clientType === "particulier" ? prenom : undefined,
+      raisonSociale: clientType === "professionnel" ? raisonSociale : undefined,
+      siren: clientType === "professionnel" ? siren : undefined,
+      tvaIntra: clientType === "professionnel" ? tvaIntra : undefined,
+      contacts: clientType === "professionnel" ? contacts : undefined,
+      phone,
+      email,
+      billingAddress: { rue, codePostal, ville },
+      trips: 0,
+      lastTrip: "Jamais",
+      notes: "Nouveau client",
+    }
+
+    addClient(newClient)
+    
+    toast.success("Client ajouté", {
+      description: clientType === "particulier" ? `${prenom} ${nom} a été ajouté.` : `${raisonSociale} a été ajouté.`
+    })
+    
     onClose()
-    resetForm()
+    setTimeout(resetForm, 300)
   }
 
   function addContact() {
