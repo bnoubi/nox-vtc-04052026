@@ -412,13 +412,13 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-white/70 ml-1">SIRET</label>
+                  <label className="text-xs font-medium text-white/70 ml-1">SIREN / SIRET</label>
                   <input
                     type="text"
                     value={siret}
                     onChange={(e) => setSiret(e.target.value)}
                     disabled={loadingData || loading}
-                    placeholder="14 chiffres"
+                    placeholder="9 ou 14 chiffres"
                     className="w-full px-4 py-3 rounded-xl bg-secondary/40 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
                   />
                 </div>
@@ -507,7 +507,7 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
 
             <button
               onClick={handleSaveEnterprise}
-              disabled={loading || loadingData || !nomEntreprise || !statutJuridique}
+              disabled={loading || loadingData || !nomEntreprise || !statutJuridique || (siret.trim() !== "" && siret.replace(/\s/g, "").length !== 9 && siret.replace(/\s/g, "").length !== 14)}
               className="w-full h-12 rounded-xl bg-gold text-primary-foreground font-semibold flex items-center justify-center gap-2 hover:bg-gold-light active:scale-[0.98] transition-all disabled:opacity-50"
             >
               {loading ? (

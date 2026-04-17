@@ -59,6 +59,7 @@ import { TarifsSettings } from "./tarifs-settings"
 import { useNox } from "./nox-context"
 import { createClient } from "@/lib/supabase/client"
 import type { Driver, Vehicle, Client, BCDocument, InvoiceDocument, BCStatus, InvoiceStatus } from "./data"
+import { AccountSecurityScreen } from "./account-security/AccountSecurityScreen"
 
 class SettingsErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: React.ReactNode }) {
@@ -88,7 +89,7 @@ const SOLO_LIMIT = 1
 const DUO_LIMIT = 2
 const TEAM_LIMIT = 10
 
-type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security" | "cgv" | "tarifs"
+type SettingsScreen = "main" | "team" | "fleet" | "profile" | "accountSecurity" | "enterprise" | "banking" | "subscription" | "notifications" | "security" | "cgv" | "tarifs"
 
 // ── Animation variants ────────────────────────────────────────
 
@@ -106,7 +107,7 @@ const slideBack = {
 
 // ── Reusable Components ───────────────────────────────────────
 
-function SubScreenHeader({ title, onBack }: { title: string; onBack: () => void }) {
+export function SubScreenHeader({ title, onBack }: { title: string; onBack: () => void }) {
   return (
     <div className="flex items-center gap-3 px-4 pt-2 pb-4">
       <button
@@ -120,7 +121,7 @@ function SubScreenHeader({ title, onBack }: { title: string; onBack: () => void 
   )
 }
 
-function InfoCard({ icon, label, value, masked }: { icon: React.ReactNode; label: string; value: string; masked?: boolean }) {
+export function InfoCard({ icon, label, value, masked }: { icon: React.ReactNode; label: string; value: string; masked?: boolean }) {
   const [visible, setVisible] = useState(!masked)
   return (
     <div className="flex items-center gap-3 p-4">
@@ -142,7 +143,7 @@ function InfoCard({ icon, label, value, masked }: { icon: React.ReactNode; label
   )
 }
 
-function GlassCard({ children, className }: { children: React.ReactNode; className?: string }) {
+export function GlassCard({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={cn(
       "mx-4 rounded-2xl bg-onyx-card/80 backdrop-blur-sm border border-onyx-border/40 overflow-hidden divide-y divide-onyx-border/20",
@@ -153,7 +154,7 @@ function GlassCard({ children, className }: { children: React.ReactNode; classNa
   )
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+export function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <p className="px-4 text-[10px] font-semibold font-heading text-muted-foreground uppercase tracking-[0.15em] mb-2">
       {children}
@@ -161,7 +162,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-interface SettingItem {
+export interface SettingItem {
   icon: React.ReactNode
   label: string
   description?: string
@@ -169,7 +170,7 @@ interface SettingItem {
   screen?: SettingsScreen
 }
 
-function SettingRow({ item, onPress }: { item: SettingItem; onPress?: () => void }) {
+export function SettingRow({ item, onPress }: { item: SettingItem; onPress?: () => void }) {
   const isClickable = !!onPress
   return (
     <button
@@ -577,6 +578,7 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
                   type="text"
                   value={legal.siren}
                   onChange={(e) => setLegal({ ...legal, siren: e.target.value })}
+                  placeholder="9 ou 14 chiffres"
                   className="flex-1 px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground font-mono focus:outline-none focus:border-gold/50 transition-colors"
                 />
               </div>
@@ -1697,7 +1699,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
     : "Non renseignée"
 
   const accountSettings: SettingItem[] = [
-    { icon: <User className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Profil", description: `${userInfo.name}${userInfo.email ? `, ${userInfo.email}` : ""}`, screen: "profile" },
+    { icon: <User className="h-4 w-4" strokeWidth={1.5} />, label: "Compte & Sécurité", description: "Gérer l'accès et les infos", screen: "accountSecurity" },
     { icon: <Building2 className="h-4 w-4" strokeWidth={1.5} />, label: "Profil Entreprise", description: enterpriseDesc, screen: "enterprise" },
     { icon: <FileText className="h-4 w-4" strokeWidth={1.5} />, label: "Mes Conditions de Vente", description: "CGV rattachées à vos documents", screen: "cgv" },
     { icon: <Calculator className="h-4 w-4" strokeWidth={1.5} />, label: "Mes Grilles Tarifaires", description: "Tarifs, suppléments et forfaits", screen: "tarifs" },
@@ -1845,6 +1847,7 @@ export function SettingsTab() {
           {screen === "team" && <TeamScreen key="team" onBack={() => setScreen("main")} />}
           {screen === "fleet" && <FleetScreen key="fleet" onBack={() => setScreen("main")} />}
           {screen === "profile" && <ProfileScreen key="profile" onBack={() => setScreen("main")} />}
+          {screen === "accountSecurity" && <AccountSecurityScreen key="accountSecurity" onBack={() => setScreen("main")} />}
           {screen === "enterprise" && <EnterpriseScreen key="enterprise" onBack={() => setScreen("main")} />}
           {screen === "banking" && <BankingScreen key="banking" onBack={() => setScreen("main")} />}
           {screen === "subscription" && <SubscriptionScreen key="subscription" onBack={() => setScreen("main")} />}

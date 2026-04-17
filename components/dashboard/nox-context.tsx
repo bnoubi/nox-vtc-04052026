@@ -24,8 +24,17 @@ const emptyEnterprise: EnterpriseProfile = {
   phone: "",
 }
 
+export interface UserProfile {
+  prenom: string
+  nom: string
+  email: string
+  phone: string
+}
+
 interface NoxContextType {
   enterprise: EnterpriseProfile
+  userProfile: UserProfile
+  refreshUserProfile: () => Promise<void>
   drivers: Driver[]
   vehicles: Vehicle[]
   clients: Client[]
@@ -90,11 +99,26 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Données métier : état initial VIDE pour tout nouveau compte ───
   const [enterprise, setEnterprise] = useState<EnterpriseProfile>(emptyEnterprise)
+  const [userProfile, setUserProfile] = useState<UserProfile>({ prenom: "", nom: "", email: "", phone: "" })
   const [drivers, setDrivers] = useState<Driver[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [bcs, setBcs] = useState<BCDocument[]>([])
   const [invoices, setInvoices] = useState<InvoiceDocument[]>([])
+
+  const refreshUserProfile = async () => {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data } = await supabase.from("user_accounts").select("prenom, nom, phone").eq("id", user.id).single()
+      setUserProfile({
+        email: user.email || "",
+        prenom: data?.prenom || "",
+        nom: data?.nom || "",
+        phone: data?.phone || ""
+      })
+    }
+  }
 
   // ─── Config fonctionnelle : valeurs par défaut système (tarification) ───
   const [tarifBase, setTarifBase] = useState<TarifBase>(defaultTarifBase)
@@ -140,6 +164,8 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           if (profile.tokens !== undefined) setTokens(profile.tokens)
           if (profile.onboarding_status) setOnboardingStatus(profile.onboarding_status)
         }
+        
+        await refreshUserProfile()
 
         const { data: entProfile } = await supabase
           .from("profiles")
@@ -372,7 +398,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <NoxContext.Provider value={{
-      enterprise, drivers, vehicles, clients, bcs, invoices, tarifBase, forfaits, supplements,
+      enterprise, userProfile, refreshUserProfile, drivers, vehicles, clients, bcs, invoices, tarifBase, forfaits, supplements,
       plan, tokens, onboardingStatus, driverCount, vehicleCount,
       upgrade, addTokens, spendToken,
       updateEnterprise, addDriver, updateDriver, deleteDriver, addVehicle, updateVehicle, deleteVehicle,

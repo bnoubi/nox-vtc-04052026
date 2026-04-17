@@ -2,10 +2,43 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Mail, Lock, Eye, EyeOff, User } from "lucide-react"
+import { Mail, Lock, Eye, EyeOff, User, CheckCircle2, XCircle } from "lucide-react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { Turnstile } from "@marsidev/react-turnstile"
+
+export function isPasswordStrong(pwd: string) {
+  return pwd.length >= 8 && /[A-Z]/.test(pwd) && /[0-9]/.test(pwd) && /[^A-Za-z0-9]/.test(pwd)
+}
+
+export function PasswordStrengthIndicator({ password, show }: { password: string; show: boolean }) {
+  if (!show) return null
+
+  const criteria = [
+    { label: "Au moins 8 caractères", valid: password.length >= 8 },
+    { label: "Au moins une majuscule", valid: /[A-Z]/.test(password) },
+    { label: "Au moins un chiffre", valid: /[0-9]/.test(password) },
+    { label: "Au moins un caractère spécial", valid: /[^A-Za-z0-9]/.test(password) }
+  ]
+
+  return (
+    <div className="mt-2 space-y-1.5 p-3 rounded-xl bg-black/40 border border-[#D4AF37]/20">
+      {criteria.map((c, i) => (
+        <div key={i} className="flex items-center gap-2 text-[10px] font-medium">
+          {c.valid ? (
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" strokeWidth={2} />
+          ) : (
+            <XCircle className="h-3.5 w-3.5 text-red-500/80" strokeWidth={2} />
+          )}
+          <span className={c.valid ? "text-emerald-500" : "text-[#888888]"}>
+            {c.label}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export default function RegisterPage() {
   const [prenom, setPrenom] = useState("")
@@ -19,24 +52,21 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [emailAlreadyExists, setEmailAlreadyExists] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
 
   const router = useRouter()
   const supabase = createClient()
+
+  // On désactive le bouton tant que 1) tout n'est pas rempli, 2) les MDP ne matchent pas, 3) password est trop faible, 4) Captcha n'est pas rempli
+  const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword
+  const canSubmit = prenom && nom && email && isPasswordStrong(password) && passwordsMatch && captchaToken
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setEmailAlreadyExists(false)
 
-    // Validation mot de passe côté client
-    if (password !== confirmPassword) {
-      setError("Les mots de passe ne correspondent pas.")
-      return
-    }
-    if (password.length < 8) {
-      setError("Le mot de passe doit contenir au moins 8 caractères.")
-      return
-    }
+    if (!canSubmit) return
 
     setIsLoading(true)
 
@@ -44,6 +74,7 @@ export default function RegisterPage() {
       email,
       password,
       options: {
+        captchaToken: captchaToken || undefined,
         data: {
           prenom,
           nom,
@@ -55,7 +86,6 @@ export default function RegisterPage() {
     setIsLoading(false)
 
     if (error) {
-      // Mapping des erreurs Supabase en messages lisibles
       const msg = error.message.toLowerCase()
       if (msg.includes("password") && msg.includes("weak")) {
         setError("Mot de passe trop faible. Utilisez au moins 8 caractères avec lettres et chiffres.")
@@ -63,15 +93,14 @@ export default function RegisterPage() {
         setError("Adresse email invalide. Vérifiez le format.")
       } else if (msg.includes("rate limit") || msg.includes("too many")) {
         setError("Trop de tentatives. Veuillez patienter quelques minutes.")
+      } else if (msg.includes("captcha")) {
+        setError("Vérification anti-robot échouée. Veuillez réessayer.")
       } else {
         setError("Une erreur est survenue. Veuillez réessayer.")
       }
       return
     }
 
-    // Détection email déjà existant :
-    // Supabase retourne error:null MAIS identities:[] si l'email est déjà pris
-    // (comportement intentionnel Supabase pour éviter l'énumération d'emails)
     if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
       setEmailAlreadyExists(true)
       return
@@ -80,7 +109,6 @@ export default function RegisterPage() {
     setSuccess(true)
   }
 
-  // Google — actif dans le périmètre MVP
   async function handleGoogleLogin() {
     setError(null)
     setEmailAlreadyExists(false)
@@ -95,10 +123,6 @@ export default function RegisterPage() {
     }
   }
 
-  // Apple & Facebook : hors périmètre MVP — réactivation prévue
-  // function handleSocialLogin(provider: "apple" | "facebook") { ... }
-
-  // Success screen
   if (success) {
     return (
       <motion.div
@@ -130,13 +154,9 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-[#000000] flex flex-col items-center justify-start py-10 relative">
-      {/* Background gradient */}
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.03)_0%,transparent_70%)] pointer-events-none" />
 
-      {/* Content Container */}
       <div className="relative w-full max-w-sm px-6">
-
-        {/* Logo Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -156,7 +176,6 @@ export default function RegisterPage() {
           <p className="mt-3 text-[12px] text-[#D4AF37]/60 tracking-[0.2em] uppercase">Créer un compte</p>
         </motion.div>
 
-        {/* Register Form */}
         <motion.form
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -223,8 +242,7 @@ export default function RegisterPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={8}
-              className="w-full h-14 pl-11 pr-12 rounded-xl bg-[#0A0A0A] border border-[#D4AF37]/30 text-[#F5F5F5] placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors"
+              className={`w-full h-14 pl-11 pr-12 rounded-xl bg-[#0A0A0A] border ${password && !isPasswordStrong(password) ? "border-red-500/50" : "border-[#D4AF37]/30"} text-[#F5F5F5] placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors`}
               style={{ fontSize: "16px" }}
             />
             <button
@@ -239,6 +257,7 @@ export default function RegisterPage() {
               )}
             </button>
           </div>
+          <PasswordStrengthIndicator password={password} show={password.length > 0} />
 
           {/* Confirmation mot de passe */}
           <div className="relative">
@@ -251,7 +270,7 @@ export default function RegisterPage() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              className="w-full h-14 pl-11 pr-12 rounded-xl bg-[#0A0A0A] border border-[#D4AF37]/30 text-[#F5F5F5] placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors"
+              className={`w-full h-14 pl-11 pr-12 rounded-xl bg-[#0A0A0A] border ${confirmPassword && !passwordsMatch ? "border-red-500/50" : "border-[#D4AF37]/30"} text-[#F5F5F5] placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors`}
               style={{ fontSize: "16px" }}
             />
             <button
@@ -266,18 +285,29 @@ export default function RegisterPage() {
               )}
             </button>
           </div>
+          {confirmPassword && !passwordsMatch && (
+            <p className="text-[10px] text-red-400 font-semibold ml-1">Les mots de passe ne correspondent pas.</p>
+          )}
+
+          {/* Turnstile Widget */}
+          <div className="flex justify-center mt-4">
+            <Turnstile
+              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
+              onSuccess={(token) => setCaptchaToken(token)}
+              options={{ theme: 'dark' }}
+            />
+          </div>
 
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isLoading}
-            className="w-full h-14 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 disabled:opacity-60 mt-2"
+            disabled={isLoading || !canSubmit}
+            className="w-full h-14 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
           >
             {isLoading ? "Création en cours..." : "Créer mon compte"}
           </button>
         </motion.form>
 
-        {/* Erreur générique */}
         <AnimatePresence>
           {error && (
             <motion.div
@@ -291,7 +321,6 @@ export default function RegisterPage() {
           )}
         </AnimatePresence>
 
-        {/* Email déjà utilisé — message dédié avec actions */}
         <AnimatePresence>
           {emailAlreadyExists && (
             <motion.div
@@ -324,7 +353,6 @@ export default function RegisterPage() {
           )}
         </AnimatePresence>
 
-        {/* Divider */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -336,14 +364,12 @@ export default function RegisterPage() {
           <div className="flex-1 h-px bg-[#D4AF37]/20" />
         </motion.div>
 
-        {/* Social Login Buttons */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.4 }}
           className="flex items-center justify-center gap-5"
         >
-          {/* Google — Actif */}
           <button
             type="button"
             onClick={handleGoogleLogin}
@@ -357,35 +383,8 @@ export default function RegisterPage() {
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
             </svg>
           </button>
-
-          {/* Apple — Bientôt disponible (hors périmètre MVP) */}
-          <div
-            aria-disabled="true"
-            title="Bientôt disponible"
-            className="relative w-14 h-14 rounded-full bg-[#0A0A0A] border border-white/5 flex items-center justify-center"
-            style={{ cursor: "not-allowed" }}
-          >
-            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="#FFFFFF" style={{ opacity: 0.25, filter: "grayscale(1)" }}>
-              <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-            </svg>
-            <span className="pointer-events-none absolute -bottom-6 left-1/2 -translate-x-1/2 text-[9px] text-[#555555] tracking-wide whitespace-nowrap">Bientôt</span>
-          </div>
-
-          {/* Facebook — Bientôt disponible (hors périmètre MVP) */}
-          <div
-            aria-disabled="true"
-            title="Bientôt disponible"
-            className="relative w-14 h-14 rounded-full bg-[#0A0A0A] border border-white/5 flex items-center justify-center"
-            style={{ cursor: "not-allowed" }}
-          >
-            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="#1877F2" style={{ opacity: 0.25, filter: "grayscale(1)" }}>
-              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-            </svg>
-            <span className="pointer-events-none absolute -bottom-6 left-1/2 -translate-x-1/2 text-[9px] text-[#555555] tracking-wide whitespace-nowrap">Bientôt</span>
-          </div>
         </motion.div>
 
-        {/* Footer Link */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -401,26 +400,6 @@ export default function RegisterPage() {
           </button>
         </motion.div>
       </div>
-
-      {/* Loading Overlay */}
-      <AnimatePresence>
-        {isLoading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#000000]/95 backdrop-blur-sm"
-          >
-            <div className="relative w-12 h-12 mb-5">
-              <div className="absolute inset-0 rounded-full border-2 border-[#D4AF37]/20" />
-              <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#D4AF37] animate-spin" />
-            </div>
-            <p className="text-[13px] text-[#D4AF37]/90 font-light tracking-wide">
-              Création de votre espace NoX...
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   )
 }

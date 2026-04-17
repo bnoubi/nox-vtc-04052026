@@ -11,7 +11,7 @@ import { WalletDrawer } from "./wallet-drawer"
 import { createClient } from "@/lib/supabase/client"
 
 export function DashboardHeader() {
-  const { plan, tokens } = useNox()
+  const { plan, tokens, userProfile } = useNox()
   const { registerWalletOpener } = useNav()
   const isTeam = plan === "TEAM"
   const [walletOpen, setWalletOpen] = useState(false)
@@ -21,7 +21,18 @@ export function DashboardHeader() {
   const [initials, setInitials] = useState("—")
 
   useEffect(() => {
-    async function loadUser() {
+    // 1. Si on a des données profil depuis le context, on les utilise (réactivité assurée)
+    if (userProfile?.prenom || userProfile?.nom) {
+      const first = userProfile.prenom || ""
+      const last = userProfile.nom || ""
+      const combined = `${first} ${last}`.trim()
+      setDisplayName(combined)
+      setInitials(`${first[0] || ""}${last[0] || ""}`.toUpperCase() || "—")
+      return; // On s'arrête ici
+    }
+
+    // 2. Fallback asynchrone si le profil est vide
+    async function loadFallbackUser() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
@@ -47,15 +58,15 @@ export function DashboardHeader() {
         setDisplayName(combined)
         setInitials(`${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase() || "—")
       } else if (user.email) {
-        // Fallback : afficher le début de l'email
+        // Fallback ultime : afficher le début de l'email
         const emailPrefix = user.email.split("@")[0]
         setDisplayName(emailPrefix)
         setInitials(emailPrefix.substring(0, 2).toUpperCase())
       }
     }
 
-    loadUser()
-  }, [])
+    loadFallbackUser()
+  }, [userProfile?.prenom, userProfile?.nom])
 
   const openWallet = useCallback(() => setWalletOpen(true), [])
 
