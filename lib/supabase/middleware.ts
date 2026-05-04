@@ -47,7 +47,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Un utilisateur connecté ne peut pas accéder à /login ou /register
-  if (user && isAuthRoute && !request.nextUrl.pathname.startsWith('/auth/callback') && !request.nextUrl.pathname.startsWith('/auth/reset-password')) {
+  if (user && isAuthRoute && !request.nextUrl.pathname.startsWith('/auth/callback') && !request.nextUrl.pathname.startsWith('/auth/reset-password') && !request.nextUrl.pathname.startsWith('/auth/confirmed')) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)

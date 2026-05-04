@@ -13,6 +13,13 @@ export async function GET(request: NextRequest) {
       console.error('Error exchanging code for session:', error)
       return NextResponse.redirect(new URL('/login?error=Invalid+Link', requestUrl.origin))
     }
+
+    // Confirmation d'inscription : on signe out (l'email est confirmé côté Supabase)
+    // puis on redirige vers la page de succès pour que l'utilisateur se connecte manuellement
+    if (type === 'signup') {
+      await supabase.auth.signOut()
+      return NextResponse.redirect(new URL('/auth/confirmed', requestUrl.origin))
+    }
   }
 
   // Si le flux est de type recovery, on redirige vers l'écran de nouveau mot de passe
@@ -20,6 +27,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/reset-password', requestUrl.origin))
   }
 
-  // Si c'est un email_change ou un signup on redirige à la racine après succès
+  // Si c'est un email_change ou autre, on redirige à la racine après succès
   return NextResponse.redirect(new URL('/', requestUrl.origin))
 }

@@ -14,6 +14,7 @@ export function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [persistentError, setPersistentError] = useState<string | null>(null)
   
   // Nouveaux états pour le flux de reset
   const [isResetMode, setIsResetMode] = useState(false)
@@ -28,6 +29,7 @@ export function AuthScreen() {
     e.preventDefault()
     setIsLoading(true)
     setError(null)
+    setPersistentError(null)
     setForgotSent(false)
 
     const { error } = await supabase.auth.signInWithPassword({
@@ -41,7 +43,14 @@ export function AuthScreen() {
     setTurnstileKey(prev => prev + 1)
 
     if (error) {
-      setError("Identifiants incorrects. Vérifiez votre email et mot de passe.")
+      const msg = error.message.toLowerCase()
+      if (msg.includes("invalid login credentials")) {
+        setError("Email ou mot de passe incorrect.")
+      } else if (msg.includes("email not confirmed")) {
+        setPersistentError("Veuillez confirmer votre email avant de vous connecter.")
+      } else {
+        setError(error.message)
+      }
       setIsLoading(false)
       return
     }
@@ -334,7 +343,7 @@ export function AuthScreen() {
                   onClick={() => router.push("/register")}
                   className="text-[12px] text-[#FFFFFF] hover:text-[#D4AF37] transition-colors duration-300 py-2 px-4"
                 >
-                  Devenir Membre
+                  Pas encore de compte ? Devenir Membre
                 </button>
               </div>
             </motion.form>
@@ -343,14 +352,18 @@ export function AuthScreen() {
 
         {/* Error Feedback */}
         <AnimatePresence>
-          {error && (
+          {(persistentError || error) && (
             <motion.div
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="mt-4 px-4 py-3 rounded-lg text-center text-[12px] tracking-wide leading-relaxed bg-red-500/10 border border-red-500/20 text-red-400"
+              className={`mt-4 px-4 py-3 rounded-lg text-center text-[12px] tracking-wide leading-relaxed ${
+                persistentError
+                  ? "bg-amber-500/10 border border-amber-500/20 text-amber-400"
+                  : "bg-red-500/10 border border-red-500/20 text-red-400"
+              }`}
             >
-              {error}
+              {persistentError || error}
             </motion.div>
           )}
         </AnimatePresence>

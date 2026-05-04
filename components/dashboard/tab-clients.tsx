@@ -29,6 +29,7 @@ import { CreateBCFlow, type BCPrefillClient } from "./create-bc"
 import { useNox } from "./nox-context"
 import { useNav } from "./nav-context"
 import type { Client, ClientContact } from "./data"
+import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 
 // ── Helper: Get display name ─────────────────────────────────
 
@@ -532,10 +533,9 @@ function ClientDetail({
               </div>
               <div>
                 <label className="text-[10px] text-muted-foreground mb-1 block">Adresse</label>
-                <input
-                  type="text"
+                <PlacesAutocomplete
                   value={editRue}
-                  onChange={(e) => setEditRue(e.target.value)}
+                  onChange={setEditRue}
                   placeholder="Rue"
                   className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors mb-2"
                 />

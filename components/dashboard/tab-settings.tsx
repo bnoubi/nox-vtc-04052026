@@ -60,6 +60,93 @@ import { useNox } from "./nox-context"
 import { createClient } from "@/lib/supabase/client"
 import type { Driver, Vehicle, Client, BCDocument, InvoiceDocument, BCStatus, InvoiceStatus } from "./data"
 import { AccountSecurityScreen } from "./account-security/AccountSecurityScreen"
+import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
+
+// ── Helpers : expiration la plus proche ───────────────────────
+
+type ExpiryInfo = { label: string; dateLabel: string; color: string } | null
+
+function getEarliestExpiry(dates: Array<{ label: string; date: string | undefined | null }>): ExpiryInfo {
+  const now = new Date()
+  const parsed: Array<{ label: string; date: Date; diff: number }> = []
+
+  for (const entry of dates) {
+    if (!entry.date) continue
+    const d = new Date(entry.date)
+    if (isNaN(d.getTime())) continue
+    const diff = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    parsed.push({ label: entry.label, date: d, diff })
+  }
+
+  if (parsed.length === 0) return null
+
+  // Sort by date ascending — earliest first
+  parsed.sort((a, b) => a.diff - b.diff)
+  const nearest = parsed[0]
+
+  const day = String(nearest.date.getDate()).padStart(2, '0')
+  const month = String(nearest.date.getMonth() + 1).padStart(2, '0')
+  const year = nearest.date.getFullYear()
+  const dateLabel = `${day}/${month}/${year}`
+
+  let color = '#888888'
+  if (nearest.diff < 7) color = '#a13544'
+  else if (nearest.diff <= 30) color = '#da7101'
+
+  return { label: nearest.label, dateLabel, color }
+}
+
+// ── CardToggle : toggle actif / in-service sur carte ─────────
+
+function CardToggle({
+  value,
+  onToggle,
+}: {
+  value: boolean
+  onToggle: (next: boolean) => Promise<void>
+}) {
+  const [localValue, setLocalValue] = useState(value)
+  const [loading, setLoading] = useState(false)
+
+  // Sync with parent if external changes arrive
+  useEffect(() => { setLocalValue(value) }, [value])
+
+  async function handleTap(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (loading) return
+    const next = !localValue
+    setLocalValue(next) // optimistic
+    setLoading(true)
+    try {
+      await onToggle(next)
+    } catch {
+      setLocalValue(!next) // rollback
+      toast.error('Mise à jour échouée', { duration: 2500 })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleTap}
+      disabled={loading}
+      aria-label={localValue ? 'Désactiver' : 'Activer'}
+      style={{ transition: 'background-color 180ms ease' }}
+      className={cn(
+        'relative shrink-0 w-10 h-[22px] rounded-full focus:outline-none',
+        loading ? 'opacity-60 cursor-default' : 'cursor-pointer',
+        localValue ? 'bg-[#D4AF37]' : 'bg-[#333333]'
+      )}
+    >
+      <motion.div
+        className="absolute top-[3px] w-4 h-4 rounded-full bg-white shadow-sm"
+        animate={{ left: localValue ? 22 : 3 }}
+        transition={{ duration: 0.18, ease: 'easeInOut' }}
+      />
+    </button>
+  )
+}
 
 class SettingsErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: React.ReactNode }) {
@@ -412,6 +499,9 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
     siren: enterprise.siren || "",
     tvaIntra: enterprise.tva || "",
     adresse: enterprise.adresse || "",
+    complementAdresse: enterprise.complementAdresse || "",
+    codePostal: enterprise.zipCode || "",
+    ville: enterprise.city || "",
   })
 
   // Conformité VTC
@@ -439,6 +529,9 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
       siren: legal.siren,
       tva: legal.tvaIntra,
       adresse: legal.adresse,
+      complementAdresse: legal.complementAdresse,
+      zipCode: legal.codePostal,
+      city: legal.ville,
       brandColor,
       logo: logoPreview || undefined,
       registreVTC: compliance.registreVTC,
@@ -608,11 +701,51 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
                 <div className="w-8 h-8 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
                   <MapPin className="h-3.5 w-3.5 text-gold" strokeWidth={1.5} />
                 </div>
+                <PlacesAutocomplete
+                  value={legal.adresse}
+                  onChange={(val) => setLegal({ ...legal, adresse: val })}
+                  onPostalCode={(val) => setLegal(prev => ({ ...prev, codePostal: val }))}
+                  onCity={(val) => setLegal(prev => ({ ...prev, ville: val }))}
+                  placeholder="Adresse du siège social"
+                  className="flex-1 px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors"
+                />
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Complément d'adresse</p>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
+                  <MapPin className="h-3.5 w-3.5 text-gold/50" strokeWidth={1.5} />
+                </div>
                 <input
                   type="text"
-                  value={legal.adresse}
-                  onChange={(e) => setLegal({ ...legal, adresse: e.target.value })}
+                  value={legal.complementAdresse}
+                  onChange={(e) => setLegal({ ...legal, complementAdresse: e.target.value })}
+                  placeholder="Bâtiment, étage... (Optionnel)"
                   className="flex-1 px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-[1fr_2fr] gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Code postal</p>
+                <input
+                  type="text"
+                  value={legal.codePostal}
+                  onChange={(e) => setLegal({ ...legal, codePostal: e.target.value })}
+                  placeholder="75000"
+                  maxLength={5}
+                  className="w-full px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors"
+                />
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Ville</p>
+                <input
+                  type="text"
+                  value={legal.ville}
+                  onChange={(e) => setLegal({ ...legal, ville: e.target.value })}
+                  placeholder="Paris"
+                  className="w-full px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors"
                 />
               </div>
             </div>
@@ -1192,27 +1325,46 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
   }
 
   function handleDriverSave(data: any) {
+    console.log('DEBUG UI: handleDriverSave called, data=', data, 'drawerDriver=', drawerDriver)
     if (drawerDriver) {
       // Edit mode
+      console.log('DEBUG UI: calling updateDriver id=', drawerDriver.id)
       updateDriver(drawerDriver.id, {
-        name: `${data.prenom} ${data.nom}`,
-        carteProExpiration: data.expirationCarte,
-        apacExpiration: data.apacExpiration,
-        rcProExpiration: data.rcProExpiration
+        name: `${data.prenom} ${data.nom}`.trim(),
+        carteProNumber: data.cartePro || null,
+        carteProExpiration: data.expirationCarte || null,
+        apacNumber: data.apacNumber || null,
+        apacExpiration: data.apacExpiration || null,
+        permisNumber: data.permisNumber || null,
+        permisExpiration: data.permisExpiration || null,
+        rcProNumber: data.rcProNumber || null,
+        rcProExpiration: data.rcProExpiration || null,
+        phone: data.phone || null,
+        email: data.email || null
       })
+      setDrawerDriver(null)
     } else {
-      // Add mode
+      // Add mode — id omis : Supabase génère un UUID réel
       const newDriver: Driver = {
-        id: `drv-${Date.now()}`,
-        name: `${data.prenom} ${data.nom}`,
-        initials: (data.prenom[0] + data.nom[0]).toUpperCase(),
-        carteProExpiration: data.expirationCarte,
-        apacExpiration: data.apacExpiration,
-        rcProExpiration: data.rcProExpiration
+        id: '',
+        name: `${data.prenom} ${data.nom}`.trim(),
+        initials: ((data.prenom?.[0] || '') + (data.nom?.[0] || '')).toUpperCase(),
+        online: true, // actif = true par défaut à la création
+        carteProNumber: data.cartePro || '',
+        carteProExpiration: data.expirationCarte || '',
+        apacNumber: data.apacNumber || '',
+        apacExpiration: data.apacExpiration || '',
+        permisNumber: data.permisNumber || '',
+        permisExpiration: data.permisExpiration || '',
+        rcProNumber: data.rcProNumber || '',
+        rcProExpiration: data.rcProExpiration || '',
+        phone: data.phone || '',
+        email: data.email || ''
       }
+      console.log('DEBUG UI: calling addDriver with', newDriver)
       addDriver(newDriver)
+      setDrawerDriver(null)
     }
-    setDrawerDriver(null)
   }
 
   function handleDriverDelete(driver: Driver) {
@@ -1234,45 +1386,78 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
           )}
         </div>
         <AnimatePresence mode="popLayout">
-          {visibleDrivers.map((driver, index) => (
-            <motion.div
-              key={driver.id}
-              onClick={() => setDrawerDriver(driver)}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: index * 0.05, ease: [0.4, 0, 0.2, 1] }}
-              className="relative flex items-center gap-3 p-4 min-h-[56px] rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
-            >
-              {/* Compliance Status Dot */}
-              <div className="absolute top-3 right-3">
-                <ComplianceDot status={getDriverComplianceStatus(driver.carteProExpiration, driver.apacExpiration, driver.rcProExpiration)} />
-              </div>
-              <div className="w-10 h-10 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0 group-hover:bg-gold/25 transition-colors">
-                <span className="text-sm font-bold text-gold">{driver.initials}</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">{driver.name}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Chauffeur VTC</p>
-              </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-gold/50" strokeWidth={1.5} />
-            </motion.div>
-          ))}
+          {visibleDrivers.map((driver, index) => {
+            const expiryInfo = getEarliestExpiry([
+              { label: 'Carte VTC', date: driver.carteProExpiration },
+              { label: 'APAC', date: driver.apacExpiration },
+              { label: 'Permis', date: driver.permisExpiration },
+              { label: 'RC Pro', date: driver.rcProExpiration },
+            ])
+            return (
+              <motion.div
+                key={driver.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: index * 0.05, ease: [0.4, 0, 0.2, 1] }}
+                className="relative rounded-2xl bg-onyx-card border border-onyx-border/50 overflow-hidden hover:border-gold/30 hover:bg-gold/5 transition-all duration-150 group"
+              >
+                {/* Compliance Status Dot — position inchangée */}
+                <div className="absolute top-3 right-3 z-10">
+                  <ComplianceDot status={getDriverComplianceStatus(driver.carteProExpiration, driver.apacExpiration, driver.rcProExpiration, driver.permisExpiration)} />
+                </div>
+
+                {/* Zone tap → ouvre la fiche */}
+                <div
+                  onClick={() => setDrawerDriver(driver)}
+                  className="flex items-center gap-3 px-4 pt-3.5 pb-1.5 cursor-pointer"
+                >
+                  <div className="w-10 h-10 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0 group-hover:bg-gold/25 transition-colors">
+                    <span className="text-sm font-bold text-gold">{driver.initials}</span>
+                  </div>
+                  <div className="flex-1 min-w-0 pr-6">
+                    <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors truncate">{driver.name}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Chauffeur VTC</p>
+                  </div>
+                </div>
+
+                {/* Ligne infos expiration + toggle */}
+                <div className="flex items-center justify-between px-4 pb-3.5">
+                  <div className="pl-[52px]">
+                    {expiryInfo ? (
+                      <p
+                        className="text-[11px] font-medium truncate"
+                        style={{ color: expiryInfo.color }}
+                      >
+                        {expiryInfo.label} · expire {expiryInfo.dateLabel}
+                      </p>
+                    ) : (
+                      <p className="text-[11px]" style={{ color: '#888888' }}>Aucun document renseigné</p>
+                    )}
+                  </div>
+                  <CardToggle
+                    value={driver.online}
+                    onToggle={async (next) => { await updateDriver(driver.id, { online: next }) }}
+                  />
+                </div>
+              </motion.div>
+            )
+          })}
         </AnimatePresence>
         {plan !== "TEAM" && <LockedSlot type="driver" onUpgrade={handleUpgrade} />}
       </div>
 
-      {/* FAB - Add Driver (locked if full) */}
+      {/* FAB - Add Driver : cadenas si limite atteinte, identique au dashboard */}
       <button
         onClick={() => isFull ? setShowLimitAlert(true) : setDrawerDriver(undefined)}
         className={cn(
           "absolute bottom-6 right-4 w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-all z-30",
           isFull
-            ? "bg-onyx-card border border-gold/30"
+            ? "bg-onyx-card border border-onyx-border/60 cursor-pointer"
             : "bg-gold gold-glow hover:bg-gold-light"
         )}
       >
         {isFull
-          ? <Lock className="h-5 w-5 text-gold" strokeWidth={1.5} />
+          ? <Lock className="h-5 w-5 text-zinc-400" strokeWidth={1.5} />
           : <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2} />
         }
       </button>
@@ -1326,27 +1511,42 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   }
 
   function handleVehicleSave(data: any) {
+    console.log('DEBUG UI: handleVehicleSave called, data=', data, 'drawerVehicle=', drawerVehicle)
     if (drawerVehicle) {
-      // Edit mode
+      // Edit mode — mapping sur la nouvelle interface Vehicle
+      console.log('DEBUG UI: calling updateVehicle id=', drawerVehicle.id)
       updateVehicle(drawerVehicle.id, {
-        model: data.model,
-        plate: data.plate,
-        assuranceTransportExpiration: data.assuranceTransportExpiration,
-        controleTechniqueExpiration: data.controleTechniqueExpiration
+        marque: data.brand || null,
+        modele: data.model || null,
+        immatriculation: data.plate || null,
+        inService: data.inService ?? true,
+        date_mise_en_circulation: data.datePremiereImmat || null,
+        type_energie: data.motorType || null,
+        category: data.category || null,
+        color: data.color === 'custom' ? (data.customColor || null) : (data.color || null),
+        assuranceTransportExpiration: data.assuranceTransportExpiration || null,
+        controleTechniqueExpiration: data.expirationCT || null
       })
+      setDrawerVehicle(null)
     } else {
-      // Add mode
+      // Add mode — id omis : Supabase génère un UUID réel
       const newVehicle: Vehicle = {
-        id: `vhc-${Date.now()}`,
-        model: data.model,
-        plate: data.plate,
-        type: "Berline", // Par défaut
-        assuranceTransportExpiration: data.assuranceTransportExpiration,
-        controleTechniqueExpiration: data.controleTechniqueExpiration
+        id: '',
+        marque: data.brand || '',
+        modele: data.model || '',
+        immatriculation: data.plate || '',
+        inService: true,
+        date_mise_en_circulation: data.datePremiereImmat || '',
+        type_energie: data.motorType || 'essence',
+        category: data.category || 'berline',
+        color: data.color === 'custom' ? (data.customColor || '') : (data.color || ''),
+        assuranceTransportExpiration: data.assuranceTransportExpiration || '',
+        controleTechniqueExpiration: data.expirationCT || ''
       }
+      console.log('DEBUG UI: calling addVehicle with', newVehicle)
       addVehicle(newVehicle)
+      setDrawerVehicle(null)
     }
-    setDrawerVehicle(null)
   }
 
   function handleVehicleDelete(vehicle: Vehicle) {
@@ -1368,45 +1568,76 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
           )}
         </div>
         <AnimatePresence mode="popLayout">
-          {visibleVehicles.map((vehicle, index) => (
-            <motion.div
-              key={vehicle.id}
-              onClick={() => setDrawerVehicle(vehicle)}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: index * 0.05, ease: [0.4, 0, 0.2, 1] }}
-              className="relative flex items-center gap-3 p-4 min-h-[56px] rounded-2xl bg-onyx-card border border-onyx-border/50 cursor-pointer hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all duration-150 group"
-            >
-              {/* Compliance Status Dot */}
-              <div className="absolute top-3 right-3">
-                <ComplianceDot status={getVehicleComplianceStatus(vehicle.assuranceTransportExpiration, vehicle.controleTechniqueExpiration)} />
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0 group-hover:bg-gold/25 transition-colors">
-                <Car className="h-4 w-4 text-gold" strokeWidth={1.5} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">{vehicle.model}</p>
-                <p className="text-[11px] font-mono text-muted-foreground mt-0.5">{vehicle.plate}</p>
-              </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-gold/50" strokeWidth={1.5} />
-            </motion.div>
-          ))}
+          {visibleVehicles.map((vehicle, index) => {
+            const expiryInfo = getEarliestExpiry([
+              { label: 'Assurance', date: vehicle.assuranceTransportExpiration },
+              { label: 'CT', date: vehicle.controleTechniqueExpiration },
+            ])
+            return (
+              <motion.div
+                key={vehicle.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: index * 0.05, ease: [0.4, 0, 0.2, 1] }}
+                className="relative rounded-2xl bg-onyx-card border border-onyx-border/50 overflow-hidden hover:border-gold/30 hover:bg-gold/5 transition-all duration-150 group"
+              >
+                {/* Compliance Status Dot — position inchangée */}
+                <div className="absolute top-3 right-3 z-10">
+                  <ComplianceDot status={getVehicleComplianceStatus(vehicle.assuranceTransportExpiration, vehicle.controleTechniqueExpiration)} />
+                </div>
+
+                {/* Zone tap → ouvre la fiche */}
+                <div
+                  onClick={() => setDrawerVehicle(vehicle)}
+                  className="flex items-center gap-3 px-4 pt-3.5 pb-1.5 cursor-pointer"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0 group-hover:bg-gold/25 transition-colors">
+                    <Car className="h-4 w-4 text-gold" strokeWidth={1.5} />
+                  </div>
+                  <div className="flex-1 min-w-0 pr-6">
+                    <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors truncate">{vehicle.marque} {vehicle.modele}</p>
+                    <p className="text-[11px] font-mono text-muted-foreground mt-0.5">{vehicle.immatriculation}</p>
+                  </div>
+                </div>
+
+                {/* Ligne infos expiration + toggle */}
+                <div className="flex items-center justify-between px-4 pb-3.5">
+                  <div className="pl-[52px]">
+                    {expiryInfo ? (
+                      <p
+                        className="text-[11px] font-medium truncate"
+                        style={{ color: expiryInfo.color }}
+                      >
+                        {expiryInfo.label} · expire {expiryInfo.dateLabel}
+                      </p>
+                    ) : (
+                      <p className="text-[11px]" style={{ color: '#888888' }}>Aucun document renseigné</p>
+                    )}
+                  </div>
+                  <CardToggle
+                    value={vehicle.inService}
+                    onToggle={async (next) => { await updateVehicle(vehicle.id, { inService: next }) }}
+                  />
+                </div>
+              </motion.div>
+            )
+          })}
         </AnimatePresence>
         {plan !== "TEAM" && <LockedSlot type="vehicle" onUpgrade={handleUpgrade} />}
       </div>
 
-      {/* FAB - Add Vehicle (locked if full) */}
+      {/* FAB - Add Vehicle : cadenas si limite atteinte, identique au dashboard */}
       <button
         onClick={() => isFull ? setShowLimitAlert(true) : setDrawerVehicle(undefined)}
         className={cn(
           "absolute bottom-6 right-4 w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-all z-30",
           isFull
-            ? "bg-onyx-card border border-gold/30"
+            ? "bg-onyx-card border border-onyx-border/60 cursor-pointer"
             : "bg-gold gold-glow hover:bg-gold-light"
         )}
       >
         {isFull
-          ? <Lock className="h-5 w-5 text-gold" strokeWidth={1.5} />
+          ? <Lock className="h-5 w-5 text-zinc-400" strokeWidth={1.5} />
           : <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2} />
         }
       </button>

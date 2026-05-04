@@ -6,8 +6,13 @@ export interface Driver {
   carteProExpiration: string // ISO date string
   carteProNumber?: string // Numero de carte professionnelle VTC
   apacExpiration: string // Attestation Préfectorale - ISO date string
+  apacNumber?: string
   rcProExpiration: string // RC Professionnelle - ISO date string
+  rcProNumber?: string
   phone?: string
+  email?: string
+  permisNumber?: string
+  permisExpiration?: string
 }
 
 // Forfait tarifaire (trajets fixes)
@@ -238,15 +243,27 @@ export type MotorType = "diesel" | "essence" | "hybride" | "electrique"
 export type VehicleCategory = "citadine" | "berline" | "suv" | "van"
 
 export interface Vehicle {
+  // Supabase: vehicles.id (UUID)
   id: string
-  model: string
-  plate: string
+  // Supabase: vehicles.marque
+  marque?: string
+  // Supabase: vehicles.modele
+  modele: string
+  // Supabase: vehicles.immatriculation
+  immatriculation: string
+  // Supabase: vehicles.in_service
   inService: boolean
-  datePremiereImmat: string // Date de première immatriculation - ISO date string
-  motorType: MotorType
+  // Supabase: vehicles.date_mise_en_circulation
+  date_mise_en_circulation: string // Date de première immatriculation - ISO date string
+  // Supabase: vehicles.type_energie
+  type_energie: MotorType
+  // Supabase: vehicles.category
   category: VehicleCategory
+  // Supabase: vehicles.color
   color: string
+  // Supabase: vehicles.assurance_transport_expiration
   assuranceTransportExpiration: string // Assurance Transport à Titre Onéreux - ISO date string
+  // Supabase: vehicles.controle_technique_expiration
   controleTechniqueExpiration: string // ISO date string
 }
 

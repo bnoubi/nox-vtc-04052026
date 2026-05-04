@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   X, ChevronLeft, ChevronDown, FileText, Link2, MessageSquare, Phone, Copy, Check,
@@ -509,12 +510,12 @@ export function CreateBCFlow({ open, onClose, prefillClient }: CreateBCFlowProps
           <Section title="Trajet" icon={Navigation}>
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center"><MapPin className="h-3.5 w-3.5 text-green-400" /></div>
-              <input type="text" value={departure} onChange={e => setDeparture(e.target.value)} placeholder="Adresse de départ"
+              <PlacesAutocomplete value={departure} onChange={setDeparture} placeholder="Adresse de départ"
                 className="flex-1 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50" style={{ fontSize: "16px" }} />
             </div>
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-full bg-red-500/20 flex items-center justify-center"><MapPin className="h-3.5 w-3.5 text-red-400" /></div>
-              <input type="text" value={arrival} onChange={e => setArrival(e.target.value)} placeholder="Adresse d'arrivée"
+              <PlacesAutocomplete value={arrival} onChange={setArrival} placeholder="Adresse d'arrivée"
                 className="flex-1 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50" style={{ fontSize: "16px" }} />
             </div>
             <div className="grid grid-cols-2 gap-3">

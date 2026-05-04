@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { useNox } from "./nox-context"
 import { toast } from "sonner"
 import type { ClientType, ClientContact, Client } from "./data"
+import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 
 interface AddClientModalProps {
   open: boolean
@@ -425,10 +426,9 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
                     <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
                       Rue et Numéro
                     </label>
-                    <input
-                      type="text"
+                    <PlacesAutocomplete
                       value={rue}
-                      onChange={(e) => setRue(e.target.value)}
+                      onChange={setRue}
                       placeholder="8 Rue de Rivoli"
                       className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
                     />

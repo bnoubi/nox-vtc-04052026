@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Building2, ArrowRight, ShieldCheck, User, Save, CheckCircle2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 
 export function OnboardingComponent({ onComplete }: { onComplete: () => void }) {
   const [step, setStep] = useState(0)
@@ -454,12 +455,12 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
 
               {/* Ligne 4 : Adresse */}
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-white/70 ml-1">Adresse du siège</label>
-                <input
-                  type="text"
+                <label className="text-xs font-medium text-white/70 ml-1">Adresse du siège social</label>
+                <PlacesAutocomplete
                   value={adresse}
-                  onChange={(e) => setAdresse(e.target.value)}
-                  disabled={loadingData || loading}
+                  onChange={setAdresse}
+                  onPostalCode={setCodePostal}
+                  onCity={setVille}
                   placeholder="123 avenue des Champs"
                   className="w-full px-4 py-3 rounded-xl bg-secondary/40 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
                 />

@@ -114,18 +114,17 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
   useEffect(() => {
     if (open) {
       if (vehicle) {
-        // Edit mode: pre-fill
-        const parts = vehicle.model.split(" ")
-        setBrand(parts[0] || "")
-        setModel(parts.slice(1).join(" ") || vehicle.model)
-        setPlate(vehicle.plate)
-        setDatePremiereImmat(vehicle.datePremiereImmat || "")
-        setMotorType(vehicle.motorType || "diesel")
+        // Edit mode: pre-fill avec les nouveaux noms de champs
+        setBrand(vehicle.marque || "")
+        setModel(vehicle.modele || "")
+        setPlate(vehicle.immatriculation || "")
+        setDatePremiereImmat(vehicle.date_mise_en_circulation || "")
+        setMotorType(vehicle.type_energie || "diesel")
         setCategory(vehicle.category || "berline")
         // Check if color is a predefined one or custom
         const isPredefined = VEHICLE_COLORS.some(c => c.value === vehicle.color)
         if (isPredefined) {
-          setColor(vehicle.color)
+          setColor(vehicle.color || "#0F0F0F")
           setCustomColor("")
         } else {
           setColor("custom")

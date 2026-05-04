@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { X, AlertTriangle, CheckCircle2, Clock, ShieldCheck, User, Car } from "lucide-react"
+import { X, AlertTriangle, CheckCircle2, Clock, ShieldCheck, User, Car, Building2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { type MotorType, PLAN_LIMITS } from "./data"
 import { useNox } from "./nox-context"
@@ -12,25 +12,27 @@ interface DocumentIssue {
   label: string
   daysRemaining: number
   documentType: string
-  entityType: "driver" | "vehicle"
+  entityType: "driver" | "vehicle" | "enterprise"
   entityId: string
   field: string
 }
 
 function getScoreColor(score: number): string {
-  if (score === -1) return "#333333" // Gray for N/A
-  if (score >= 100) return "#10B981" // Emerald green
-  if (score >= 70) return "#D4AF37" // Gold/Amber
-  if (score > 0) return "#F59E0B" // Amber/Orange
-  return "#EF4444" // Red - Score 0
+  if (score >= 95) return "#D4AF37" // Or/Gold
+  if (score >= 80) return "#3B82F6" // Bleu
+  if (score >= 60) return "#22C55E" // Vert
+  if (score >= 40) return "#EAB308" // Jaune
+  if (score >= 20) return "#F97316" // Orange
+  return "#EF4444" // Rouge
 }
 
 function getScoreMessage(score: number): string {
-  if (score === -1) return "Non renseigné. Ajoutez des chauffeurs/véhicules."
-  if (score >= 100) return "Votre flotte est en parfaite conformité."
-  if (score >= 70) return "Attention : Renouvellement proche."
-  if (score > 0) return "Urgent : Document(s) expiré(s) !"
-  return "Critique : Score NoX à 0 !"
+  if (score >= 95) return "Excellence NoX"
+  if (score >= 80) return "Profil solide"
+  if (score >= 60) return "Profil opérationnel"
+  if (score >= 40) return "En progression, éléments critiques manquants"
+  if (score >= 20) return "Base créée, conformité insuffisante"
+  return "Profil non sécurisé"
 }
 
 function calculateVehicleAge(datePremiereImmat: string): number {
@@ -66,158 +68,150 @@ interface GuardianScoreProps {
 
 export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
   const [showDetails, setShowDetails] = useState(false)
-  const { drivers, vehicles, plan } = useNox()
+  const { drivers, vehicles, plan, enterprise, userProfile } = useNox()
   const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.SOLO
 
-  // Get visible drivers/vehicles based on plan limits
   const visibleDrivers = drivers.slice(0, limits.drivers)
   const visibleVehicles = vehicles.slice(0, limits.vehicles)
 
-  // Calculate compliance score and issues
-  const { score, issues } = useMemo(() => {
+  function getValidityScore(dateStr: string | undefined | null, weight: number): number {
+    if (!dateStr) return 0
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const targetDate = new Date(dateStr)
+    if (isNaN(targetDate.getTime())) return 0
+    if (targetDate.getTime() < today.getTime()) return weight * 0.2 // expiré => 20%
+    return weight
+  }
+
+  const { score, blocks, issues } = useMemo(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const issuesList: DocumentIssue[] = []
-    let hasExpired = false
-    let hasWarning = false
-    let hasCritical = false
 
-    // Helper to check date
-    function checkDate(dateStr: string, label: string, docType: string, entityType: "driver" | "vehicle", entityId: string, field: string) {
+    function checkDate(dateStr: string | undefined | null, label: string, docType: string, entityType: "driver" | "vehicle" | "enterprise", entityId: string, field: string) {
+      if (!dateStr) {
+         issuesList.push({ type: "critical", label, daysRemaining: 0, documentType: `${docType} non renseigné`, entityType, entityId, field })
+         return;
+      }
       const expDate = new Date(dateStr)
-      const diffTime = expDate.getTime() - today.getTime()
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      if (isNaN(expDate.getTime())) return;
+      const diffDays = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 
       if (diffDays < 0) {
-        hasExpired = true
-        issuesList.push({
-          type: "expired",
-          label,
-          daysRemaining: diffDays,
-          documentType: docType,
-          entityType,
-          entityId,
-          field,
-        })
+        issuesList.push({ type: "expired", label, daysRemaining: diffDays, documentType: docType, entityType, entityId, field })
       } else if (diffDays <= 30) {
-        hasWarning = true
-        issuesList.push({
-          type: "warning",
-          label,
-          daysRemaining: diffDays,
-          documentType: docType,
-          entityType,
-          entityId,
-          field,
-        })
+        issuesList.push({ type: "warning", label, daysRemaining: diffDays, documentType: docType, entityType, entityId, field })
       }
     }
 
-    // Check driver documents
-    visibleDrivers.forEach((driver: any) => {
-      // Carte Pro
-      checkDate(driver.carteProExpiration, `Carte Pro - ${driver.name}`, "Carte Pro VTC", "driver", driver.id, "carteProExpiration")
-      
-      // APAC
-      if (driver.apacExpiration) {
-        checkDate(driver.apacExpiration, `APAC - ${driver.name}`, "Attestation Préfectorale", "driver", driver.id, "apacExpiration")
-      }
-      
-      // RC Pro
-      if (driver.rcProExpiration) {
-        checkDate(driver.rcProExpiration, `RC Pro - ${driver.name}`, "RC Professionnelle", "driver", driver.id, "rcProExpiration")
-      }
-    })
-
-    // Check vehicle documents and age
-    visibleVehicles.forEach((vehicle: any) => {
-      // Assurance Transport à Titre Onéreux
-      checkDate(vehicle.assuranceTransportExpiration, `Assurance - ${vehicle.plate}`, "Assurance Transport à Titre Onéreux", "vehicle", vehicle.id, "assuranceTransportExpiration")
-      
-      // Contrôle Technique
-      checkDate(vehicle.controleTechniqueExpiration, `CT - ${vehicle.plate}`, "Contrôle Technique", "vehicle", vehicle.id, "controleTechniqueExpiration")
-      
-      // Age check for thermal vehicles (5/6/7 algorithm)
-      const vehicleAge = calculateVehicleAge(vehicle.datePremiereImmat)
-      const ageStatus = getVehicleAgeStatus(vehicleAge, vehicle.motorType)
-      
-      if (ageStatus.status === "critical") {
-        hasCritical = true
-        issuesList.push({
-          type: "critical",
-          label: `${vehicle.model} - ${vehicle.plate}`,
-          daysRemaining: 0,
-          documentType: `Véhicule thermique >= 7 ans (${vehicleAge} ans)`,
-          entityType: "vehicle",
-          entityId: vehicle.id,
-          field: "datePremiereImmat",
-        })
-      } else if (ageStatus.status === "alert") {
-        hasExpired = true
-        issuesList.push({
-          type: "expired",
-          label: `${vehicle.model} - ${vehicle.plate}`,
-          daysRemaining: 0,
-          documentType: `Véhicule thermique 6-7 ans (${vehicleAge} ans)`,
-          entityType: "vehicle",
-          entityId: vehicle.id,
-          field: "datePremiereImmat",
-        })
-      } else if (ageStatus.status === "warning") {
-        hasWarning = true
-        issuesList.push({
-          type: "warning",
-          label: `${vehicle.model} - ${vehicle.plate}`,
-          daysRemaining: 0,
-          documentType: `Véhicule thermique 5-6 ans (${vehicleAge} ans)`,
-          entityType: "vehicle",
-          entityId: vehicle.id,
-          field: "datePremiereImmat",
-        })
-      }
-    })
-
-    // Calculate score
-    // Score = 0 si:
-    // - APAC expiré
-    // - RC Pro expiré
-    // - Assurance Transport expiré
-    // - Véhicule thermique >= 7 ans
-    let calculatedScore = 100
+    // === BLOCK 1: Profil Entreprise (20 pts) ===
+    let b1Score = 0;
+    // Complétude (6 pts) : On utilise les champs réels du userProfile et enterprise (pas d'invention)
+    if (userProfile?.prenom && userProfile?.nom) b1Score += 2;
+    if (userProfile?.phone || enterprise?.phone) b1Score += 1;
+    // Le minimum "profil entreprise" est basé sur la présence des coordonnées de base
+    if (enterprise?.name && enterprise?.siren && enterprise?.adresse) b1Score += 3;
     
-    if (visibleDrivers.length === 0 && visibleVehicles.length === 0) {
-      calculatedScore = -1
-    } else if (hasCritical) {
-      calculatedScore = 0
-    } else if (hasExpired) {
-      calculatedScore = 40
-    } else if (hasWarning) {
-      calculatedScore = 80
+    // Validité (14 pts) : Registre VTC (seule composante réglementaire directe entreprise)
+    if (enterprise?.registreVTC) b1Score += 5;
+    if (enterprise?.dateRegistre) {
+       b1Score += getValidityScore(enterprise.dateRegistre, 9);
+       checkDate(enterprise.dateRegistre, "Entreprise", "Registre VTC", "enterprise", "1", "dateRegistre");
+    } else {
+       checkDate(null, "Entreprise", "Registre VTC", "enterprise", "1", "dateRegistre");
     }
 
-    // Check specifically for expired APAC, RC Pro, Assurance - these set score to 0
-    const criticalExpired = issuesList.some(issue => 
-      issue.type === "expired" && 
-      (issue.documentType === "Attestation Préfectorale" || 
-       issue.documentType === "RC Professionnelle" || 
-       issue.documentType === "Assurance Transport à Titre Onéreux")
-    )
-    
-    if (criticalExpired && calculatedScore !== -1) {
-      calculatedScore = 0
-    }
+    // === BLOCK 2: Chauffeurs Actifs (40 pts max) ===
+    let b2Total = 0;
+    // Ne calculer que sur les chauffeurs ACTIFS (champ TS: online = boolean)
+    const activeDrivers = visibleDrivers.filter(d => Boolean(d.online));
+    activeDrivers.forEach((d: any) => {
+       let dScore = 0; // Sur 100
+       
+       // Complétude = 30 pts
+       // Redistribution propre car "numero_apac" et "numero_rc_pro" n'existent pas encore dans l'interface TS Driver actuelle.
+       // Identity(prenom/nom) = ~10, Telephone = ~5, Carte VTC = ~15 (somme = 30 points)
+       if (d.name) dScore += 10;
+       if (d.phone) dScore += 5;
+       if (d.carteProNumber) dScore += 15;
 
-    // Sort issues: critical first, then expired, then by days remaining
+       // Validité = 70 pts
+       // Champs réels dispos: carteProExpiration, apacExpiration, rcProExpiration
+       // date_expiration_carte_vtc valide = 30pts
+       dScore += getValidityScore(d.carteProExpiration, 30);
+       checkDate(d.carteProExpiration, `Carte VTC - ${d.name}`, "Carte VTC", "driver", d.id, "carteProExpiration");
+
+       // date_expiration_apac valide = 25pts
+       dScore += getValidityScore(d.apacExpiration, 25);
+       checkDate(d.apacExpiration, `APAC - ${d.name}`, "Attest. Préfectorale (APAC)", "driver", d.id, "apacExpiration");
+
+       // date_expiration_rc_pro valide = 15pts
+       dScore += getValidityScore(d.rcProExpiration, 15);
+       checkDate(d.rcProExpiration, `RC Pro - ${d.name}`, "RC Pro", "driver", d.id, "rcProExpiration");
+
+       b2Total += dScore;
+    });
+    // Moyenne des chauffeurs actifs, ramenée sur 40 (dScore sur 100 * 0.40 = 40 max)
+    const b2Score = activeDrivers.length > 0 ? (b2Total / activeDrivers.length) * 0.4 : 0;
+
+    // === BLOCK 3: Véhicules (40 pts max) ===
+    let b3Total = 0;
+    visibleVehicles.forEach((v: any) => {
+       let vScore = 0; // Sur 100
+       
+       // Complétude = 30 pts (6 champs à 5 pts - on adapte pour category)
+       if (v.marque) vScore += 5;
+       if (v.modele) vScore += 5;
+       if (v.type_energie) vScore += 5;
+       if (v.immatriculation) vScore += 5;
+       if (v.date_mise_en_circulation) vScore += 5;
+       if (v.category) vScore += 5;
+
+       // Validité = 70 pts (Age: 25, Assurance: 25, CT: 20)
+       vScore += getValidityScore(v.assuranceTransportExpiration, 25);
+       checkDate(v.assuranceTransportExpiration, `Assurance - ${v.immatriculation || v.modele}`, "Assurance au Tiers + ATO", "vehicle", v.id, "assuranceTransportExpiration");
+
+       vScore += getValidityScore(v.controleTechniqueExpiration, 20);
+       checkDate(v.controleTechniqueExpiration, `CT - ${v.immatriculation || v.modele}`, "Contrôle Technique VTC", "vehicle", v.id, "controleTechniqueExpiration");
+
+       // Règle d'éligibilité d'Âge (25 pts)
+       if (v.type_energie === 'hybride' || v.type_energie === 'electrique') {
+          vScore += 25; // Pas de pénalité d'âge
+       } else if (v.date_mise_en_circulation) {
+          const age = calculateVehicleAge(v.date_mise_en_circulation);
+          if (age <= 7) {
+             vScore += 25;
+          } else {
+             issuesList.push({ type: "critical", label: `${v.modele || ''} - ${v.immatriculation || ''}`, daysRemaining: 0, documentType: `Véhicule thermique > 7 ans`, entityType: "vehicle", entityId: v.id, field: "datePremiereImmat" });
+          }
+       } else {
+          // Date inconnue = 0% de la sous-note âge
+          issuesList.push({ type: "critical", label: `${v.modele || ''} - ${v.immatriculation || ''}`, daysRemaining: 0, documentType: `Date mise en circulation manquante`, entityType: "vehicle", entityId: v.id, field: "datePremiereImmat" });
+       }
+
+       b3Total += vScore;
+    });
+    // Moyenne des véhicules, ramenée sur 40 (vScore sur 100 * 0.40 = 40 max)
+    const b3Score = visibleVehicles.length > 0 ? (b3Total / visibleVehicles.length) * 0.4 : 0;
+
+    // Calcul du score global : bornage strict 0-100 et arrondi propre
+    let finalScore = Math.round(b1Score + b2Score + b3Score);
+    if (!Number.isFinite(finalScore)) finalScore = 0;
+    finalScore = Math.max(0, Math.min(100, finalScore));
+
     issuesList.sort((a, b) => {
       const priority = { critical: 0, expired: 1, warning: 2 }
-      if (priority[a.type] !== priority[b.type]) {
-        return priority[a.type] - priority[b.type]
-      }
+      if (priority[a.type] !== priority[b.type]) return priority[a.type] - priority[b.type]
       return a.daysRemaining - b.daysRemaining
-    })
+    });
 
-    return { score: calculatedScore, issues: issuesList }
-  }, [visibleDrivers, visibleVehicles])
+    return { 
+       score: finalScore,
+       blocks: { b1: Math.round(b1Score), b2: Math.round(b2Score), b3: Math.round(b3Score) },
+       issues: issuesList 
+    };
+  }, [visibleDrivers, visibleVehicles, enterprise, userProfile])
 
   const scoreColor = getScoreColor(score)
   const scoreMessage = getScoreMessage(score)
@@ -227,7 +221,7 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
   const strokeWidth = 8
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
-  const progressScore = score === -1 ? 0 : score
+  const progressScore = score
   const strokeDashoffset = circumference - (progressScore / 100) * circumference
 
   function handleIssueClick(issue: DocumentIssue) {
@@ -288,7 +282,7 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, delay: 0.3 }}
             >
-              {score === -1 ? "—" : `${score}%`}
+              {`${score}%`}
             </motion.span>
             <span className="text-[10px] font-bold tracking-[0.2em] text-muted-foreground uppercase mt-1">
               SCORE NOX
@@ -306,19 +300,8 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
           transition={{ duration: 0.4, delay: 0.5 }}
           className="mt-4 flex items-center gap-2"
         >
-          {score === -1 ? (
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-          ) : score >= 100 ? (
-            <ShieldCheck className="h-4 w-4 text-emerald-500" strokeWidth={1.5} />
-          ) : score >= 70 ? (
-            <Clock className="h-4 w-4 text-[#D4AF37]" strokeWidth={1.5} />
-          ) : (
-            <AlertTriangle className="h-4 w-4 text-red-500" strokeWidth={1.5} />
-          )}
-          <p className={cn(
-            "text-xs font-medium",
-            score === -1 ? "text-muted-foreground" : score >= 100 ? "text-emerald-500" : score >= 70 ? "text-[#D4AF37]" : "text-red-500"
-          )}>
+          <ShieldCheck className="h-5 w-5" style={{ color: scoreColor }} strokeWidth={1.5} />
+          <p className="text-xs font-medium" style={{ color: scoreColor }}>
             {scoreMessage}
           </p>
         </motion.div>
@@ -366,12 +349,12 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
                 <div className="flex items-center gap-3">
                   <div className={cn(
                     "w-10 h-10 rounded-full flex items-center justify-center",
-                    score >= 100 ? "bg-emerald-500/15" : score >= 70 ? "bg-[#D4AF37]/15" : "bg-red-500/15"
+                    score >= 60 ? "bg-emerald-500/15" : score >= 40 ? "bg-[#D4AF37]/15" : "bg-red-500/15"
                   )}>
                     <ShieldCheck
                       className={cn(
                         "h-5 w-5",
-                        score >= 100 ? "text-emerald-500" : score >= 70 ? "text-[#D4AF37]" : "text-red-500"
+                        score >= 60 ? "text-emerald-500" : score >= 40 ? "text-[#D4AF37]" : "text-red-500"
                       )}
                       strokeWidth={1.5}
                     />
@@ -381,11 +364,9 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
                       Guardian NoX
                     </h3>
                     <p className="text-[11px] text-muted-foreground">
-                      {score === -1 
-                        ? "Veuillez ajouter votre flotte"
-                        : issues.length === 0
-                          ? "Tous vos documents sont à jour"
-                          : `${issues.length} document${issues.length > 1 ? "s" : ""} à surveiller`}
+                      {issues.length === 0
+                        ? "Conformité validée"
+                        : `${issues.length} élément${issues.length > 1 ? "s" : ""} à surveiller`}
                     </p>
                   </div>
                 </div>
@@ -397,16 +378,27 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
                 </button>
               </div>
 
-              <div className="px-5 pb-8 max-h-[50vh] overflow-y-auto space-y-3">
-                {score === -1 ? (
-                  <div className="flex flex-col items-center py-8">
-                    <AlertTriangle className="h-12 w-12 text-muted-foreground/50 mb-3" strokeWidth={1} />
-                    <p className="text-sm text-[#F5F5F5] font-medium">Aucune donnée</p>
-                    <p className="text-xs text-muted-foreground mt-1 text-center">
-                      Ajoutez au moins un véhicule et un chauffeur pour calculer votre score de conformité.
-                    </p>
+              <div className="px-5 mb-5 mt-1">
+                  <div className="flex justify-between items-center bg-[#1A1A1A] p-3 rounded-xl border border-[#333]">
+                    <div className="text-center flex-1">
+                      <p className="text-[10px] text-muted-foreground uppercase mb-0.5">Profil</p>
+                      <p className="text-sm font-bold text-foreground">{blocks.b1}<span className="text-[#A1A1AA] text-xs font-normal">/20</span></p>
+                    </div>
+                    <div className="w-px h-8 bg-[#333]"></div>
+                    <div className="text-center flex-1">
+                      <p className="text-[10px] text-muted-foreground uppercase mb-0.5">Chauffeurs</p>
+                      <p className="text-sm font-bold text-foreground">{blocks.b2}<span className="text-[#A1A1AA] text-xs font-normal">/40</span></p>
+                    </div>
+                    <div className="w-px h-8 bg-[#333]"></div>
+                    <div className="text-center flex-1">
+                      <p className="text-[10px] text-muted-foreground uppercase mb-0.5">Véhicules</p>
+                      <p className="text-sm font-bold text-foreground">{blocks.b3}<span className="text-[#A1A1AA] text-xs font-normal">/40</span></p>
+                    </div>
                   </div>
-                ) : issues.length === 0 ? (
+                </div>
+
+              <div className="px-5 pb-8 max-h-[50vh] overflow-y-auto space-y-3">
+                {issues.length === 0 ? (
                   <div className="flex flex-col items-center py-8">
                     <CheckCircle2 className="h-12 w-12 text-emerald-500 mb-3" strokeWidth={1} />
                     <p className="text-sm text-[#F5F5F5] font-medium">Parfaite conformité</p>
@@ -435,7 +427,9 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
                         "w-9 h-9 rounded-full flex items-center justify-center shrink-0",
                         issue.type === "critical" ? "bg-rose-500/20" : issue.type === "expired" ? "bg-red-500/20" : "bg-[#D4AF37]/20"
                       )}>
-                        {issue.entityType === "driver" ? (
+                        {issue.entityType === "enterprise" ? (
+                          <Building2 className={cn("h-4 w-4", issue.type === "critical" ? "text-rose-500" : issue.type === "expired" ? "text-red-500" : "text-[#D4AF37]")} strokeWidth={1.5} />
+                        ) : issue.entityType === "driver" ? (
                           <User className={cn("h-4 w-4", issue.type === "critical" ? "text-rose-500" : issue.type === "expired" ? "text-red-500" : "text-[#D4AF37]")} strokeWidth={1.5} />
                         ) : (
                           <Car className={cn("h-4 w-4", issue.type === "critical" ? "text-rose-500" : issue.type === "expired" ? "text-red-500" : "text-[#D4AF37]")} strokeWidth={1.5} />

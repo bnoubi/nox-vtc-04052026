@@ -75,6 +75,7 @@ export default function RegisterPage() {
       password,
       options: {
         captchaToken: captchaToken || undefined,
+        emailRedirectTo: `${window.location.origin}/auth/callback?type=signup`,
         data: {
           prenom,
           nom,

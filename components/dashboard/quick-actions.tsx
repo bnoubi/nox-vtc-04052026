@@ -28,20 +28,20 @@ function QuickActionTile({ icon, label, locked, onClick, onLockedClick }: QuickA
       className={cn(
         "relative flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-2xl border transition-all duration-200",
         locked
-          ? "bg-onyx-card/50 border-onyx-border/50 opacity-60"
+          ? "bg-onyx-card border-onyx-border/60 cursor-pointer"
           : "bg-onyx-card border-gold/20 hover:border-gold/40 hover:gold-glow-sm active:scale-[0.98]",
       )}
     >
       {locked && (
         <div className="absolute top-1.5 right-1.5">
-          <Lock className="h-3 w-3 text-gold/70" strokeWidth={1.5} />
+          <Lock className="h-3 w-3 text-zinc-500" strokeWidth={1.5} />
         </div>
       )}
 
       <div
-        className={cn("p-2 rounded-lg", locked ? "bg-onyx-border/30" : "bg-gold/10")}
+        className={cn("p-2 rounded-lg", locked ? "bg-zinc-800/60" : "bg-gold/10")}
       >
-        <span className={cn(locked ? "text-muted-foreground" : "text-gold")}>
+        <span className={cn(locked ? "text-zinc-400" : "text-gold")}>
           {React.cloneElement(icon as React.ReactElement, {
             className: "h-4 w-4",
           })}
@@ -51,7 +51,7 @@ function QuickActionTile({ icon, label, locked, onClick, onLockedClick }: QuickA
       <span
         className={cn(
           "text-[10px] font-medium leading-tight text-center px-1",
-          locked ? "text-muted-foreground" : "text-foreground",
+          locked ? "text-zinc-400" : "text-foreground",
         )}
       >
         {label}
@@ -67,11 +67,54 @@ export function QuickActions() {
   const [showBCFlow, setShowBCFlow] = useState(false)
   const [showInvoiceFlow, setShowInvoiceFlow] = useState(false)
   const [limitAlert, setLimitAlert] = useState<{ open: boolean; label: string }>({ open: false, label: "" })
-  const { plan, driverCount, vehicleCount } = useNox()
+  const { plan, driverCount, vehicleCount, addDriver, addVehicle } = useNox()
   const { navigateToSubscription } = useNav()
   const limits = PLAN_LIMITS[plan]
   const driversFull = driverCount >= limits.drivers
   const vehiclesFull = vehicleCount >= limits.vehicles
+
+  function handleQuickDriverSave(data: any) {
+    console.log('DEBUG quick-actions: handleQuickDriverSave called', data)
+    const newDriver = {
+      id: '',
+      name: `${data.prenom} ${data.nom}`.trim(),
+      initials: ((data.prenom?.[0] || '') + (data.nom?.[0] || '')).toUpperCase(),
+      online: false,
+      carteProNumber: data.cartePro || '',
+      carteProExpiration: data.expirationCarte || '',
+      apacNumber: data.apacNumber || '',
+      apacExpiration: data.apacExpiration || '',
+      permisNumber: data.permisNumber || '',
+      permisExpiration: data.permisExpiration || '',
+      rcProNumber: data.rcProNumber || '',
+      rcProExpiration: data.rcProExpiration || '',
+      phone: data.phone || '',
+      email: data.email || ''
+    }
+    console.log('DEBUG quick-actions: calling addDriver with', newDriver)
+    addDriver(newDriver)
+    setShowDriverDrawer(false)
+  }
+
+  function handleQuickVehicleSave(data: any) {
+    console.log('DEBUG quick-actions: handleQuickVehicleSave called', data)
+    const newVehicle = {
+      id: '',
+      marque: data.brand || '',
+      modele: data.model || '',
+      immatriculation: data.plate || '',
+      inService: true,
+      date_mise_en_circulation: data.datePremiereImmat || '',
+      type_energie: data.motorType || 'essence',
+      category: data.category || 'berline',
+      color: data.color === 'custom' ? (data.customColor || '') : (data.color || ''),
+      assuranceTransportExpiration: data.assuranceTransportExpiration || '',
+      controleTechniqueExpiration: data.expirationCT || ''
+    }
+    console.log('DEBUG quick-actions: calling addVehicle with', newVehicle)
+    addVehicle(newVehicle)
+    setShowVehicleDrawer(false)
+  }
 
   return (
     <section className="px-4">
@@ -118,13 +161,13 @@ export function QuickActions() {
         open={showDriverDrawer}
         driver={null}
         onClose={() => setShowDriverDrawer(false)}
-        onSave={() => setShowDriverDrawer(false)}
+        onSave={handleQuickDriverSave}
       />
       <VehicleDrawer
         open={showVehicleDrawer}
         vehicle={null}
         onClose={() => setShowVehicleDrawer(false)}
-        onSave={() => setShowVehicleDrawer(false)}
+        onSave={handleQuickVehicleSave}
       />
       <CreateBCFlow
         open={showBCFlow}

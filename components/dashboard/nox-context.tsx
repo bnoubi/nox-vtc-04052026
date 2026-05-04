@@ -202,6 +202,70 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         console.warn("[NoxStore] Could not load backend data", err)
       }
 
+      // ─── Chargement Drivers (Supabase) ───
+      try {
+        const { data: dbDrivers, error: drvErr } = await supabase
+          .from("drivers")
+          .select("*")
+          .eq("user_id", uid)
+        if (drvErr) console.error("[NoxStore] Error loading drivers:", drvErr)
+        else if (dbDrivers) {
+          setDrivers(dbDrivers.map(d => {
+            // Reconstituer name depuis prenom + nom (source de vérité SQL)
+            const fullNameDb = [d.prenom, d.nom].filter(Boolean).join(' ')
+            const displayName = fullNameDb || d.name || ''
+            const nameParts = displayName.trim().split(' ')
+            const initials = nameParts.length >= 2
+              ? (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase()
+              : displayName.substring(0, 2).toUpperCase()
+            return {
+              id: d.id,
+              name: displayName,
+              initials,
+              online: d.actif || false,
+              carteProExpiration: d.date_expiration_carte_vtc || '',
+              carteProNumber: d.numero_carte_vtc || '',
+              apacExpiration: d.date_expiration_apac || '',
+              apacNumber: d.numero_apac || '',
+              rcProExpiration: d.date_expiration_rc_pro || '',
+              rcProNumber: d.numero_rc_pro || '',
+              phone: d.telephone || '',
+              email: d.email || '',
+              permisNumber: d.numero_permis || '',
+              permisExpiration: d.date_expiration_permis || ''
+            }
+          }))
+        }
+      } catch (err) {
+        console.error("[NoxStore] Uncaught error loading drivers", err)
+      }
+
+      // ─── Chargement Vehicles (Supabase) ───
+      try {
+        const { data: dbVehicles, error: vehErr } = await supabase
+          .from("vehicles")
+          .select("*")
+          .eq("user_id", uid)
+        if (vehErr) console.error("[NoxStore] Error loading vehicles:", vehErr)
+        else if (dbVehicles) {
+          setVehicles(dbVehicles.map(v => ({
+            id: v.id,
+            marque: v.marque || "",
+            modele: v.modele || "",
+            immatriculation: v.immatriculation || "",
+            inService: v.in_service || false,
+            date_mise_en_circulation: v.date_mise_en_circulation || "",
+            type_energie: v.type_energie,
+            category: v.category,
+            color: v.color || "",
+            assuranceTransportExpiration: v.assurance_transport_expiration || "",
+            controleTechniqueExpiration: v.controle_technique_expiration || ""
+          })))
+        }
+      } catch (err) {
+        console.error("[NoxStore] Uncaught error loading vehicles", err)
+      }
+
       // Charger les données propres à CET utilisateur depuis son espace isolé
       const storageKey = getStorageKey(uid)
       const savedData = localStorage.getItem(storageKey)
@@ -210,8 +274,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         try {
           const parsed = JSON.parse(savedData)
           // Données métier : ne charger que si existantes pour cet utilisateur
-          if (Array.isArray(parsed.drivers)) setDrivers(parsed.drivers)
-          if (Array.isArray(parsed.vehicles)) setVehicles(parsed.vehicles)
+          if (Array.isArray(parsed.clients)) setClients(parsed.clients)
           if (Array.isArray(parsed.clients)) setClients(parsed.clients)
           if (Array.isArray(parsed.bcs)) setBcs(parsed.bcs)
           if (Array.isArray(parsed.invoices)) setInvoices(parsed.invoices)
@@ -243,13 +306,13 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     if (!isLoaded || !userId) return
     const storageKey = getStorageKey(userId)
     localStorage.setItem(storageKey, JSON.stringify({
-      drivers, vehicles, clients, bcs, invoices, // Enterprise is now in Supabase
+      clients, bcs, invoices, // Enterprise, drivers, vehicles are in Supabase
       tarifBase, forfaits, supplements, tranches,
       applyWeekend, applyHolidays, plan, tokens
     }))
   }, [
     isLoaded, userId,
-    drivers, vehicles, clients, bcs, invoices,
+    clients, bcs, invoices,
     tarifBase, forfaits, supplements, tranches,
     applyWeekend, applyHolidays, plan, tokens
   ])
@@ -344,12 +407,272 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       console.error("[NoxStore] Uncaught exception in updateEnterprise:", e)
     }
   }
-  const addDriver = (driver: Driver) => setDrivers((prev: Driver[]) => [driver, ...prev])
-  const updateDriver = (id: string, data: Partial<Driver>) => setDrivers((prev: Driver[]) => prev.map(d => d.id === id ? { ...d, ...data } : d))
-  const deleteDriver = (id: string) => setDrivers((prev: Driver[]) => prev.filter(d => d.id !== id))
-  const addVehicle = (vehicle: Vehicle) => setVehicles((prev: Vehicle[]) => [vehicle, ...prev])
-  const updateVehicle = (id: string, data: Partial<Vehicle>) => setVehicles((prev: Vehicle[]) => prev.map(v => v.id === id ? { ...v, ...data } : v))
-  const deleteVehicle = (id: string) => setVehicles((prev: Vehicle[]) => prev.filter(v => v.id !== id))
+  const addDriver = async (driver: Driver) => {
+    console.log('DEBUG CONTEXT: addDriver called', driver)
+    const supabase = createClient()
+
+    console.log('=== DEBUG INSERT DRIVER ===')
+    console.log('context userId:', userId)
+    const sessionResult = await supabase.auth.getSession()
+    const sessionUserId = sessionResult.data.session?.user?.id
+    console.log('session user.id:', sessionUserId)
+    console.log('userId === session.user.id ?', userId === sessionUserId)
+
+    if (!userId) {
+      console.error('[NoxStore] addDriver: userId is null or undefined — ABORT')
+      return
+    }
+
+    // ─── Extraction prenom / nom depuis driver.name (split sur le premier espace) ───
+    // La colonne prenom est NOT NULL dans public.drivers
+    const fullName = (driver.name || '').trim()
+    const spaceIdx = fullName.indexOf(' ')
+    const prenom = spaceIdx >= 0 ? fullName.substring(0, spaceIdx).trim() : fullName
+    const nom    = spaceIdx >= 0 ? fullName.substring(spaceIdx + 1).trim() : ''
+
+    // Colonnes réelles de public.drivers (schéma exact)
+    const payloadFinal = {
+      user_id: userId,
+      prenom: prenom || null,                                          // NOT NULL
+      nom: nom || null,                                                // NOT NULL (peut être vide si prénom seul)
+      name: fullName || null,                                          // colonne name optionnelle
+      actif: driver.online ?? false,
+      telephone: driver.phone || null,
+      email: driver.email || null,
+      numero_carte_vtc: driver.carteProNumber || null,
+      date_expiration_carte_vtc: driver.carteProExpiration || null,
+      numero_apac: driver.apacNumber || null,
+      date_expiration_apac: driver.apacExpiration || null,
+      numero_permis: driver.permisNumber || null,
+      date_expiration_permis: driver.permisExpiration || null,
+      numero_rc_pro: driver.rcProNumber || null,
+      date_expiration_rc_pro: driver.rcProExpiration || null,
+    }
+    console.log('payload driver:', payloadFinal)
+
+    try {
+      // ─── INSERT minimal sans .select() ───
+      const { error, status, statusText } = await supabase
+        .from('drivers')
+        .insert([payloadFinal])
+
+      console.log('drivers insert status:', status, statusText)
+      console.log('drivers insert error:', JSON.stringify(error, null, 2))
+
+      if (error) {
+        console.error('[NoxStore] ❌ addDriver INSERT FAILED:', error.message, '| code:', error.code, '| hint:', error.hint)
+        return
+      }
+
+      // ─── Reload complet de la liste depuis Supabase ───
+      const { data: rows, error: selectError } = await supabase
+        .from('drivers')
+        .select('*')
+        .eq('user_id', userId)
+      console.log('drivers post-insert select rows:', rows)
+      console.log('drivers post-insert select error:', selectError)
+
+      if (rows) {
+        setDrivers(rows.map(d => {
+          // Reconstituer name depuis prenom + nom (source de vérité SQL)
+          const fullNameDb = [d.prenom, d.nom].filter(Boolean).join(' ')
+          const nameParts = fullNameDb.trim().split(' ')
+          const initials = nameParts.length >= 2
+            ? (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase()
+            : fullNameDb.substring(0, 2).toUpperCase()
+          return {
+            id: d.id,
+            name: fullNameDb || d.name || '',
+            initials,
+            online: d.actif || false,
+            carteProExpiration: d.date_expiration_carte_vtc || '',
+            carteProNumber: d.numero_carte_vtc || '',
+            apacExpiration: d.date_expiration_apac || '',
+            apacNumber: d.numero_apac || '',
+            rcProExpiration: d.date_expiration_rc_pro || '',
+            rcProNumber: d.numero_rc_pro || '',
+            phone: d.telephone || '',
+            email: d.email || '',
+            permisNumber: d.numero_permis || '',
+            permisExpiration: d.date_expiration_permis || ''
+          }
+        }))
+      }
+    } catch (e) {
+      console.error('[NoxStore] Uncaught exception in addDriver', e)
+    }
+  }
+
+  const updateDriver = async (id: string, data: Partial<Driver>) => {
+    if (!userId) return
+    // ─── Extraction prenom / nom si name est mis à jour ───
+    const payload: any = {}
+    if (data.name !== undefined) {
+      const fullName = (data.name || '').trim()
+      const spaceIdx = fullName.indexOf(' ')
+      payload.prenom = spaceIdx >= 0 ? fullName.substring(0, spaceIdx).trim() : fullName
+      payload.nom    = spaceIdx >= 0 ? fullName.substring(spaceIdx + 1).trim() : ''
+      payload.name   = fullName || null
+    }
+    // initials n'existe pas en base — ignoré
+    if (data.online !== undefined) payload.actif = data.online
+    if (data.carteProExpiration !== undefined) payload.date_expiration_carte_vtc = data.carteProExpiration || null
+    if (data.carteProNumber !== undefined) payload.numero_carte_vtc = data.carteProNumber || null
+    if (data.apacExpiration !== undefined) payload.date_expiration_apac = data.apacExpiration || null
+    if (data.apacNumber !== undefined) payload.numero_apac = data.apacNumber || null
+    if (data.rcProExpiration !== undefined) payload.date_expiration_rc_pro = data.rcProExpiration || null
+    if (data.rcProNumber !== undefined) payload.numero_rc_pro = data.rcProNumber || null
+    if (data.phone !== undefined) payload.telephone = data.phone || null
+    if (data.email !== undefined) payload.email = data.email || null
+    if (data.permisNumber !== undefined) payload.numero_permis = data.permisNumber || null
+    if (data.permisExpiration !== undefined) payload.date_expiration_permis = data.permisExpiration || null
+
+    try {
+      const supabase = createClient()
+      const { data: dbData, error } = await supabase.from('drivers').update(payload).eq('id', id).eq('user_id', userId).select().single()
+      if (error) {
+        console.error("[NoxStore] Error updating driver:", error)
+        return
+      }
+      if (dbData) {
+        setDrivers(prev => prev.map(d => d.id === id ? { ...d, ...data } : d))
+      }
+    } catch (e) {
+      console.error("[NoxStore] Uncaught error updating driver", e)
+    }
+  }
+
+  const deleteDriver = async (id: string) => {
+    if (!userId) return
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from('drivers').delete().eq('id', id).eq('user_id', userId)
+      if (error) {
+        console.error("[NoxStore] Error deleting driver:", error)
+        return
+      }
+      setDrivers(prev => prev.filter(d => d.id !== id))
+    } catch (e) {
+      console.error("[NoxStore] Uncaught error deleting driver", e)
+    }
+  }
+
+  const addVehicle = async (vehicle: Vehicle) => {
+    console.log('DEBUG CONTEXT: addVehicle called', vehicle)
+    const supabase = createClient()
+
+    console.log('=== DEBUG INSERT VEHICLE ===')
+    console.log('context userId:', userId)
+    const sessionResult = await supabase.auth.getSession()
+    const sessionUserId = sessionResult.data.session?.user?.id
+    console.log('session user.id:', sessionUserId)
+    console.log('userId === session.user.id ?', userId === sessionUserId)
+
+    if (!userId) {
+      console.error('[NoxStore] addVehicle: userId is null or undefined — ABORT')
+      return
+    }
+
+    const payloadFinal = {
+      user_id: userId,
+      marque: vehicle.marque || null,
+      modele: vehicle.modele || null,
+      immatriculation: vehicle.immatriculation || null,
+      in_service: vehicle.inService || false,
+      date_mise_en_circulation: vehicle.date_mise_en_circulation || null,
+      type_energie: vehicle.type_energie || null,
+      category: vehicle.category || null,
+      color: vehicle.color || null,
+      assurance_transport_expiration: vehicle.assuranceTransportExpiration || null,
+      controle_technique_expiration: vehicle.controleTechniqueExpiration || null
+    }
+    console.log('payload vehicle:', payloadFinal)
+
+    try {
+      // ─── INSERT minimal sans .select() ───
+      const { error, status, statusText } = await supabase
+        .from('vehicles')
+        .insert([payloadFinal])
+
+      console.log('vehicles insert status:', status, statusText)
+      console.log('vehicles insert error:', JSON.stringify(error, null, 2))
+
+      if (error) {
+        console.error('[NoxStore] ❌ addVehicle INSERT FAILED:', error.message, '| code:', error.code, '| hint:', error.hint)
+        return
+      }
+
+      // ─── Reload complet de la liste depuis Supabase ───
+      const { data: rows, error: selectError } = await supabase
+        .from('vehicles')
+        .select('*')
+        .eq('user_id', userId)
+      console.log('vehicles post-insert select rows:', rows)
+      console.log('vehicles post-insert select error:', selectError)
+
+      if (rows) {
+        setVehicles(rows.map(v => ({
+          id: v.id,
+          marque: v.marque || '',
+          modele: v.modele || '',
+          immatriculation: v.immatriculation || '',
+          inService: v.in_service || false,
+          date_mise_en_circulation: v.date_mise_en_circulation || '',
+          type_energie: v.type_energie as any,
+          category: v.category as any,
+          color: v.color || '',
+          assuranceTransportExpiration: v.assurance_transport_expiration || '',
+          controleTechniqueExpiration: v.controle_technique_expiration || ''
+        })))
+      }
+    } catch (e) {
+      console.error('[NoxStore] Uncaught exception in addVehicle', e)
+    }
+  }
+
+  const updateVehicle = async (id: string, data: Partial<Vehicle>) => {
+    if (!userId) return
+    const payload: any = {}
+    if (data.marque !== undefined) payload.marque = data.marque || null
+    if (data.modele !== undefined) payload.modele = data.modele || null
+    if (data.immatriculation !== undefined) payload.immatriculation = data.immatriculation || null
+    if (data.inService !== undefined) payload.in_service = data.inService
+    if (data.date_mise_en_circulation !== undefined) payload.date_mise_en_circulation = data.date_mise_en_circulation || null
+    if (data.type_energie !== undefined) payload.type_energie = data.type_energie || null
+    if (data.category !== undefined) payload.category = data.category || null
+    if (data.color !== undefined) payload.color = data.color || null
+    if (data.assuranceTransportExpiration !== undefined) payload.assurance_transport_expiration = data.assuranceTransportExpiration || null
+    if (data.controleTechniqueExpiration !== undefined) payload.controle_technique_expiration = data.controleTechniqueExpiration || null
+
+    try {
+      const supabase = createClient()
+      const { data: dbData, error } = await supabase.from('vehicles').update(payload).eq('id', id).eq('user_id', userId).select().single()
+      if (error) {
+        console.error("[NoxStore] Error updating vehicle:", error)
+        return
+      }
+      if (dbData) {
+        setVehicles(prev => prev.map(v => v.id === id ? { ...v, ...data } : v))
+      }
+    } catch (e) {
+      console.error("[NoxStore] Uncaught error updating vehicle", e)
+    }
+  }
+
+  const deleteVehicle = async (id: string) => {
+    if (!userId) return
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from('vehicles').delete().eq('id', id).eq('user_id', userId)
+      if (error) {
+        console.error("[NoxStore] Error deleting vehicle:", error)
+        return
+      }
+      setVehicles(prev => prev.filter(v => v.id !== id))
+    } catch (e) {
+      console.error("[NoxStore] Uncaught error deleting vehicle", e)
+    }
+  }
   const addClient = (client: Client) => setClients((prev: Client[]) => [client, ...prev])
   const updateClient = (id: string, data: Partial<Client>) => setClients((prev: Client[]) => prev.map(c => c.id === id ? { ...c, ...data } : c))
   const deleteClient = (id: string) => setClients((prev: Client[]) => prev.filter(c => c.id !== id))

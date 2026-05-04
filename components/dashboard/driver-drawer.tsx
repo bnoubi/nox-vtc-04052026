@@ -19,7 +19,7 @@ interface DriverDrawerProps {
   open: boolean
   driver: Driver | null // null = Add mode, Driver = Edit mode
   onClose: () => void
-  onSave: (data: { nom: string; prenom: string; phone: string; cartePro: string; expirationCarte: string; apacExpiration: string; rcProExpiration: string }) => void
+  onSave: (data: { nom: string; prenom: string; phone: string; email: string; cartePro: string; expirationCarte: string; apacNumber: string; apacExpiration: string; permisNumber: string; permisExpiration: string; rcProNumber: string; rcProExpiration: string }) => void
   onDelete?: (driver: Driver) => void
 }
 
@@ -28,50 +28,76 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
   const [nom, setNom] = useState("")
   const [prenom, setPrenom] = useState("")
   const [phone, setPhone] = useState("")
+  const [email, setEmail] = useState("")
   const [cartePro, setCartePro] = useState("")
   const [expirationCarte, setExpirationCarte] = useState("")
+  const [permisNumber, setPermisNumber] = useState("")
+  const [permisExpiration, setPermisExpiration] = useState("")
+  const [apacNumber, setApacNumber] = useState("")
   const [apacExpiration, setApacExpiration] = useState("")
+  const [rcProNumber, setRcProNumber] = useState("")
   const [rcProExpiration, setRcProExpiration] = useState("")
+  const [emailTouched, setEmailTouched] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     if (open) {
       if (driver) {
-        // Edit mode: pre-fill
+        // Edit mode: pre-fill depuis les vraies valeurs SQL
         const parts = driver.name.split(" ")
         setPrenom(parts[0] || "")
         setNom(parts.slice(1).join(" ") || "")
-        setPhone("+33 6 00 00 00 00")
-        setCartePro("VTC-" + driver.id.padStart(6, "0"))
+        setPhone(driver.phone || "")                    // vraie valeur telephone SQL
+        setEmail(driver.email || "")
+        setCartePro(driver.carteProNumber || "")        // vraie valeur numero_carte_vtc SQL (pas de fallback VTC-id)
         setExpirationCarte(driver.carteProExpiration || "")
+        setPermisNumber(driver.permisNumber || "")
+        setPermisExpiration(driver.permisExpiration || "")
+        setApacNumber(driver.apacNumber || "")
         setApacExpiration(driver.apacExpiration || "")
+        setRcProNumber(driver.rcProNumber || "")
         setRcProExpiration(driver.rcProExpiration || "")
       } else {
         // Add mode: empty
         setNom("")
         setPrenom("")
         setPhone("")
+        setEmail("")
         setCartePro("")
         setExpirationCarte("")
+        setPermisNumber("")
+        setPermisExpiration("")
+        setApacNumber("")
         setApacExpiration("")
+        setRcProNumber("")
         setRcProExpiration("")
       }
+      setEmailTouched(false)
       setConfirmDelete(false)
       setSaved(false)
     }
   }, [driver, open])
 
   const carteStatus = getExpirationStatus(expirationCarte)
+  const permisStatus = getExpirationStatus(permisExpiration)
   const apacStatus = getExpirationStatus(apacExpiration)
   const rcProStatus = getExpirationStatus(rcProExpiration)
-  const canSave = nom.trim() && prenom.trim()
+  function isEmailValid(val: string): boolean {
+    if (!val.trim()) return false
+    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(val.trim())
+  }
+  const emailError = emailTouched && !isEmailValid(email)
+  const canSave = nom.trim() && prenom.trim() && isEmailValid(email)
 
   function handleSave() {
-    if (!canSave) return
+    // Mark email as touched so error shows if user clicks save without filling it
+    setEmailTouched(true)
+    if (!isEmailValid(email)) return
+    if (!nom.trim() || !prenom.trim()) return
     setSaved(true)
     setTimeout(() => {
-      onSave({ nom, prenom, phone, cartePro, expirationCarte, apacExpiration, rcProExpiration })
+      onSave({ nom, prenom, phone, email, cartePro, expirationCarte, apacNumber, apacExpiration, permisNumber, permisExpiration, rcProNumber, rcProExpiration })
       toast(isEditMode ? "Mise à jour effectuée" : "Chauffeur ajouté", {
         description: `${prenom} ${nom}`,
         duration: 2000,
@@ -183,6 +209,33 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
                 />
               </div>
 
+              {/* EMAIL */}
+              <div>
+                <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-1.5 flex items-center gap-1.5">
+                  <FileText className="h-3 w-3" strokeWidth={1.5} />
+                  EMAIL <span className="text-red-400 ml-0.5">*</span>
+                </label>
+                <input
+                  type="email"
+                  placeholder="contact@exemple.com"
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); if (emailTouched) setEmailTouched(true) }}
+                  onBlur={() => setEmailTouched(true)}
+                  className={`w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border text-sm text-[#F5F5F5] placeholder:text-[#555] focus:outline-none transition-colors ${
+                    emailError
+                      ? "border-red-500/60 focus:border-red-500/80"
+                      : "border-[#333] focus:border-[#D4AF37]/50"
+                  }`}
+                />
+                {emailError && (
+                  <p className="text-[10px] text-red-400 mt-1.5 pl-0.5">
+                    {email.trim() === ""
+                      ? "L'adresse email est obligatoire"
+                      : "Veuillez saisir une adresse email valide"}
+                  </p>
+                )}
+              </div>
+
               {/* NUMERO CARTE PRO VTC */}
               <div>
                 <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-1.5 flex items-center gap-1.5">
@@ -219,6 +272,57 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
                 />
               </div>
 
+              {/* NUMERO PERMIS DE CONDUIRE */}
+              <div>
+                <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-1.5 flex items-center gap-1.5">
+                  <FileText className="h-3 w-3" strokeWidth={1.5} />
+                  NUMÉRO PERMIS
+                </label>
+                <input
+                  type="text"
+                  placeholder="00000000"
+                  value={permisNumber}
+                  onChange={(e) => setPermisNumber(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] font-mono placeholder:text-[#555] focus:outline-none focus:border-[#D4AF37]/50 transition-colors"
+                />
+              </div>
+
+              {/* EXPIRATION PERMIS DE CONDUIRE */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold flex items-center gap-1.5">
+                    <Calendar className="h-3 w-3" strokeWidth={1.5} />
+                    EXPIRATION PERMIS
+                  </label>
+                  {permisStatus.label && (
+                    <span className={cn("px-1.5 py-0.5 text-[8px] font-bold rounded border", permisStatus.cls)}>
+                      {permisStatus.label}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="date"
+                  value={permisExpiration}
+                  onChange={(e) => setPermisExpiration(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] focus:outline-none focus:border-[#D4AF37]/50 transition-colors [color-scheme:dark]"
+                />
+              </div>
+
+              {/* NUMERO APAC */}
+              <div>
+                <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-1.5 flex items-center gap-1.5">
+                  <FileText className="h-3 w-3" strokeWidth={1.5} />
+                  NUMÉRO APAC
+                </label>
+                <input
+                  type="text"
+                  placeholder="APAC-000000"
+                  value={apacNumber}
+                  onChange={(e) => setApacNumber(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] font-mono placeholder:text-[#555] focus:outline-none focus:border-[#D4AF37]/50 transition-colors"
+                />
+              </div>
+
               {/* EXPIRATION VISITE MÉDICALE - APAC */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
@@ -239,6 +343,21 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
                   className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] focus:outline-none focus:border-[#D4AF37]/50 transition-colors [color-scheme:dark]"
                 />
                 <p className="text-[9px] text-[#666] mt-1">APAC : Attestation Préfectorale d&apos;Aptitude Physique</p>
+              </div>
+
+              {/* NUMERO RC PRO */}
+              <div>
+                <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-1.5 flex items-center gap-1.5">
+                  <FileText className="h-3 w-3" strokeWidth={1.5} />
+                  NUMÉRO RC PRO
+                </label>
+                <input
+                  type="text"
+                  placeholder="RC-000000"
+                  value={rcProNumber}
+                  onChange={(e) => setRcProNumber(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] font-mono placeholder:text-[#555] focus:outline-none focus:border-[#D4AF37]/50 transition-colors"
+                />
               </div>
 
               {/* EXPIRATION RC PRO */}

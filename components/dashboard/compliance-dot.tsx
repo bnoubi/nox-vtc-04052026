@@ -8,7 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-type ComplianceStatus = "ok" | "warning" | "expired"
+type ComplianceStatus = "ok" | "warning" | "expired" | "neutral"
 
 interface ComplianceDotProps {
   status: ComplianceStatus
@@ -16,6 +16,12 @@ interface ComplianceDotProps {
 }
 
 const STATUS_CONFIG = {
+  neutral: {
+    color: "bg-slate-400",
+    glow: "shadow-none",
+    label: "Aucune date saisie",
+    pulse: false,
+  },
   ok: {
     color: "bg-emerald-500",
     glow: "shadow-[0_0_8px_rgba(16,185,129,0.6)]",
@@ -25,13 +31,13 @@ const STATUS_CONFIG = {
   warning: {
     color: "bg-amber-500",
     glow: "shadow-[0_0_8px_rgba(245,158,11,0.6)]",
-    label: "Expiration proche",
+    label: "Expiration proche (≤ 30 j)",
     pulse: true,
   },
   expired: {
     color: "bg-rose-500",
     glow: "shadow-[0_0_8px_rgba(244,63,94,0.6)]",
-    label: "Document expiré",
+    label: "Date expirée",
     pulse: true,
   },
 }
@@ -64,27 +70,53 @@ export function ComplianceDot({ status, className }: ComplianceDotProps) {
   )
 }
 
-// Helper function to calculate compliance status from dates
+// ─── Helpers ────────────────────────────────────────────────────────────────
+//
+// RÈGLE MÉTIER (outil d'anticipation, PAS de conformité) :
+//
+//  ⚪ GRIS   → aucune date saisie pour ce profil
+//  🔴 ROUGE  → au moins une date saisie ET déjà expirée (< aujourd'hui)
+//  🟠 ORANGE → au moins une date saisie ET expire dans ≤ 30 jours (aucune expirée)
+//  🟢 VERT   → au moins une date saisie ET toutes > 30 jours
+//
+// null / "" / undefined  →  date non renseignée → IGNORÉE (jamais rouge)
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Filtre et parse une liste de valeurs de dates brutes.
+ *  Retourne uniquement les Date valides (null/vide ignorés). */
+function parseDates(rawDates: (string | undefined | null)[]): Date[] {
+  return rawDates
+    .filter((s): s is string => !!s && s.trim() !== "")
+    .map((s) => new Date(s))
+    .filter((d) => !isNaN(d.getTime()))
+}
+
 export function getDriverComplianceStatus(
-  carteProExpiration: string,
-  apacExpiration?: string,
-  rcProExpiration?: string
+  carteProExpiration: string | undefined | null,
+  apacExpiration?: string | undefined | null,
+  rcProExpiration?: string | undefined | null,
+  permisExpiration?: string | undefined | null
 ): ComplianceStatus {
   const today = new Date()
-  
-  const dates = [carteProExpiration]
-  if (apacExpiration) dates.push(apacExpiration)
-  if (rcProExpiration) dates.push(rcProExpiration)
-  
+  today.setHours(0, 0, 0, 0)
+
+  const dates = parseDates([
+    carteProExpiration,
+    permisExpiration,
+    apacExpiration,
+    rcProExpiration,
+  ])
+
+  // Aucune date saisie → gris neutre
+  if (dates.length === 0) return "neutral"
+
   let hasExpired = false
   let hasWarning = false
-  
-  for (const dateStr of dates) {
-    const expDate = new Date(dateStr)
-    const daysUntil = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-    
-    if (daysUntil < 0) hasExpired = true
-    else if (daysUntil < 30) hasWarning = true
+
+  for (const d of dates) {
+    const daysUntil = Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    if (daysUntil < 0) { hasExpired = true; break }   // priorité max → sortie rapide
+    if (daysUntil <= 30) hasWarning = true
   }
 
   if (hasExpired) return "expired"
@@ -93,19 +125,30 @@ export function getDriverComplianceStatus(
 }
 
 export function getVehicleComplianceStatus(
-  assuranceTransportExpiration: string,
-  controleTechniqueExpiration: string
+  assuranceTransportExpiration: string | undefined | null,
+  controleTechniqueExpiration: string | undefined | null
 ): ComplianceStatus {
   const today = new Date()
-  const assuranceDate = new Date(assuranceTransportExpiration)
-  const ctDate = new Date(controleTechniqueExpiration)
-  
-  const assuranceDays = Math.ceil((assuranceDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-  const ctDays = Math.ceil((ctDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+  today.setHours(0, 0, 0, 0)
 
-  // Check if any is expired
-  if (assuranceDays < 0 || ctDays < 0) return "expired"
-  // Check if any is expiring within 30 days
-  if (assuranceDays < 30 || ctDays < 30) return "warning"
+  const dates = parseDates([
+    assuranceTransportExpiration,
+    controleTechniqueExpiration,
+  ])
+
+  // Aucune date saisie → gris neutre
+  if (dates.length === 0) return "neutral"
+
+  let hasExpired = false
+  let hasWarning = false
+
+  for (const d of dates) {
+    const daysUntil = Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    if (daysUntil < 0) { hasExpired = true; break }
+    if (daysUntil <= 30) hasWarning = true
+  }
+
+  if (hasExpired) return "expired"
+  if (hasWarning) return "warning"
   return "ok"
 }
