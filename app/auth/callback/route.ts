@@ -5,28 +5,29 @@ export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
   const type = requestUrl.searchParams.get('type')
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.noxvtc.fr'
   
   if (code) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (error) {
       console.error('Error exchanging code for session:', error)
-      return NextResponse.redirect(new URL('/login?error=Invalid+Link', requestUrl.origin))
+      return NextResponse.redirect(new URL('/login?error=Invalid+Link', siteUrl))
     }
 
     // Confirmation d'inscription : on signe out (l'email est confirmé côté Supabase)
     // puis on redirige vers la page de succès pour que l'utilisateur se connecte manuellement
     if (type === 'signup') {
       await supabase.auth.signOut()
-      return NextResponse.redirect(new URL('/auth/confirmed', requestUrl.origin))
+      return NextResponse.redirect(new URL('/auth/confirmed', siteUrl))
     }
   }
 
   // Si le flux est de type recovery, on redirige vers l'écran de nouveau mot de passe
   if (type === 'recovery') {
-    return NextResponse.redirect(new URL('/reset-password', requestUrl.origin))
+    return NextResponse.redirect(new URL('/reset-password', siteUrl))
   }
 
   // Si c'est un email_change ou autre, on redirige à la racine après succès
-  return NextResponse.redirect(new URL('/', requestUrl.origin))
+  return NextResponse.redirect(new URL('/', siteUrl))
 }
