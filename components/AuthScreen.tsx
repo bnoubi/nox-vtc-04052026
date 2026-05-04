@@ -120,10 +120,10 @@ export function AuthScreen() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1 }}
-          className="mb-10 flex flex-col items-center"
+          className="mb-6 sm:mb-10 flex flex-col items-center"
         >
           <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-20 blur-3xl bg-[#D4AF37]/15 w-40 h-40 rounded-full" />
-          <div className="relative w-full max-w-[220px]">
+          <div className="relative w-full max-w-[160px] sm:max-w-[220px]">
             <Image
               src="/assets/logo.png"
               alt="Logo NOX"
@@ -279,7 +279,7 @@ export function AuthScreen() {
               </button>
               
               {/* Divider */}
-              <div className="flex items-center gap-4 my-6">
+              <div className="flex items-center gap-4 my-4 sm:my-6">
                 <div className="flex-1 h-px bg-[#D4AF37]/20" />
                 <span className="text-[11px] text-[#FFFFFF] tracking-wide uppercase">Ou continuer avec</span>
                 <div className="flex-1 h-px bg-[#D4AF37]/20" />
@@ -327,23 +327,24 @@ export function AuthScreen() {
               </div>
 
               {/* Footer Links */}
-              <div className="mt-10 flex flex-col items-center gap-3">
+              <div className="mt-6 sm:mt-10 flex flex-row items-center justify-center gap-1 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => {
                     setError(null)
                     setIsResetMode(true)
                   }}
-                  className="text-[12px] text-[#FFFFFF] hover:text-[#D4AF37] transition-colors duration-300 py-2 px-4"
+                  className="text-[12px] text-[#FFFFFF] hover:text-[#D4AF37] transition-colors duration-300 py-2 px-2 sm:px-4"
                 >
                   Mot de passe oublié ?
                 </button>
+                <span className="text-[#D4AF37]/30 text-[10px]">|</span>
                 <button
                   type="button"
                   onClick={() => router.push("/register")}
-                  className="text-[12px] text-[#FFFFFF] hover:text-[#D4AF37] transition-colors duration-300 py-2 px-4"
+                  className="text-[12px] text-[#D4AF37] hover:text-[#E5C04B] transition-colors duration-300 py-2 px-2 sm:px-4 font-medium"
                 >
-                  Pas encore de compte ? Devenir Membre
+                  S'inscrire
                 </button>
               </div>
             </motion.form>
