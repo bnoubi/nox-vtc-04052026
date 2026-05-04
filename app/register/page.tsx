@@ -56,6 +56,7 @@ export default function RegisterPage() {
 
   const router = useRouter()
   const supabase = createClient()
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "")
 
   // On désactive le bouton tant que 1) tout n'est pas rempli, 2) les MDP ne matchent pas, 3) password est trop faible, 4) Captcha n'est pas rempli
   const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword
@@ -75,7 +76,7 @@ export default function RegisterPage() {
       password,
       options: {
         captchaToken: captchaToken || undefined,
-        emailRedirectTo: `${window.location.origin}/auth/callback?type=signup`,
+        emailRedirectTo: `${siteUrl}/auth/callback?type=signup`,
         data: {
           prenom,
           nom,
@@ -116,7 +117,7 @@ export default function RegisterPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${siteUrl}/auth/callback`,
       },
     })
     if (error) {

@@ -24,6 +24,7 @@ export function AuthScreen() {
 
   const router = useRouter()
   const supabase = createClient()
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "")
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -65,7 +66,7 @@ export function AuthScreen() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${siteUrl}/auth/callback`,
       },
     })
     if (error) {
@@ -85,7 +86,7 @@ export function AuthScreen() {
     
     setIsLoading(true)
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
+      redirectTo: `${siteUrl}/auth/callback?type=recovery`,
       captchaToken: captchaToken || undefined,
     })
     
