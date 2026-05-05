@@ -54,7 +54,7 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
     setVille("")
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     
     const newClient: Client = {
@@ -75,7 +75,11 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
       notes: "Nouveau client",
     }
 
-    addClient(newClient)
+    try {
+      await addClient(newClient)
+    } catch (e) {
+      console.error("[AddClientModal] addClient failed:", e)
+    }
     
     toast.success("Client ajouté", {
       description: clientType === "particulier" ? `${prenom} ${nom} a été ajouté.` : `${raisonSociale} a été ajouté.`
