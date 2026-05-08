@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect } from "react"
+import React, { createContext, useContext, useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { 
   Driver, Vehicle, Client, EnterpriseProfile, TarifBase, TarifForfait, TarifSupplement, TrancheHoraire,
@@ -20,6 +20,7 @@ const emptyEnterprise: EnterpriseProfile = {
   adresse: "",
   zipCode: "",
   city: "",
+  pays: "",
   email: "",
   phone: "",
 }
@@ -61,11 +62,12 @@ interface NoxContextType {
   addVehicle: (vehicle: Vehicle) => void
   updateVehicle: (id: string, data: Partial<Vehicle>) => void
   deleteVehicle: (id: string) => void
-  addClient: (client: Client) => void
+  addClient: (client: Client) => Promise<boolean>
   updateClient: (id: string, data: Partial<Client>) => void
   deleteClient: (id: string) => void
   addBC: (bc: BCDocument) => void
   updateBC: (id: string, data: Partial<BCDocument>) => void
+  saveDraftBC: (data: Partial<BCDocument>) => Promise<string | null>
   addInvoice: (invoice: InvoiceDocument) => void
   updateInvoice: (id: string, data: Partial<InvoiceDocument>) => void
   updateTarifs: (base: TarifBase, forfaits: TarifForfait[], supplements: TarifSupplement[], tranches?: TrancheHoraire[], applyWeekend?: boolean, applyHolidays?: boolean) => void
@@ -94,6 +96,9 @@ function purgeGlobalStorageIfNeeded() {
 }
 
 export function NoxProvider({ children }: { children: React.ReactNode }) {
+  // Single stable Supabase browser client — avoids session desync across functions
+  const supabase = useMemo(() => createClient(), [])
+
   const [isLoaded, setIsLoaded] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
 
@@ -107,7 +112,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   const [invoices, setInvoices] = useState<InvoiceDocument[]>([])
 
   const refreshUserProfile = async () => {
-    const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const { data } = await supabase.from("user_accounts").select("prenom, nom, phone").eq("id", user.id).single()
@@ -138,7 +142,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     async function initStore() {
       purgeGlobalStorageIfNeeded()
 
-      const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
 
       if (!isMounted) return
@@ -181,13 +184,15 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             siren: entProfile.siret || prev.siren,
             tva: entProfile.tva || prev.tva,
             tvaIntra: entProfile.tva || prev.tvaIntra,
+            // BUG 1 FIX — evtcNumber lu depuis registre_vtc (jamais stocké dans bcs)
+            evtcNumber: entProfile.registre_vtc || prev.evtcNumber,
+            registreVTC: entProfile.registre_vtc || prev.registreVTC,
+            dateRegistre: entProfile.date_registre_vtc || prev.dateRegistre,
+            dateAssurance: entProfile.date_assurance_pro || prev.dateAssurance,
             adresse: entProfile.adresse || prev.adresse,
             bankName: entProfile.banque || prev.bankName,
             iban: entProfile.iban || prev.iban,
             bic: entProfile.bic || prev.bic,
-            registreVTC: entProfile.registre_vtc || prev.registreVTC,
-            dateRegistre: entProfile.date_registre_vtc || prev.dateRegistre,
-            dateAssurance: entProfile.date_assurance_pro || prev.dateAssurance,
             logo: entProfile.logo_url || prev.logo,
             brandColor: entProfile.brand_color || prev.brandColor,
             statutJuridique: entProfile.statut_juridique || prev.statutJuridique,
@@ -195,7 +200,8 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             nomRepresentantLegal: entProfile.nom_representant_legal || prev.nomRepresentantLegal,
             zipCode: entProfile.code_postal || prev.zipCode,
             city: entProfile.ville || prev.city,
-            complementAdresse: entProfile.complement_adresse || prev.complementAdresse
+            complementAdresse: entProfile.complement_adresse || prev.complementAdresse,
+            pays: entProfile.pays || prev.pays
           }))
         }
       } catch (err) {
@@ -289,6 +295,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
               rue: c.adresse || "",
               codePostal: c.code_postal || "",
               ville: c.ville || "",
+              pays: c.pays || "",
             },
             contacts: c.contacts || [],
             notes: c.notes || "",
@@ -315,9 +322,11 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           setBcs(dbBcs.map(b => ({
             id: b.id,
             number: b.numero || "",
+            clientId: b.client_id || undefined,
             client: b.client_nom || "",
             clientPhone: b.client_telephone || undefined,
-            clientId: b.client_id || undefined,
+            passagerNom: b.passager_nom || undefined,
+            passagerTelephone: b.passager_telephone || undefined,
             amount: Number(b.montant_ttc) || 0,
             amountHT: Number(b.montant_ht) || 0,
             tva: Number(b.tva) || 0,
@@ -338,6 +347,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             trajet: b.trajet || {},
             driverName: b.driver_nom || undefined,
             driverCarteVTC: b.driver_carte_vtc || undefined,
+            vehicleId: b.vehicle_id || undefined,
             vehicleName: b.vehicle_nom || undefined,
             vehiclePlate: b.vehicle_immatriculation || undefined,
             notes: b.notes || undefined,
@@ -364,10 +374,20 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           if (Array.isArray(parsed.tranches)) setTranches(parsed.tranches)
           if (parsed.applyWeekend !== undefined) setApplyWeekend(parsed.applyWeekend)
           if (parsed.applyHolidays !== undefined) setApplyHolidays(parsed.applyHolidays)
-          // We intentionally do not override plan and tokens with local storage 
+          // We intentionally do not override plan and tokens with local storage
           // if we want the DB to be the source of truth, but we keep it as fallback
           if (!plan && parsed.plan) setPlan(parsed.plan)
           if (tokens === 0 && parsed.tokens) setTokens(parsed.tokens)
+          // BUG 4 FIX — Restaurer CGV depuis localStorage (non stockées en DB)
+          if (parsed.cgvMode || parsed.cgvText || parsed.cgv) {
+            setEnterprise(prev => ({
+              ...prev,
+              cgvMode: parsed.cgvMode || prev.cgvMode,
+              cgvConfig: parsed.cgvConfig || prev.cgvConfig,
+              cgvText: parsed.cgvText || prev.cgvText,
+              cgv: parsed.cgv || prev.cgv,
+            }))
+          }
         } catch (e) {
           console.error("[NoxStore] Failed to parse user storage", e)
         }
@@ -377,10 +397,21 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     }
 
     initStore()
-    return () => { isMounted = false }
-  }, [])
+
+    // Keep userId in sync if the session is refreshed or revoked outside this component
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return
+      setUserId(session?.user?.id ?? null)
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [supabase])
 
   // ─── Étape 2 : Persister uniquement dans l'espace de l'utilisateur connecté ───
+  // BUG 6 FIX — inclure les CGV pour éviter leur écrasement au rechargement
   useEffect(() => {
     if (!isLoaded || !userId) return
     const storageKey = getStorageKey(userId)
@@ -388,13 +419,19 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       // clients & bcs sont dans Supabase — plus en localStorage
       invoices,
       tarifBase, forfaits, supplements, tranches,
-      applyWeekend, applyHolidays, plan, tokens
+      applyWeekend, applyHolidays, plan, tokens,
+      // CGV préservées entre les rechargements (jusqu'à migration Supabase via ALTER TABLE)
+      cgvMode: enterprise.cgvMode,
+      cgvConfig: enterprise.cgvConfig,
+      cgvText: enterprise.cgvText,
+      cgv: enterprise.cgv,
     }))
   }, [
     isLoaded, userId,
-    clients, bcs, invoices,
+    invoices,
     tarifBase, forfaits, supplements, tranches,
-    applyWeekend, applyHolidays, plan, tokens
+    applyWeekend, applyHolidays, plan, tokens,
+    enterprise.cgvMode, enterprise.cgvConfig, enterprise.cgvText, enterprise.cgv,
   ])
 
   // ─── Mutations données métier ───
@@ -428,12 +465,12 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         nom_representant_legal: data.nomRepresentantLegal !== undefined ? (data.nomRepresentantLegal || null) : (enterprise.nomRepresentantLegal || null),
         code_postal: data.zipCode !== undefined ? (data.zipCode || null) : (enterprise.zipCode || null),
         ville: data.city !== undefined ? (data.city || null) : (enterprise.city || null),
-        complement_adresse: data.complementAdresse !== undefined ? (data.complementAdresse || null) : (enterprise.complementAdresse || null)
+        complement_adresse: data.complementAdresse !== undefined ? (data.complementAdresse || null) : (enterprise.complementAdresse || null),
+        pays: data.pays !== undefined ? (data.pays || null) : (enterprise.pays || null)
       }
 
       console.log("[NoxStore] Upserting payload:", dbPayload)
 
-      const supabase = createClient()
       const { data: dbData, error } = await supabase
         .from('profiles')
         .upsert(dbPayload, { onConflict: 'user_id' })
@@ -463,13 +500,15 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             siren: dbData.siret || "",
             tva: dbData.tva || "",
             tvaIntra: dbData.tva || "",
+            // BUG 1 FIX — evtcNumber lu depuis registre_vtc
+            evtcNumber: dbData.registre_vtc || prev.evtcNumber || "",
+            registreVTC: dbData.registre_vtc || "",
+            dateRegistre: dbData.date_registre_vtc || "",
+            dateAssurance: dbData.date_assurance_pro || "",
             adresse: dbData.adresse || "",
             bankName: dbData.banque || "",
             iban: dbData.iban || "",
             bic: dbData.bic || "",
-            registreVTC: dbData.registre_vtc || "",
-            dateRegistre: dbData.date_registre_vtc || "",
-            dateAssurance: dbData.date_assurance_pro || "",
             logo: dbData.logo_url || "",
             brandColor: dbData.brand_color || "",
             statutJuridique: dbData.statut_juridique || "",
@@ -477,11 +516,35 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             nomRepresentantLegal: dbData.nom_representant_legal || "",
             zipCode: dbData.code_postal || "",
             city: dbData.ville || "",
-            complementAdresse: dbData.complement_adresse || ""
+            complementAdresse: dbData.complement_adresse || "",
+            pays: dbData.pays || "",
+            // BUG 4 FIX — CGV non stockées en DB : préserver depuis data param ou prev
+            cgvMode: data.cgvMode !== undefined ? data.cgvMode : prev.cgvMode,
+            cgvConfig: data.cgvConfig !== undefined ? data.cgvConfig : prev.cgvConfig,
+            cgvText: data.cgvText !== undefined ? data.cgvText : prev.cgvText,
+            cgv: data.cgv !== undefined ? data.cgv : prev.cgv,
           }
           console.log("[NoxStore] Setting new Enterprise stable state:", freshState)
           return freshState
         })
+
+        // BUG 4 FIX — Persister CGV dans localStorage pour survie aux rechargements
+        if (data.cgvMode !== undefined || data.cgvText !== undefined || data.cgv !== undefined) {
+          try {
+            const storageKey = getStorageKey(userId!)
+            const saved = localStorage.getItem(storageKey)
+            const existing = saved ? JSON.parse(saved) : {}
+            localStorage.setItem(storageKey, JSON.stringify({
+              ...existing,
+              cgvMode: data.cgvMode ?? existing.cgvMode,
+              cgvConfig: data.cgvConfig ?? existing.cgvConfig,
+              cgvText: data.cgvText ?? existing.cgvText,
+              cgv: data.cgv ?? existing.cgv,
+            }))
+          } catch (e) {
+            console.warn("[NoxStore] Could not persist CGV to localStorage", e)
+          }
+        }
       }
     } catch (e) {
       console.error("[NoxStore] Uncaught exception in updateEnterprise:", e)
@@ -489,7 +552,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   }
   const addDriver = async (driver: Driver) => {
     console.log('DEBUG CONTEXT: addDriver called', driver)
-    const supabase = createClient()
 
     console.log('=== DEBUG INSERT DRIVER ===')
     console.log('context userId:', userId)
@@ -608,7 +670,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     if (data.permisExpiration !== undefined) payload.date_expiration_permis = data.permisExpiration || null
 
     try {
-      const supabase = createClient()
       const { data: dbData, error } = await supabase.from('drivers').update(payload).eq('id', id).eq('user_id', userId).select().single()
       if (error) {
         console.error("[NoxStore] Error updating driver:", error)
@@ -625,7 +686,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   const deleteDriver = async (id: string) => {
     if (!userId) return
     try {
-      const supabase = createClient()
       const { error } = await supabase.from('drivers').delete().eq('id', id).eq('user_id', userId)
       if (error) {
         console.error("[NoxStore] Error deleting driver:", error)
@@ -639,7 +699,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
 
   const addVehicle = async (vehicle: Vehicle) => {
     console.log('DEBUG CONTEXT: addVehicle called', vehicle)
-    const supabase = createClient()
 
     console.log('=== DEBUG INSERT VEHICLE ===')
     console.log('context userId:', userId)
@@ -725,7 +784,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     if (data.controleTechniqueExpiration !== undefined) payload.controle_technique_expiration = data.controleTechniqueExpiration || null
 
     try {
-      const supabase = createClient()
       const { data: dbData, error } = await supabase.from('vehicles').update(payload).eq('id', id).eq('user_id', userId).select().single()
       if (error) {
         console.error("[NoxStore] Error updating vehicle:", error)
@@ -742,7 +800,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   const deleteVehicle = async (id: string) => {
     if (!userId) return
     try {
-      const supabase = createClient()
       const { error } = await supabase.from('vehicles').delete().eq('id', id).eq('user_id', userId)
       if (error) {
         console.error("[NoxStore] Error deleting vehicle:", error)
@@ -753,50 +810,83 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       console.error("[NoxStore] Uncaught error deleting vehicle", e)
     }
   }
-  const addClient = async (client: Client) => {
-    if (!userId) return
-    const supabase = createClient()
-    const payload = {
-      user_id: userId,
-      type: client.type || "particulier",
-      civilite: client.civilite || null,
-      prenom: client.prenom || null,
-      nom: client.nom || null,
-      raison_sociale: client.raisonSociale || null,
-      siren: client.siren || null,
-      tva_intra: client.tvaIntra || null,
-      telephone: client.phone || null,
-      email: client.email || null,
-      adresse: client.billingAddress?.rue || null,
-      code_postal: client.billingAddress?.codePostal || null,
-      ville: client.billingAddress?.ville || null,
-      contacts: client.contacts || [],
-      notes: client.notes || null,
-      tag: client.tag || null,
-      preferences: client.preferences || null,
-    }
+  const addClient = async (client: Client): Promise<boolean> => {
     try {
-      const { data, error } = await supabase
+      if (!userId) {
+        console.error("[NoxStore] addClient: userId is null — ABORT")
+        return false
+      }
+
+      const { data: c, error } = await supabase
         .from("clients")
-        .insert([payload])
+        .insert([{
+          user_id: userId,
+          type: client.type || "particulier",
+          civilite: client.civilite || null,
+          nom: client.nom || null,
+          prenom: client.prenom || null,
+          raison_sociale: client.raisonSociale || null,
+          siren: client.siren || null,
+          tva_intra: client.tvaIntra || null,
+          email: client.email || null,
+          telephone: client.phone || null,
+          adresse: client.billingAddress?.rue || null,
+          code_postal: client.billingAddress?.codePostal || null,
+          ville: client.billingAddress?.ville || null,
+          pays: client.billingAddress?.pays || null,
+          contacts: client.contacts ?? [],
+          notes: client.notes || null,
+          tag: client.tag || null,
+          preferences: client.preferences || null,
+        }])
         .select()
         .single()
+
       if (error) {
-        console.error("[NoxStore] addClient FAILED:", error.message)
-        return
+        console.error("[NoxStore] ❌ addClient RPC FAILED:", error)
+        return false
       }
-      if (data) {
-        setClients(prev => [{ ...client, id: data.id }, ...prev])
-      }
+
+      setClients(prev => [...prev, {
+        id: c.id,
+        type: c.type || "particulier",
+        civilite: c.civilite || "M.",
+        prenom: c.prenom || "",
+        nom: c.nom || "",
+        raisonSociale: c.raison_sociale || "",
+        siren: c.siren || "",
+        tvaIntra: c.tva_intra || "",
+        phone: c.telephone || "",
+        email: c.email || "",
+        billingAddress: {
+          rue: c.adresse || "",
+          codePostal: c.code_postal || "",
+          ville: c.ville || "",
+          pays: c.pays || "",
+        },
+        contacts: c.contacts || [],
+        notes: c.notes || "",
+        tag: c.tag || "",
+        trips: c.trips || 0,
+        lastTrip: c.last_trip || "",
+        tripHistory: [],
+        preferences: c.preferences || "",
+      }])
+
+      return true
     } catch (e) {
-      console.error("[NoxStore] Uncaught error in addClient", e)
+      console.error("[NoxStore] Uncaught exception in addClient", e)
+      return false
     }
   }
 
   const updateClient = async (id: string, data: Partial<Client>) => {
     if (!userId) return
-    const supabase = createClient()
     const payload: any = {}
+    if (data.civilite !== undefined) payload.civilite = data.civilite || null
+    if (data.nom !== undefined) payload.nom = data.nom || null
+    if (data.prenom !== undefined) payload.prenom = data.prenom || null
+    if (data.raisonSociale !== undefined) payload.raison_sociale = data.raisonSociale || null
     if (data.phone !== undefined) payload.telephone = data.phone || null
     if (data.email !== undefined) payload.email = data.email || null
     if (data.notes !== undefined) payload.notes = data.notes || null
@@ -807,6 +897,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       payload.adresse = data.billingAddress.rue || null
       payload.code_postal = data.billingAddress.codePostal || null
       payload.ville = data.billingAddress.ville || null
+      payload.pays = data.billingAddress.pays || null
     }
     try {
       const { error } = await supabase
@@ -826,7 +917,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
 
   const deleteClient = async (id: string) => {
     if (!userId) return
-    const supabase = createClient()
     try {
       const { error } = await supabase
         .from("clients")
@@ -845,7 +935,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
 
   const addBC = async (bc: BCDocument) => {
     if (!userId) return
-    const supabase = createClient()
     const { count } = await supabase
       .from("bcs")
       .select("*", { count: "exact", head: true })
@@ -858,13 +947,14 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       numero,
       status: bc.status || "en_attente",
       date_emission: now.toISOString().split("T")[0],
-      client_id: (bc as any).clientId || null,
+      client_id: bc.clientId || null,
       client_nom: bc.client || null,
       client_telephone: bc.clientPhone || null,
-      driver_id: (bc as any).driverId || null,
+      passager_nom: bc.passagerNom || null,
+      passager_telephone: bc.passagerTelephone || null,
       driver_nom: bc.driverName || null,
       driver_carte_vtc: bc.driverCarteVTC || null,
-      vehicle_id: (bc as any).vehicleId || null,
+      vehicle_id: bc.vehicleId || null,
       vehicle_nom: bc.vehicleName || null,
       vehicle_immatriculation: bc.vehiclePlate || null,
       trajet: bc.trajet || {},
@@ -904,7 +994,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
 
   const updateBC = async (id: string, data: Partial<BCDocument>) => {
     if (!userId) return
-    const supabase = createClient()
     const payload: any = {}
     if (data.status !== undefined) payload.status = data.status
     if (data.notes !== undefined) payload.notes = data.notes || null
@@ -926,6 +1015,82 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       console.error("[NoxStore] Uncaught error in updateBC", e)
     }
   }
+  // FEATURE 3 — Auto-save brouillon : upsert (1 seul brouillon actif par utilisateur)
+  const saveDraftBC = async (data: Partial<BCDocument>): Promise<string | null> => {
+    if (!userId) return null
+    try {
+      // Chercher un brouillon existant pour cet utilisateur
+      const { data: existing } = await supabase
+        .from("bcs")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("status", "brouillon")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (existing?.id) {
+        // Mettre à jour le brouillon existant
+        const patchPayload: Record<string, unknown> = { status: "brouillon" }
+        if (data.client !== undefined) patchPayload.client_nom = data.client || null
+        if (data.clientId !== undefined) patchPayload.client_id = data.clientId || null
+        if (data.trajet !== undefined) patchPayload.trajet = data.trajet || null
+        if (data.driverName !== undefined) patchPayload.driver_nom = data.driverName || null
+        if (data.notes !== undefined) patchPayload.notes = data.notes || null
+        const { error } = await supabase
+          .from("bcs")
+          .update(patchPayload)
+          .eq("id", existing.id)
+          .eq("user_id", userId)
+        if (!error) {
+          setBcs(prev => prev.map(b => b.id === existing.id ? { ...b, ...data } : b))
+          return existing.id
+        }
+      } else {
+        // Créer un nouveau brouillon
+        const now = new Date()
+        const insertPayload = {
+          user_id: userId,
+          numero: `DRAFT-${now.getTime()}`,
+          status: "brouillon",
+          date_emission: now.toISOString().split("T")[0],
+          client_nom: data.client || null,
+          client_id: data.clientId || null,
+          trajet: data.trajet || null,
+          driver_nom: data.driverName || null,
+          montant_ttc: 0,
+          montant_ht: 0,
+          notes: data.notes || null,
+        }
+        const { data: inserted, error } = await supabase
+          .from("bcs")
+          .insert([insertPayload])
+          .select("id, numero")
+          .single()
+        if (!error && inserted?.id) {
+          const newDraft: BCDocument = {
+            id: inserted.id,
+            number: inserted.numero,
+            client: data.client || "",
+            clientId: data.clientId,
+            amount: 0,
+            date: now.toLocaleDateString("fr-FR"),
+            status: "brouillon",
+            type: "bc",
+            trajet: data.trajet,
+            driverName: data.driverName,
+            notes: data.notes,
+          }
+          setBcs(prev => [newDraft, ...prev])
+          return inserted.id
+        }
+      }
+    } catch (e) {
+      console.warn("[NoxStore] saveDraftBC failed", e)
+    }
+    return null
+  }
+
   const addInvoice = (invoice: InvoiceDocument) => setInvoices((prev: InvoiceDocument[]) => [invoice, ...prev])
   const updateInvoice = (id: string, data: Partial<InvoiceDocument>) => setInvoices((prev: InvoiceDocument[]) => prev.map(i => i.id === id ? { ...i, ...data } : i))
 
@@ -973,7 +1138,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       plan, tokens, onboardingStatus, driverCount, vehicleCount,
       upgrade, addTokens, spendToken,
       updateEnterprise, addDriver, updateDriver, deleteDriver, addVehicle, updateVehicle, deleteVehicle,
-      addClient, updateClient, deleteClient, addBC, updateBC, addInvoice, updateInvoice, updateTarifs,
+      addClient, updateClient, deleteClient, addBC, updateBC, saveDraftBC, addInvoice, updateInvoice, updateTarifs,
       tranches, applyWeekend, applyHolidays,
       tariffSettings
     }}>
