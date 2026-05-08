@@ -3,27 +3,26 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader"
 
-// Singleton promise — l'API n'est chargée qu'une seule fois
+// setOptions doit être appelé avant tout importLibrary — y compris depuis d'autres fichiers
+// qui importent ce module. On l'exécute au chargement du module, pas à l'intérieur d'un composant.
+setOptions({
+  key: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+  v: "weekly",
+  language: "fr",
+})
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let placesLibPromise: Promise<any> | null = null
-let optionsSet = false
 
 function getPlacesLib() {
   if (!placesLibPromise) {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
-
-    if (!optionsSet) {
-      setOptions({ key: apiKey, v: "weekly", language: "fr" })
-      optionsSet = true
-    }
-
-    placesLibPromise = importLibrary("places").then((lib) => {
-      return lib
-    }).catch((err) => {
-      console.error("[PlacesAutocomplete] ❌ Échec chargement Places library:", err)
-      placesLibPromise = null
-      return null
-    })
+    placesLibPromise = importLibrary("places")
+      .then((lib) => lib)
+      .catch((err) => {
+        console.error("[PlacesAutocomplete] ❌ Échec chargement Places library:", err)
+        placesLibPromise = null
+        return null
+      })
   }
   return placesLibPromise
 }
@@ -33,6 +32,7 @@ interface PlacesAutocompleteProps {
   onChange: (value: string) => void
   onPostalCode?: (value: string) => void
   onCity?: (value: string) => void
+  onCountry?: (value: string) => void
   placeholder?: string
   className?: string
   style?: React.CSSProperties
@@ -43,6 +43,7 @@ export function PlacesAutocomplete({
   onChange,
   onPostalCode,
   onCity,
+  onCountry,
   placeholder = "Adresse",
   className = "",
   style,
@@ -151,44 +152,60 @@ export function PlacesAutocomplete({
     text: string
     secondary: string
   }) {
-    const fullAddress = suggestion.secondary
-      ? `${suggestion.text}, ${suggestion.secondary}`
-      : suggestion.text
-
-    onChange(fullAddress)
+    // Provisional value while we fetch address components
+    onChange(suggestion.text)
     setSuggestions([])
     setShowDropdown(false)
 
-    // Extract postal_code and locality from addressComponents if callbacks provided
-    if (onPostalCode || onCity) {
-      try {
-        const places = await getPlacesLib()
-        if (places) {
-          const place = new places.Place({ id: suggestion.placeId })
-          await place.fetchFields({ fields: ["addressComponents"] })
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const components: any[] = place.addressComponents || []
-          for (const comp of components) {
-            const types: string[] = comp.types || []
-            if (onPostalCode && types.includes("postal_code")) {
-              onPostalCode(comp.longText || comp.shortText || "")
-            }
-            if (onCity && types.includes("locality")) {
-              onCity(comp.longText || comp.shortText || "")
-            }
-          }
+    try {
+      const places = await getPlacesLib()
+      if (places) {
+        const place = new places.Place({ id: suggestion.placeId })
+        await place.fetchFields({ fields: ["addressComponents"] })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const components: any[] = place.addressComponents || []
+
+        let streetNumber = ""
+        let route = ""
+        let postalCode = ""
+        let locality = ""
+        let country = ""
+
+        for (const comp of components) {
+          const types: string[] = comp.types || []
+          const text = comp.longText || comp.shortText || ""
+          if (types.includes("street_number")) streetNumber = text
+          if (types.includes("route")) route = text
+          if (types.includes("postal_code")) postalCode = text
+          if (types.includes("locality")) locality = text
+          if (types.includes("country")) country = text
         }
-      } catch {
-        // Non-critical: address was already set, components extraction is best-effort
+
+        // BUG 4 FIX — adresse complète : rue + ville + pays (ou nom POI + ville + pays)
+        let displayAddress: string
+        if (route) {
+          // Adresse classique
+          const street = streetNumber ? `${streetNumber} ${route}` : route
+          displayAddress = [street, locality, country].filter(Boolean).join(", ")
+        } else {
+          // POI (aéroport, gare, hôtel…) — on utilise le texte principal comme nom
+          displayAddress = [suggestion.text, locality, country].filter(Boolean).join(", ")
+        }
+        onChange(displayAddress)
+
+        if (onPostalCode) onPostalCode(postalCode)
+        if (onCity) onCity(locality)
+        if (onCountry) onCountry(country)
       }
+    } catch {
+      // Non-critical: provisional value remains
     }
 
-    // Refresh session token after selection (billing best practice)
     refreshToken()
   }
 
   return (
-    <div ref={containerRef} className="relative flex-1">
+    <div ref={containerRef} className="relative flex-1 min-w-0">
       <input
         ref={inputRef}
         type="text"
@@ -198,7 +215,7 @@ export function PlacesAutocomplete({
           if (suggestions.length > 0) setShowDropdown(true)
         }}
         placeholder={placeholder}
-        className={className}
+        className={`w-full ${className ?? ""}`}
         style={style}
         autoComplete="off"
       />
