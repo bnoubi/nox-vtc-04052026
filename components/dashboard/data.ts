@@ -69,6 +69,7 @@ export interface EnterpriseProfile {
   complementAdresse?: string
   zipCode: string
   city: string
+  pays?: string
   email: string
   phone: string
   logo?: string
@@ -82,14 +83,19 @@ export interface EnterpriseProfile {
   cgvText?: string
 }
 
-export type BCStatus = "signe" | "en_attente" | "brouillon" | "annule"
+export type BCStatus = "brouillon" | "en_attente" | "confirme" | "en_cours" | "termine" | "annule_client" | "annule_chauffeur"
 export type InvoiceStatus = "brouillon" | "envoyee" | "payee"
 
 export interface BCDocument {
   id: string
   number: string
+  // Payeur — référence vers public.clients
+  clientId?: string
   client: string
   clientPhone?: string
+  // Passager physiquement transporté (peut différer du client payeur)
+  passagerNom?: string
+  passagerTelephone?: string
   amount: number
   amountHT?: number
   tva?: number
@@ -102,7 +108,7 @@ export interface BCDocument {
   tva20Amount?: number
   tva55Amount?: number
   tvaOtherAmount?: number
-  
+
   discountValue?: number
   discountType?: "percent" | "amount"
   originalHT?: number
@@ -123,10 +129,12 @@ export interface BCDocument {
   }
   driverName?: string
   driverCarteVTC?: string
+  vehicleId?: string
   vehicleName?: string
   vehiclePlate?: string
   notes?: string
   cgvText?: string
+  cgvInclure?: boolean
 }
 
 export interface InvoiceItem {
@@ -287,6 +295,7 @@ export interface BillingAddress {
   rue: string
   codePostal: string
   ville: string
+  pays?: string
 }
 
 // Historique de trajets/documents

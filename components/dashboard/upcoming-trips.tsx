@@ -38,9 +38,9 @@ export function UpcomingTrips() {
   // Les courses à venir proviennent des BCs confirmés dans le store utilisateur
   const { bcs } = useNox()
 
-  // Filtrer les BCs signés (= courses confirmées)
+  // Filtrer les BCs en attente ou confirmés (= courses à venir)
   const upcomingTrips = bcs
-    .filter((bc) => bc.status === "signe")
+    .filter((bc) => bc.status === "en_attente" || bc.status === "confirme")
     .slice(0, 3)
 
   return (

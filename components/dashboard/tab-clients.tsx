@@ -16,7 +16,6 @@ import {
   StickyNote,
   Building2,
   Users,
-  Sparkles,
   History,
   Save,
   Trash2,
@@ -24,6 +23,7 @@ import {
   ExternalLink,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 import { AddClientModal } from "./add-client-modal"
 import { CreateBCFlow, type BCPrefillClient } from "./create-bc"
 import { useNox } from "./nox-context"
@@ -138,17 +138,24 @@ function ClientDetail({
   const displayName = getClientDisplayName(client)
   const isPro = client.type === "professionnel"
   const { switchTab } = useNav()
+  const { updateClient, deleteClient } = useNox()
 
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [editCivilite, setEditCivilite] = useState(client.civilite || "M.")
+  const [editNom, setEditNom] = useState(client.nom || "")
+  const [editPrenom, setEditPrenom] = useState(client.prenom || "")
+  const [editRaisonSociale, setEditRaisonSociale] = useState(client.raisonSociale || "")
   const [editPhone, setEditPhone] = useState(client.phone)
   const [editEmail, setEditEmail] = useState(client.email)
   const [editNotes, setEditNotes] = useState(client.notes)
-  const [editPreferences, setEditPreferences] = useState(client.preferences || "")
   const [editContacts, setEditContacts] = useState<ClientContact[]>(client.contacts || [])
   const [editRue, setEditRue] = useState(client.billingAddress.rue)
   const [editCodePostal, setEditCodePostal] = useState(client.billingAddress.codePostal)
   const [editVille, setEditVille] = useState(client.billingAddress.ville)
+  const [editPays, setEditPays] = useState(client.billingAddress.pays || "")
 
   function handleCreateBC() {
     const prefill: BCPrefillClient = isPro
@@ -169,37 +176,67 @@ function ClientDetail({
   }
 
   function handleEdit() {
-    setIsEditing(true)
-  }
-
-  function handleCancelEdit() {
-    // Reset to original values
+    setEditCivilite(client.civilite || "M.")
+    setEditNom(client.nom || "")
+    setEditPrenom(client.prenom || "")
+    setEditRaisonSociale(client.raisonSociale || "")
     setEditPhone(client.phone)
     setEditEmail(client.email)
     setEditNotes(client.notes)
-    setEditPreferences(client.preferences || "")
     setEditContacts(client.contacts || [])
     setEditRue(client.billingAddress.rue)
     setEditCodePostal(client.billingAddress.codePostal)
     setEditVille(client.billingAddress.ville)
+    setEditPays(client.billingAddress.pays || "")
+    setIsEditing(true)
+  }
+
+  function handleCancelEdit() {
+    setEditCivilite(client.civilite || "M.")
+    setEditNom(client.nom || "")
+    setEditPrenom(client.prenom || "")
+    setEditRaisonSociale(client.raisonSociale || "")
+    setEditPhone(client.phone)
+    setEditEmail(client.email)
+    setEditNotes(client.notes)
+    setEditContacts(client.contacts || [])
+    setEditRue(client.billingAddress.rue)
+    setEditCodePostal(client.billingAddress.codePostal)
+    setEditVille(client.billingAddress.ville)
+    setEditPays(client.billingAddress.pays || "")
     setIsEditing(false)
   }
 
   function handleSaveEdit() {
-    const { updateClient } = useNox()
-    updateClient(client.id, {
-      phone: editPhone,
-      email: editEmail,
-      notes: editNotes,
-      preferences: editPreferences,
-      contacts: editContacts,
-      billingAddress: {
-        rue: editRue,
-        codePostal: editCodePostal,
-        ville: editVille
-      }
-    })
-    setIsEditing(false)
+    setIsSaving(true)
+    try {
+      updateClient(client.id, {
+        ...(isPro
+          ? { raisonSociale: editRaisonSociale }
+          : { civilite: editCivilite, nom: editNom, prenom: editPrenom }),
+        phone: editPhone,
+        email: editEmail,
+        notes: editNotes,
+        contacts: editContacts,
+        billingAddress: {
+          rue: editRue,
+          codePostal: editCodePostal,
+          ville: editVille,
+          pays: editPays,
+        }
+      })
+      toast.success("Modifications enregistrées ✓", { duration: 3000 })
+      setIsEditing(false)
+    } catch {
+      toast.error("Une erreur est survenue, veuillez réessayer")
+    } finally {
+      setTimeout(() => setIsSaving(false), 500)
+    }
+  }
+
+  function handleDelete() {
+    deleteClient(client.id)
+    onClose()
   }
 
   function addContact() {
@@ -223,8 +260,12 @@ function ClientDetail({
     }, 350)
   }
 
-  const fullAddress = client.billingAddress 
-    ? `${client.billingAddress.rue}, ${client.billingAddress.codePostal} ${client.billingAddress.ville}`
+  const fullAddress = client.billingAddress
+    ? [
+        client.billingAddress.rue,
+        `${client.billingAddress.codePostal} ${client.billingAddress.ville}`.trim(),
+        client.billingAddress.pays,
+      ].filter(Boolean).join(", ")
     : ""
 
   return (
@@ -354,63 +395,200 @@ function ClientDetail({
             </button>
             <button
               onClick={handleSaveEdit}
-              className="flex-1 py-2.5 rounded-xl bg-gold text-primary-foreground text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+              disabled={isSaving}
+              className="flex-1 py-2.5 rounded-xl bg-gold text-primary-foreground text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Save className="h-4 w-4" strokeWidth={1.5} />
-              Enregistrer
+              {isSaving ? (
+                <span className="animate-pulse">Enregistrement...</span>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" strokeWidth={1.5} />
+                  Enregistrer
+                </>
+              )}
             </button>
           </div>
         )}
 
-        {/* Préférences Prestige */}
-        {(client.preferences || isEditing) && (
-          <div className="px-4 mb-5">
-            <p className="text-[11px] font-semibold text-gold uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Sparkles className="h-3 w-3" strokeWidth={1.5} />
-              Préférences Prestige
-            </p>
-            {isEditing ? (
-              <textarea
-                value={editPreferences}
-                onChange={(e) => setEditPreferences(e.target.value)}
-                placeholder="Ex: Eau plate Evian, Température 21°C, Silence souhaité..."
-                rows={2}
-                className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-gold/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50 resize-none transition-colors"
-              />
-            ) : (
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-gold/5 to-gold/10 border border-gold/20">
-                <p className="text-sm text-gold leading-relaxed">
-                  {client.preferences}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Professional Info */}
-        {isPro && !isEditing && (
-          <div className="px-4 mb-5">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-              Informations Entreprise
-            </p>
-            <div className="rounded-2xl bg-onyx-card border border-onyx-border/50 overflow-hidden divide-y divide-onyx-border/30">
-              {client.siren && (
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-[10px] text-muted-foreground uppercase">SIREN</span>
-                  <span className="text-xs text-foreground font-mono">{client.siren}</span>
+        {/* Identité */}
+        <div className="px-4 mb-5">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            Identité
+          </p>
+          {isEditing ? (
+            <div className="space-y-3">
+              {isPro ? (
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Raison sociale</label>
+                  <input
+                    type="text"
+                    value={editRaisonSociale}
+                    onChange={(e) => setEditRaisonSociale(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
+                  />
                 </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">Civilité</label>
+                    <select
+                      value={editCivilite}
+                      onChange={(e) => setEditCivilite(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
+                    >
+                      <option value="M.">M.</option>
+                      <option value="Mme">Mme</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-muted-foreground mb-1 block">Prénom</label>
+                      <input
+                        type="text"
+                        value={editPrenom}
+                        onChange={(e) => setEditPrenom(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground mb-1 block">Nom</label>
+                      <input
+                        type="text"
+                        value={editNom}
+                        onChange={(e) => setEditNom(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
+                      />
+                    </div>
+                  </div>
+                </>
               )}
-              {client.tvaIntra && (
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-[10px] text-muted-foreground uppercase">TVA Intracom.</span>
-                  <span className="text-xs text-foreground font-mono">{client.tvaIntra}</span>
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-onyx-card border border-onyx-border/50 overflow-hidden divide-y divide-onyx-border/30">
+              {isPro ? (
+                <>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-[10px] text-muted-foreground uppercase">Raison sociale</span>
+                    <span className="text-xs text-foreground font-medium">{client.raisonSociale}</span>
+                  </div>
+                  {client.siren && (
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <span className="text-[10px] text-muted-foreground uppercase">SIREN</span>
+                      <span className="text-xs text-foreground font-mono">{client.siren}</span>
+                    </div>
+                  )}
+                  {client.tvaIntra && (
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <span className="text-[10px] text-muted-foreground uppercase">TVA Intracom.</span>
+                      <span className="text-xs text-foreground font-mono">{client.tvaIntra}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-[10px] text-muted-foreground uppercase">Civilité</span>
+                    <span className="text-xs text-foreground">{client.civilite}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-[10px] text-muted-foreground uppercase">Prénom</span>
+                    <span className="text-xs text-foreground">{client.prenom}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-[10px] text-muted-foreground uppercase">Nom</span>
+                    <span className="text-xs text-foreground">{client.nom}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Contact info */}
+        <div className="px-4 mb-5">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            Coordonnées
+          </p>
+          {isEditing ? (
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-1 block">Téléphone</label>
+                <input
+                  type="tel"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-1 block">Email</label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-1 block">Adresse</label>
+                <PlacesAutocomplete
+                  value={editRue}
+                  onChange={setEditRue}
+                  onPostalCode={setEditCodePostal}
+                  onCity={setEditVille}
+                  onCountry={setEditPays}
+                  placeholder="Rue"
+                  className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors mb-2"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={editCodePostal}
+                    onChange={(e) => setEditCodePostal(e.target.value)}
+                    placeholder="Code postal"
+                    maxLength={5}
+                    className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
+                  />
+                  <input
+                    type="text"
+                    value={editVille}
+                    onChange={(e) => setEditVille(e.target.value)}
+                    placeholder="Ville"
+                    className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
+                  />
+                </div>
+                <input
+                  type="text"
+                  value={editPays}
+                  onChange={(e) => setEditPays(e.target.value)}
+                  placeholder="Pays"
+                  className="w-full mt-2 px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-onyx-card border border-onyx-border/50 overflow-hidden divide-y divide-onyx-border/30">
+              <div className="flex items-center gap-3 px-4 py-3">
+                <Phone className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
+                <span className="text-xs text-foreground">{client.phone}</span>
+              </div>
+              <div className="flex items-center gap-3 px-4 py-3">
+                <Mail className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
+                <span className="text-xs text-foreground truncate">
+                  {client.email}
+                </span>
+              </div>
+              {fullAddress && (
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <MapPin className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
+                  <span className="text-xs text-foreground">{fullAddress}</span>
                 </div>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Contacts for professionals */}
+        {/* Contacts / Passagers */}
         {isPro && (
           <div className="px-4 mb-5">
             <div className="flex items-center justify-between mb-2">
@@ -428,7 +606,6 @@ function ClientDetail({
                 </button>
               )}
             </div>
-            
             {isEditing ? (
               <div className="space-y-2">
                 {editContacts.length === 0 ? (
@@ -492,7 +669,7 @@ function ClientDetail({
                         <p className="text-xs font-medium text-foreground">{contact.prenom} {contact.nom}</p>
                         <p className="text-[10px] text-muted-foreground">{contact.phone}</p>
                       </div>
-                      <button 
+                      <button
                         onClick={() => window.open(`tel:${contact.phone}`)}
                         className="p-2 rounded-lg hover:bg-gold/10 text-gold transition-colors"
                       >
@@ -505,80 +682,6 @@ function ClientDetail({
             )}
           </div>
         )}
-
-        {/* Contact info */}
-        <div className="px-4 mb-5">
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Coordonnées
-          </p>
-          {isEditing ? (
-            <div className="space-y-3">
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 block">Téléphone</label>
-                <input
-                  type="tel"
-                  value={editPhone}
-                  onChange={(e) => setEditPhone(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 block">Email</label>
-                <input
-                  type="email"
-                  value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 block">Adresse</label>
-                <PlacesAutocomplete
-                  value={editRue}
-                  onChange={setEditRue}
-                  placeholder="Rue"
-                  className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors mb-2"
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    value={editCodePostal}
-                    onChange={(e) => setEditCodePostal(e.target.value)}
-                    placeholder="Code postal"
-                    maxLength={5}
-                    className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
-                  />
-                  <input
-                    type="text"
-                    value={editVille}
-                    onChange={(e) => setEditVille(e.target.value)}
-                    placeholder="Ville"
-                    className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
-                  />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-2xl bg-onyx-card border border-onyx-border/50 overflow-hidden divide-y divide-onyx-border/30">
-              <div className="flex items-center gap-3 px-4 py-3">
-                <Phone className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
-                <span className="text-xs text-foreground">{client.phone}</span>
-              </div>
-              <div className="flex items-center gap-3 px-4 py-3">
-                <Mail className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
-                <span className="text-xs text-foreground truncate">
-                  {client.email}
-                </span>
-              </div>
-              {fullAddress && (
-                <div className="flex items-center gap-3 px-4 py-3">
-                  <MapPin className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
-                  <span className="text-xs text-foreground">{fullAddress}</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
 
         {/* Notes */}
         <div className="px-4 mb-5">
@@ -633,6 +736,44 @@ function ClientDetail({
           </div>
         )}
 
+        {/* Supprimer le client */}
+        {!isEditing && (
+          <div className="px-4 pb-8 mt-2">
+            {!showDeleteConfirm ? (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="w-full py-3 rounded-xl border border-red-500/30 text-red-400 text-sm font-medium hover:bg-red-500/5 transition-colors flex items-center justify-center gap-2"
+              >
+                <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                Supprimer ce client
+              </button>
+            ) : (
+              <div className="p-4 rounded-xl border border-red-500/30 bg-red-500/5">
+                <p className="text-sm text-foreground font-semibold mb-1 text-center">
+                  Supprimer {displayName} ?
+                </p>
+                <p className="text-xs text-muted-foreground text-center mb-4">
+                  Cette action est irréversible.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm font-medium text-muted-foreground"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    className="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/40 text-sm font-bold text-red-400"
+                  >
+                    Supprimer
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {isEditing && <div className="h-20" />}
       </motion.div>
     </motion.div>
@@ -644,7 +785,8 @@ function ClientDetail({
 export function ClientsTab() {
   const { clients } = useNox()
   const [search, setSearch] = useState("")
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
+  const selectedClient = clients.find(c => c.id === selectedClientId) ?? null
   const [showAddModal, setShowAddModal] = useState(false)
   const [bcPrefill, setBcPrefill] = useState<BCPrefillClient | null>(null)
   const [showBCFlow, setShowBCFlow] = useState(false)
@@ -711,7 +853,7 @@ export function ClientsTab() {
             <ClientCard
               key={client.id}
               client={client}
-              onSelect={() => setSelectedClient(client)}
+              onSelect={() => setSelectedClientId(client.id)}
             />
           ))
         ) : (
@@ -745,7 +887,7 @@ export function ClientsTab() {
         {selectedClient && (
           <ClientDetail
             client={selectedClient}
-            onClose={() => setSelectedClient(null)}
+            onClose={() => setSelectedClientId(null)}
             onCreateBC={handleCreateBCFromClient}
           />
         )}

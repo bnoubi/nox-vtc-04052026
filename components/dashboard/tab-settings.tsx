@@ -502,6 +502,7 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
     complementAdresse: enterprise.complementAdresse || "",
     codePostal: enterprise.zipCode || "",
     ville: enterprise.city || "",
+    pays: enterprise.pays || "",
   })
 
   // Conformité VTC
@@ -524,22 +525,28 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
   }
 
   function handleSave() {
-    updateEnterprise({
-      name: legal.denomination,
-      siren: legal.siren,
-      tva: legal.tvaIntra,
-      adresse: legal.adresse,
-      complementAdresse: legal.complementAdresse,
-      zipCode: legal.codePostal,
-      city: legal.ville,
-      brandColor,
-      logo: logoPreview || undefined,
-      registreVTC: compliance.registreVTC,
-      dateRegistre: compliance.dateRegistre,
-      dateAssurance: compliance.dateAssurance
-    })
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
+    try {
+      updateEnterprise({
+        name: legal.denomination,
+        siren: legal.siren,
+        tva: legal.tvaIntra,
+        adresse: legal.adresse,
+        complementAdresse: legal.complementAdresse,
+        zipCode: legal.codePostal,
+        city: legal.ville,
+        pays: legal.pays,
+        brandColor,
+        logo: logoPreview || undefined,
+        registreVTC: compliance.registreVTC,
+        dateRegistre: compliance.dateRegistre,
+        dateAssurance: compliance.dateAssurance
+      })
+      toast.success("Modifications enregistrées ✓", { duration: 3000 })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch {
+      toast.error("Une erreur est survenue, veuillez réessayer")
+    }
   }
 
   const registreStatus = getExpirationStatus(compliance.dateRegistre)
@@ -706,6 +713,7 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
                   onChange={(val) => setLegal({ ...legal, adresse: val })}
                   onPostalCode={(val) => setLegal(prev => ({ ...prev, codePostal: val }))}
                   onCity={(val) => setLegal(prev => ({ ...prev, ville: val }))}
+                  onCountry={(val) => setLegal(prev => ({ ...prev, pays: val }))}
                   placeholder="Adresse du siège social"
                   className="flex-1 px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors"
                 />
@@ -748,6 +756,16 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
                   className="w-full px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors"
                 />
               </div>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Pays</p>
+              <input
+                type="text"
+                value={legal.pays}
+                onChange={(e) => setLegal({ ...legal, pays: e.target.value })}
+                placeholder="France"
+                className="w-full px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors"
+              />
             </div>
           </div>
         </GlassCard>
@@ -880,6 +898,7 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
 function BankingScreen({ onBack }: { onBack: () => void }) {
   const { enterprise, updateEnterprise } = useNox()
   const [editing, setEditing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [bank, setBank] = useState({
     banque: enterprise.bankName || "À renseigner",
     iban: enterprise.iban || "À renseigner",
@@ -887,13 +906,20 @@ function BankingScreen({ onBack }: { onBack: () => void }) {
   })
 
   function handleSave() {
-    updateEnterprise({
-      bankName: bank.banque,
-      iban: bank.iban,
-      bic: bank.bic
-    })
-    setEditing(false)
-    toast.success("Coordonnées bancaires mises à jour")
+    setIsSaving(true)
+    try {
+      updateEnterprise({
+        bankName: bank.banque,
+        iban: bank.iban,
+        bic: bank.bic
+      })
+      setEditing(false)
+      toast.success("Modifications enregistrées ✓", { duration: 3000 })
+    } catch {
+      toast.error("Une erreur est survenue, veuillez réessayer")
+    } finally {
+      setTimeout(() => setIsSaving(false), 500)
+    }
   }
 
   return (
@@ -954,14 +980,21 @@ function BankingScreen({ onBack }: { onBack: () => void }) {
         <div className="px-4">
           <button
             onClick={() => editing ? handleSave() : setEditing(true)}
+            disabled={isSaving}
             className={cn(
               "w-full py-3 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-all",
               editing
-                ? "bg-gold text-primary-foreground hover:bg-gold-light gold-glow-sm"
+                ? isSaving
+                  ? "bg-gold/50 text-primary-foreground cursor-not-allowed"
+                  : "bg-gold text-primary-foreground hover:bg-gold-light gold-glow-sm"
                 : "bg-gold/10 border border-gold/30 text-gold hover:bg-gold/20"
             )}
           >
-            {editing ? "Enregistrer les modifications" : "Modifier mes coordonnées bancaires"}
+            {editing
+              ? isSaving
+                ? <span className="animate-pulse">Enregistrement...</span>
+                : "Enregistrer les modifications"
+              : "Modifier mes coordonnées bancaires"}
           </button>
         </div>
       </div>

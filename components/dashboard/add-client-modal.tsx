@@ -37,6 +37,7 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
   const [rue, setRue] = useState("")
   const [codePostal, setCodePostal] = useState("")
   const [ville, setVille] = useState("")
+  const [pays, setPays] = useState("")
 
   function resetForm() {
     setClientType("particulier")
@@ -52,6 +53,7 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
     setRue("")
     setCodePostal("")
     setVille("")
+    setPays("")
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -69,24 +71,30 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
       contacts: clientType === "professionnel" ? contacts : undefined,
       phone,
       email,
-      billingAddress: { rue, codePostal, ville },
+      billingAddress: { rue, codePostal, ville, pays },
       trips: 0,
       lastTrip: "Jamais",
       notes: "Nouveau client",
     }
 
+    let success = false
     try {
-      await addClient(newClient)
+      success = await addClient(newClient)
     } catch (e) {
       console.error("[AddClientModal] addClient failed:", e)
     }
-    
-    toast.success("Client ajouté", {
-      description: clientType === "particulier" ? `${prenom} ${nom} a été ajouté.` : `${raisonSociale} a été ajouté.`
-    })
-    
-    onClose()
-    setTimeout(resetForm, 300)
+
+    if (success) {
+      toast.success("Client ajouté", {
+        description: clientType === "particulier" ? `${prenom} ${nom} a été ajouté.` : `${raisonSociale} a été ajouté.`
+      })
+      onClose()
+      setTimeout(resetForm, 300)
+    } else {
+      toast.error("Erreur lors de l'ajout", {
+        description: "Le client n'a pas pu être enregistré. Vérifiez la console."
+      })
+    }
   }
 
   function addContact() {
@@ -225,23 +233,14 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
                     <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
                       Civilité
                     </label>
-                    <div className="flex gap-2">
-                      {(["M.", "Mme"] as const).map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => setCivilite(c)}
-                          className={cn(
-                            "flex-1 py-2.5 rounded-xl text-xs font-medium border transition-all",
-                            civilite === c
-                              ? "bg-gold/15 border-gold/40 text-gold"
-                              : "bg-onyx-card border-onyx-border/50 text-muted-foreground"
-                          )}
-                        >
-                          {c}
-                        </button>
-                      ))}
-                    </div>
+                    <select
+                      value={civilite}
+                      onChange={(e) => setCivilite(e.target.value as "M." | "Mme")}
+                      className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
+                    >
+                      <option value="M.">M.</option>
+                      <option value="Mme">Mme</option>
+                    </select>
                   </div>
 
                   {/* Nom & Prénom */}
@@ -433,6 +432,9 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
                     <PlacesAutocomplete
                       value={rue}
                       onChange={setRue}
+                      onPostalCode={setCodePostal}
+                      onCity={setVille}
+                      onCountry={setPays}
                       placeholder="8 Rue de Rivoli"
                       className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
                     />
@@ -463,6 +465,18 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
                         className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
                       />
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                      Pays
+                    </label>
+                    <input
+                      type="text"
+                      value={pays}
+                      onChange={(e) => setPays(e.target.value)}
+                      placeholder="France"
+                      className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
+                    />
                   </div>
                 </div>
               </div>

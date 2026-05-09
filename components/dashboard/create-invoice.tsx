@@ -187,8 +187,8 @@ function FromBCScreen({
   const [tvaRate, setTvaRate] = useState<Record<string, number>>({})
 
   // Only show BCs that are signed and NOT yet in any invoice
-  const unbilledBCs = bcs.filter(bc => 
-    bc.status === "signe" && !invoices.some(inv => inv.bcRef === bc.number)
+  const unbilledBCs = bcs.filter(bc =>
+    (bc.status === "confirme" || bc.status === "termine") && !invoices.some(inv => inv.bcRef === bc.number)
   )
 
   const filtered = unbilledBCs.filter(

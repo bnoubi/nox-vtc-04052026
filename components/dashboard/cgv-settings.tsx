@@ -239,6 +239,7 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
   const [config, setConfig] = useState<CGVConfig>(enterprise.cgvConfig || defaultConfig)
   const [freeText, setFreeText] = useState(enterprise.cgvText || "")
   const [importedFile, setImportedFile] = useState<File | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   const updateConfig = useCallback(<K extends keyof CGVConfig>(key: K, value: CGVConfig[K]) => {
     setConfig((prev) => ({ ...prev, [key]: value }))
@@ -252,6 +253,7 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
   }
 
   const handleSave = () => {
+    setIsSaving(true)
     // Determine the text to save based on mode
     let cgvToSave = ""
     if (mode === "configurator") {
@@ -270,16 +272,19 @@ export function CGVSettings({ onBack }: { onBack: () => void }) {
       cgvToSave = `CGV Importées: ${importedFile.name}`
     }
 
-    updateEnterprise({
-      cgv: cgvToSave,
-      cgvMode: mode,
-      cgvConfig: config,
-      cgvText: freeText
-    })
-
-    toast.success("✓ CGV enregistrées et rattachées à vos futurs documents", {
-      duration: 3000,
-    })
+    try {
+      updateEnterprise({
+        cgv: cgvToSave,
+        cgvMode: mode,
+        cgvConfig: config,
+        cgvText: freeText
+      })
+      toast.success("✓ CGV enregistrées et rattachées à vos futurs documents", { duration: 3000 })
+    } catch {
+      toast.error("Une erreur est survenue, veuillez réessayer")
+    } finally {
+      setTimeout(() => setIsSaving(false), 600)
+    }
   }
 
   const loadTemplate = () => {
@@ -666,9 +671,10 @@ Temps d'attente offert : 10 minutes..."
       <div className="fixed bottom-20 left-0 right-0 px-4 py-4 bg-gradient-to-t from-background via-background to-transparent">
         <button
           onClick={handleSave}
-          className="w-full h-[52px] rounded-full bg-gold text-black font-bold text-sm flex items-center justify-center gap-2 hover:bg-gold/90 active:scale-[0.98] transition-all gold-glow"
+          disabled={isSaving}
+          className="w-full h-[52px] rounded-full bg-gold text-black font-bold text-sm flex items-center justify-center gap-2 hover:bg-gold/90 active:scale-[0.98] transition-all gold-glow disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Enregistrer mes CGV
+          {isSaving ? <span className="animate-pulse">Enregistrement...</span> : "Enregistrer mes CGV"}
         </button>
       </div>
     </motion.div>

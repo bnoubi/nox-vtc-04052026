@@ -3,13 +3,17 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader"
 
-// setOptions doit être appelé avant tout importLibrary — y compris depuis d'autres fichiers
-// qui importent ce module. On l'exécute au chargement du module, pas à l'intérieur d'un composant.
-setOptions({
-  key: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
-  v: "weekly",
-  language: "fr",
-})
+// setOptions doit être appelé avant tout importLibrary. On l'exécute au chargement du module
+// (et non à l'intérieur d'un composant) pour garantir qu'il précède tout importLibrary,
+// y compris ceux déclenchés depuis d'autres fichiers (ex. create-bc.tsx → importLibrary("routes")).
+// Le guard typeof window évite l'erreur SSR lors du prerendering Next.js.
+if (typeof window !== "undefined") {
+  setOptions({
+    key: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+    v: "weekly",
+    language: "fr",
+  })
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let placesLibPromise: Promise<any> | null = null
@@ -36,6 +40,8 @@ interface PlacesAutocompleteProps {
   placeholder?: string
   className?: string
   style?: React.CSSProperties
+  // "full" = rue+ville+pays (départ/arrivée BC) — "street" = rue seule (fiches adresse)
+  addressMode?: "full" | "street"
 }
 
 export function PlacesAutocomplete({
@@ -47,6 +53,7 @@ export function PlacesAutocomplete({
   placeholder = "Adresse",
   className = "",
   style,
+  addressMode = "street",
 }: PlacesAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [suggestions, setSuggestions] = useState<
@@ -122,8 +129,9 @@ export function PlacesAutocomplete({
             const pred = s.placePrediction!
             return {
               placeId: pred.placeId,
-              text: pred.mainText?.toString() || pred.text?.toString() || "",
-              secondary: pred.secondaryText?.toString() || "",
+              // .text est un objet FormattableText, pas une string — on extrait .text
+              text: pred.mainText?.text || pred.text?.text || "",
+              secondary: pred.secondaryText?.text || "",
             }
           })
 
@@ -181,15 +189,23 @@ export function PlacesAutocomplete({
           if (types.includes("country")) country = text
         }
 
-        // BUG 4 FIX — adresse complète : rue + ville + pays (ou nom POI + ville + pays)
         let displayAddress: string
-        if (route) {
-          // Adresse classique
-          const street = streetNumber ? `${streetNumber} ${route}` : route
-          displayAddress = [street, locality, country].filter(Boolean).join(", ")
+        if (addressMode === "full") {
+          // Adresse complète : rue + ville + pays (départ/arrivée BC)
+          if (route) {
+            const street = streetNumber ? `${streetNumber} ${route}` : route
+            displayAddress = [street, locality, country].filter(Boolean).join(", ")
+          } else {
+            // POI (aéroport, gare, hôtel…)
+            displayAddress = [suggestion.text, locality, country].filter(Boolean).join(", ")
+          }
         } else {
-          // POI (aéroport, gare, hôtel…) — on utilise le texte principal comme nom
-          displayAddress = [suggestion.text, locality, country].filter(Boolean).join(", ")
+          // Mode "street" : rue seule (fiches client, chauffeur, profil…)
+          if (route) {
+            displayAddress = streetNumber ? `${streetNumber} ${route}` : route
+          } else {
+            displayAddress = suggestion.text
+          }
         }
         onChange(displayAddress)
 

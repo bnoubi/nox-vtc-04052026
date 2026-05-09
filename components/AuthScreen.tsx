@@ -181,7 +181,9 @@ export function AuthScreen() {
                       key={`turnstile-reset-${turnstileKey}`}
                       siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
                       onSuccess={(token) => setCaptchaToken(token)}
-                      options={{ theme: 'dark' }}
+                      onExpire={() => { setCaptchaToken(null); setTurnstileKey(prev => prev + 1) }}
+                      onError={() => setCaptchaToken(null)}
+                      options={{ theme: 'dark', refreshExpired: 'auto' }}
                     />
                   </div>
 
@@ -266,7 +268,9 @@ export function AuthScreen() {
                   key={`turnstile-login-${turnstileKey}`}
                   siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
                   onSuccess={(token) => setCaptchaToken(token)}
-                  options={{ theme: 'dark' }}
+                  onExpire={() => { setCaptchaToken(null); setTurnstileKey(prev => prev + 1) }}
+                  onError={() => setCaptchaToken(null)}
+                  options={{ theme: 'dark', refreshExpired: 'auto' }}
                 />
               </div>
 

@@ -39,8 +39,10 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/register') ||
     request.nextUrl.pathname.startsWith('/auth')
 
-  // Toutes les routes non-auth nécessitent une session
-  if (!user && !isAuthRoute) {
+  const isApiRoute = request.nextUrl.pathname.startsWith('/api')
+
+  // Toutes les routes non-auth nécessitent une session (sauf les API routes qui gèrent leur propre auth)
+  if (!user && !isAuthRoute && !isApiRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

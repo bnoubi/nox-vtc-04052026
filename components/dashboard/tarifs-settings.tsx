@@ -311,6 +311,8 @@ export function TarifsSettings({ onBack }: { onBack: () => void }) {
   // Forfaits fixes
   const [forfaits, setForfaits] = useState<Forfait[]>(storeForfaits)
 
+  const [isSaving, setIsSaving] = useState(false)
+
   // Estimator
   const [estimatorOpen, setEstimatorOpen] = useState(false)
   const [estimatorDistance, setEstimatorDistance] = useState(12)
@@ -375,13 +377,14 @@ export function TarifsSettings({ onBack }: { onBack: () => void }) {
   }, [baseRate, tranches, tranchesEnabled, estimatorDistance, estimatorTranche, estimatorSupplements, supplements])
 
   const handleSave = () => {
+    setIsSaving(true)
     const base: TarifBase = {
       priseEnCharge: baseRate.priseEnCharge,
       prixKm: baseRate.tarifKm,
       prixAttente: baseRate.tarifAttente,
       courseMinimum: baseRate.courseMinimum
     }
-    
+
     const f: TarifForfait[] = forfaits.map(item => ({
       id: item.id,
       name: item.name,
@@ -395,8 +398,14 @@ export function TarifsSettings({ onBack }: { onBack: () => void }) {
       enabled: item.enabled
     }))
 
-    updateTarifs(base, f, s, tranches, applyWeekend, applyHolidays)
-    toast.success("✓ Grille tarifaire sauvegardée", { duration: 2000 })
+    try {
+      updateTarifs(base, f, s, tranches, applyWeekend, applyHolidays)
+      toast.success("✓ Grille tarifaire sauvegardée", { duration: 3000 })
+    } catch {
+      toast.error("Une erreur est survenue, veuillez réessayer")
+    } finally {
+      setTimeout(() => setIsSaving(false), 600)
+    }
   }
 
   const activeSupplements = supplements.filter(s => s.enabled)
@@ -925,9 +934,10 @@ export function TarifsSettings({ onBack }: { onBack: () => void }) {
           <div className="px-4 py-3 border-t border-onyx-border/20">
             <button
               onClick={handleSave}
-              className="w-full py-3.5 rounded-full bg-gold text-black font-semibold text-sm hover:bg-gold/90 active:scale-[0.98] transition-all"
+              disabled={isSaving}
+              className="w-full py-3.5 rounded-full bg-gold text-black font-semibold text-sm hover:bg-gold/90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Enregistrer ma grille tarifaire
+              {isSaving ? <span className="animate-pulse">Enregistrement...</span> : "Enregistrer ma grille tarifaire"}
             </button>
           </div>
         </div>

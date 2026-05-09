@@ -53,6 +53,7 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState(false)
   const [emailAlreadyExists, setEmailAlreadyExists] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [turnstileKey, setTurnstileKey] = useState(0)
 
   const router = useRouter()
   const supabase = createClient()
@@ -86,6 +87,9 @@ export default function RegisterPage() {
     })
 
     setIsLoading(false)
+    // Toujours réinitialiser le token après la tentative (token à usage unique)
+    setCaptchaToken(null)
+    setTurnstileKey(prev => prev + 1)
 
     if (error) {
       const msg = error.message.toLowerCase()
@@ -294,9 +298,12 @@ export default function RegisterPage() {
           {/* Turnstile Widget */}
           <div className="flex justify-center mt-4">
             <Turnstile
+              key={`turnstile-register-${turnstileKey}`}
               siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
               onSuccess={(token) => setCaptchaToken(token)}
-              options={{ theme: 'dark' }}
+              onExpire={() => { setCaptchaToken(null); setTurnstileKey(prev => prev + 1) }}
+              onError={() => setCaptchaToken(null)}
+              options={{ theme: 'dark', refreshExpired: 'auto' }}
             />
           </div>
 

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect, useMemo } from "react"
+import React, { createContext, useContext, useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { 
   Driver, Vehicle, Client, EnterpriseProfile, TarifBase, TarifForfait, TarifSupplement, TrancheHoraire,
@@ -20,7 +20,6 @@ const emptyEnterprise: EnterpriseProfile = {
   adresse: "",
   zipCode: "",
   city: "",
-  pays: "",
   email: "",
   phone: "",
 }
@@ -62,12 +61,11 @@ interface NoxContextType {
   addVehicle: (vehicle: Vehicle) => void
   updateVehicle: (id: string, data: Partial<Vehicle>) => void
   deleteVehicle: (id: string) => void
-  addClient: (client: Client) => Promise<boolean>
+  addClient: (client: Client) => void
   updateClient: (id: string, data: Partial<Client>) => void
   deleteClient: (id: string) => void
   addBC: (bc: BCDocument) => void
   updateBC: (id: string, data: Partial<BCDocument>) => void
-  saveDraftBC: (data: Partial<BCDocument>) => Promise<string | null>
   addInvoice: (invoice: InvoiceDocument) => void
   updateInvoice: (id: string, data: Partial<InvoiceDocument>) => void
   updateTarifs: (base: TarifBase, forfaits: TarifForfait[], supplements: TarifSupplement[], tranches?: TrancheHoraire[], applyWeekend?: boolean, applyHolidays?: boolean) => void
@@ -96,9 +94,6 @@ function purgeGlobalStorageIfNeeded() {
 }
 
 export function NoxProvider({ children }: { children: React.ReactNode }) {
-  // Single stable Supabase browser client — avoids session desync across functions
-  const supabase = useMemo(() => createClient(), [])
-
   const [isLoaded, setIsLoaded] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
 
@@ -112,6 +107,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   const [invoices, setInvoices] = useState<InvoiceDocument[]>([])
 
   const refreshUserProfile = async () => {
+    const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const { data } = await supabase.from("user_accounts").select("prenom, nom, phone").eq("id", user.id).single()
@@ -142,6 +138,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     async function initStore() {
       purgeGlobalStorageIfNeeded()
 
+      const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
 
       if (!isMounted) return
@@ -184,15 +181,13 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             siren: entProfile.siret || prev.siren,
             tva: entProfile.tva || prev.tva,
             tvaIntra: entProfile.tva || prev.tvaIntra,
-            // BUG 1 FIX — evtcNumber lu depuis registre_vtc (jamais stocké dans bcs)
-            evtcNumber: entProfile.registre_vtc || prev.evtcNumber,
-            registreVTC: entProfile.registre_vtc || prev.registreVTC,
-            dateRegistre: entProfile.date_registre_vtc || prev.dateRegistre,
-            dateAssurance: entProfile.date_assurance_pro || prev.dateAssurance,
             adresse: entProfile.adresse || prev.adresse,
             bankName: entProfile.banque || prev.bankName,
             iban: entProfile.iban || prev.iban,
             bic: entProfile.bic || prev.bic,
+            registreVTC: entProfile.registre_vtc || prev.registreVTC,
+            dateRegistre: entProfile.date_registre_vtc || prev.dateRegistre,
+            dateAssurance: entProfile.date_assurance_pro || prev.dateAssurance,
             logo: entProfile.logo_url || prev.logo,
             brandColor: entProfile.brand_color || prev.brandColor,
             statutJuridique: entProfile.statut_juridique || prev.statutJuridique,
@@ -200,11 +195,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             nomRepresentantLegal: entProfile.nom_representant_legal || prev.nomRepresentantLegal,
             zipCode: entProfile.code_postal || prev.zipCode,
             city: entProfile.ville || prev.city,
-            complementAdresse: entProfile.complement_adresse || prev.complementAdresse,
-            pays: entProfile.pays || prev.pays,
-            cgvMode: entProfile.cgv_mode || prev.cgvMode,
-            cgvConfig: entProfile.cgv_config || prev.cgvConfig,
-            cgvText: entProfile.cgv_text || prev.cgvText,
+            complementAdresse: entProfile.complement_adresse || prev.complementAdresse
           }))
         }
       } catch (err) {
@@ -275,94 +266,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         console.error("[NoxStore] Uncaught error loading vehicles", err)
       }
 
-      // ─── Chargement Clients (Supabase) ───
-      try {
-        const { data: dbClients, error: cliErr } = await supabase
-          .from("clients")
-          .select("*")
-          .eq("user_id", uid)
-        if (cliErr) console.error("[NoxStore] Error loading clients:", cliErr)
-        else if (dbClients) {
-          setClients(dbClients.map(c => ({
-            id: c.id,
-            type: c.type || "particulier",
-            civilite: c.civilite || "M.",
-            prenom: c.prenom || "",
-            nom: c.nom || "",
-            raisonSociale: c.raison_sociale || "",
-            siren: c.siren || "",
-            tvaIntra: c.tva_intra || "",
-            phone: c.telephone || "",
-            email: c.email || "",
-            billingAddress: {
-              rue: c.adresse || "",
-              codePostal: c.code_postal || "",
-              ville: c.ville || "",
-              pays: c.pays || "",
-            },
-            contacts: c.contacts || [],
-            notes: c.notes || "",
-            tag: c.tag || "",
-            trips: c.trips || 0,
-            lastTrip: c.last_trip || "",
-            tripHistory: [],
-            preferences: c.preferences || "",
-          })))
-        }
-      } catch (err) {
-        console.error("[NoxStore] Uncaught error loading clients", err)
-      }
-
-      // ─── Chargement BCs (Supabase) ───
-      try {
-        const { data: dbBcs, error: bcsErr } = await supabase
-          .from("bcs")
-          .select("*")
-          .eq("user_id", uid)
-          .order("created_at", { ascending: false })
-        if (bcsErr) console.error("[NoxStore] Error loading bcs:", bcsErr)
-        else if (dbBcs) {
-          setBcs(dbBcs.map(b => ({
-            id: b.id,
-            number: b.numero || "",
-            clientId: b.client_id || undefined,
-            client: b.client_nom || "",
-            clientPhone: b.client_telephone || undefined,
-            passagerNom: b.passager_nom || undefined,
-            passagerTelephone: b.passager_telephone || undefined,
-            amount: Number(b.montant_ttc) || 0,
-            amountHT: Number(b.montant_ht) || 0,
-            tva: Number(b.tva) || 0,
-            baseHT: Number(b.base_ht) || 0,
-            supplementsHT: Number(b.supplements_ht) || 0,
-            tva10Amount: Number(b.tva_10_amount) || 0,
-            tva20Amount: Number(b.tva_20_amount) || 0,
-            discountValue: Number(b.discount_value) || 0,
-            discountType: b.discount_type || "percent",
-            originalHT: Number(b.original_ht) || 0,
-            originalTTC: Number(b.original_ttc) || 0,
-            supplementsList: b.supplements_list || [],
-            date: b.date_emission
-              ? new Date(b.date_emission).toLocaleDateString("fr-FR")
-              : "",
-            status: b.status || "en_attente",
-            type: "bc",
-            trajet: b.trajet || {},
-            driverName: b.driver_nom || undefined,
-            driverCarteVTC: b.driver_carte_vtc || undefined,
-            vehicleId: b.vehicle_id || undefined,
-            vehicleName: b.vehicle_nom || undefined,
-            vehiclePlate: b.vehicle_immatriculation || undefined,
-            notes: b.notes || undefined,
-            cgvText: b.cgv_text || undefined,
-            cgvInclure: b.cgv_inclure ?? true,
-          })))
-        }
-      } catch (err) {
-        console.error("[NoxStore] Uncaught error loading bcs", err)
-      }
-
-            // Charger les données propres à CET utilisateur depuis son espace isolé
+      // Charger les données propres à CET utilisateur depuis son espace isolé
       const storageKey = getStorageKey(uid)
       const savedData = localStorage.getItem(storageKey)
 
@@ -370,6 +274,9 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         try {
           const parsed = JSON.parse(savedData)
           // Données métier : ne charger que si existantes pour cet utilisateur
+          if (Array.isArray(parsed.clients)) setClients(parsed.clients)
+          if (Array.isArray(parsed.clients)) setClients(parsed.clients)
+          if (Array.isArray(parsed.bcs)) setBcs(parsed.bcs)
           if (Array.isArray(parsed.invoices)) setInvoices(parsed.invoices)
           // Config fonctionnelle
           if (parsed.tarifBase) setTarifBase(parsed.tarifBase)
@@ -378,11 +285,10 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           if (Array.isArray(parsed.tranches)) setTranches(parsed.tranches)
           if (parsed.applyWeekend !== undefined) setApplyWeekend(parsed.applyWeekend)
           if (parsed.applyHolidays !== undefined) setApplyHolidays(parsed.applyHolidays)
-          // We intentionally do not override plan and tokens with local storage
+          // We intentionally do not override plan and tokens with local storage 
           // if we want the DB to be the source of truth, but we keep it as fallback
           if (!plan && parsed.plan) setPlan(parsed.plan)
           if (tokens === 0 && parsed.tokens) setTokens(parsed.tokens)
-          // CGV désormais chargées depuis Supabase public.profiles — plus de localStorage
         } catch (e) {
           console.error("[NoxStore] Failed to parse user storage", e)
         }
@@ -392,35 +298,23 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     }
 
     initStore()
-
-    // Keep userId in sync if the session is refreshed or revoked outside this component
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!isMounted) return
-      setUserId(session?.user?.id ?? null)
-    })
-
-    return () => {
-      isMounted = false
-      subscription.unsubscribe()
-    }
-  }, [supabase])
+    return () => { isMounted = false }
+  }, [])
 
   // ─── Étape 2 : Persister uniquement dans l'espace de l'utilisateur connecté ───
   useEffect(() => {
     if (!isLoaded || !userId) return
     const storageKey = getStorageKey(userId)
     localStorage.setItem(storageKey, JSON.stringify({
-      // clients & bcs sont dans Supabase — plus en localStorage
-      invoices,
+      clients, bcs, invoices, // Enterprise, drivers, vehicles are in Supabase
       tarifBase, forfaits, supplements, tranches,
-      applyWeekend, applyHolidays, plan, tokens,
-      // CGV stockées dans Supabase public.profiles — pas en localStorage
+      applyWeekend, applyHolidays, plan, tokens
     }))
   }, [
     isLoaded, userId,
-    invoices,
+    clients, bcs, invoices,
     tarifBase, forfaits, supplements, tranches,
-    applyWeekend, applyHolidays, plan, tokens,
+    applyWeekend, applyHolidays, plan, tokens
   ])
 
   // ─── Mutations données métier ───
@@ -454,15 +348,12 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         nom_representant_legal: data.nomRepresentantLegal !== undefined ? (data.nomRepresentantLegal || null) : (enterprise.nomRepresentantLegal || null),
         code_postal: data.zipCode !== undefined ? (data.zipCode || null) : (enterprise.zipCode || null),
         ville: data.city !== undefined ? (data.city || null) : (enterprise.city || null),
-        complement_adresse: data.complementAdresse !== undefined ? (data.complementAdresse || null) : (enterprise.complementAdresse || null),
-        pays: data.pays !== undefined ? (data.pays || null) : (enterprise.pays || null),
-        cgv_mode: data.cgvMode !== undefined ? (data.cgvMode || null) : (enterprise.cgvMode || null),
-        cgv_config: data.cgvConfig !== undefined ? (data.cgvConfig || null) : (enterprise.cgvConfig || null),
-        cgv_text: data.cgvText !== undefined ? (data.cgvText || null) : (enterprise.cgvText || null),
+        complement_adresse: data.complementAdresse !== undefined ? (data.complementAdresse || null) : (enterprise.complementAdresse || null)
       }
 
       console.log("[NoxStore] Upserting payload:", dbPayload)
 
+      const supabase = createClient()
       const { data: dbData, error } = await supabase
         .from('profiles')
         .upsert(dbPayload, { onConflict: 'user_id' })
@@ -492,15 +383,13 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             siren: dbData.siret || "",
             tva: dbData.tva || "",
             tvaIntra: dbData.tva || "",
-            // BUG 1 FIX — evtcNumber lu depuis registre_vtc
-            evtcNumber: dbData.registre_vtc || prev.evtcNumber || "",
-            registreVTC: dbData.registre_vtc || "",
-            dateRegistre: dbData.date_registre_vtc || "",
-            dateAssurance: dbData.date_assurance_pro || "",
             adresse: dbData.adresse || "",
             bankName: dbData.banque || "",
             iban: dbData.iban || "",
             bic: dbData.bic || "",
+            registreVTC: dbData.registre_vtc || "",
+            dateRegistre: dbData.date_registre_vtc || "",
+            dateAssurance: dbData.date_assurance_pro || "",
             logo: dbData.logo_url || "",
             brandColor: dbData.brand_color || "",
             statutJuridique: dbData.statut_juridique || "",
@@ -508,11 +397,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             nomRepresentantLegal: dbData.nom_representant_legal || "",
             zipCode: dbData.code_postal || "",
             city: dbData.ville || "",
-            complementAdresse: dbData.complement_adresse || "",
-            pays: dbData.pays || "",
-            cgvMode: dbData.cgv_mode || prev.cgvMode,
-            cgvConfig: dbData.cgv_config || prev.cgvConfig,
-            cgvText: dbData.cgv_text || prev.cgvText,
+            complementAdresse: dbData.complement_adresse || ""
           }
           console.log("[NoxStore] Setting new Enterprise stable state:", freshState)
           return freshState
@@ -524,6 +409,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   }
   const addDriver = async (driver: Driver) => {
     console.log('DEBUG CONTEXT: addDriver called', driver)
+    const supabase = createClient()
 
     console.log('=== DEBUG INSERT DRIVER ===')
     console.log('context userId:', userId)
@@ -642,6 +528,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     if (data.permisExpiration !== undefined) payload.date_expiration_permis = data.permisExpiration || null
 
     try {
+      const supabase = createClient()
       const { data: dbData, error } = await supabase.from('drivers').update(payload).eq('id', id).eq('user_id', userId).select().single()
       if (error) {
         console.error("[NoxStore] Error updating driver:", error)
@@ -658,6 +545,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   const deleteDriver = async (id: string) => {
     if (!userId) return
     try {
+      const supabase = createClient()
       const { error } = await supabase.from('drivers').delete().eq('id', id).eq('user_id', userId)
       if (error) {
         console.error("[NoxStore] Error deleting driver:", error)
@@ -671,6 +559,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
 
   const addVehicle = async (vehicle: Vehicle) => {
     console.log('DEBUG CONTEXT: addVehicle called', vehicle)
+    const supabase = createClient()
 
     console.log('=== DEBUG INSERT VEHICLE ===')
     console.log('context userId:', userId)
@@ -756,6 +645,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     if (data.controleTechniqueExpiration !== undefined) payload.controle_technique_expiration = data.controleTechniqueExpiration || null
 
     try {
+      const supabase = createClient()
       const { data: dbData, error } = await supabase.from('vehicles').update(payload).eq('id', id).eq('user_id', userId).select().single()
       if (error) {
         console.error("[NoxStore] Error updating vehicle:", error)
@@ -772,6 +662,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   const deleteVehicle = async (id: string) => {
     if (!userId) return
     try {
+      const supabase = createClient()
       const { error } = await supabase.from('vehicles').delete().eq('id', id).eq('user_id', userId)
       if (error) {
         console.error("[NoxStore] Error deleting vehicle:", error)
@@ -782,288 +673,11 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       console.error("[NoxStore] Uncaught error deleting vehicle", e)
     }
   }
-  const addClient = async (client: Client): Promise<boolean> => {
-    try {
-      if (!userId) {
-        console.error("[NoxStore] addClient: userId is null — ABORT")
-        return false
-      }
-
-      const { data: c, error } = await supabase
-        .from("clients")
-        .insert([{
-          user_id: userId,
-          type: client.type || "particulier",
-          civilite: client.civilite || null,
-          nom: client.nom || null,
-          prenom: client.prenom || null,
-          raison_sociale: client.raisonSociale || null,
-          siren: client.siren || null,
-          tva_intra: client.tvaIntra || null,
-          email: client.email || null,
-          telephone: client.phone || null,
-          adresse: client.billingAddress?.rue || null,
-          code_postal: client.billingAddress?.codePostal || null,
-          ville: client.billingAddress?.ville || null,
-          pays: client.billingAddress?.pays || null,
-          contacts: client.contacts ?? [],
-          notes: client.notes || null,
-          tag: client.tag || null,
-          preferences: client.preferences || null,
-        }])
-        .select()
-        .single()
-
-      if (error) {
-        console.error("[NoxStore] ❌ addClient RPC FAILED:", error)
-        return false
-      }
-
-      setClients(prev => [...prev, {
-        id: c.id,
-        type: c.type || "particulier",
-        civilite: c.civilite || "M.",
-        prenom: c.prenom || "",
-        nom: c.nom || "",
-        raisonSociale: c.raison_sociale || "",
-        siren: c.siren || "",
-        tvaIntra: c.tva_intra || "",
-        phone: c.telephone || "",
-        email: c.email || "",
-        billingAddress: {
-          rue: c.adresse || "",
-          codePostal: c.code_postal || "",
-          ville: c.ville || "",
-          pays: c.pays || "",
-        },
-        contacts: c.contacts || [],
-        notes: c.notes || "",
-        tag: c.tag || "",
-        trips: c.trips || 0,
-        lastTrip: c.last_trip || "",
-        tripHistory: [],
-        preferences: c.preferences || "",
-      }])
-
-      return true
-    } catch (e) {
-      console.error("[NoxStore] Uncaught exception in addClient", e)
-      return false
-    }
-  }
-
-  const updateClient = async (id: string, data: Partial<Client>) => {
-    if (!userId) return
-    const payload: any = {}
-    if (data.civilite !== undefined) payload.civilite = data.civilite || null
-    if (data.nom !== undefined) payload.nom = data.nom || null
-    if (data.prenom !== undefined) payload.prenom = data.prenom || null
-    if (data.raisonSociale !== undefined) payload.raison_sociale = data.raisonSociale || null
-    if (data.phone !== undefined) payload.telephone = data.phone || null
-    if (data.email !== undefined) payload.email = data.email || null
-    if (data.notes !== undefined) payload.notes = data.notes || null
-    if (data.preferences !== undefined) payload.preferences = data.preferences || null
-    if (data.contacts !== undefined) payload.contacts = data.contacts || []
-    if (data.tag !== undefined) payload.tag = data.tag || null
-    if (data.billingAddress !== undefined) {
-      payload.adresse = data.billingAddress.rue || null
-      payload.code_postal = data.billingAddress.codePostal || null
-      payload.ville = data.billingAddress.ville || null
-      payload.pays = data.billingAddress.pays || null
-    }
-    try {
-      const { error } = await supabase
-        .from("clients")
-        .update(payload)
-        .eq("id", id)
-        .eq("user_id", userId)
-      if (error) {
-        console.error("[NoxStore] updateClient FAILED:", error.message)
-        return
-      }
-      setClients(prev => prev.map(c => c.id === id ? { ...c, ...data } : c))
-    } catch (e) {
-      console.error("[NoxStore] Uncaught error in updateClient", e)
-    }
-  }
-
-  const deleteClient = async (id: string) => {
-    if (!userId) return
-    try {
-      const { error } = await supabase
-        .from("clients")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", userId)
-      if (error) {
-        console.error("[NoxStore] deleteClient FAILED:", error.message)
-        return
-      }
-      setClients(prev => prev.filter(c => c.id !== id))
-    } catch (e) {
-      console.error("[NoxStore] Uncaught error in deleteClient", e)
-    }
-  }
-
-  const addBC = async (bc: BCDocument) => {
-    if (!userId) return
-    const { count } = await supabase
-      .from("bcs")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", userId)
-    const now = new Date()
-    const seq = String((count ?? 0) + 1).padStart(4, "0")
-    const numero = `BC-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${seq}`
-    const payload = {
-      user_id: userId,
-      numero,
-      status: bc.status || "en_attente",
-      date_emission: now.toISOString().split("T")[0],
-      client_id: bc.clientId || null,
-      client_nom: bc.client || null,
-      client_telephone: bc.clientPhone || null,
-      passager_nom: bc.passagerNom || null,
-      passager_telephone: bc.passagerTelephone || null,
-      driver_nom: bc.driverName || null,
-      driver_carte_vtc: bc.driverCarteVTC || null,
-      vehicle_id: bc.vehicleId || null,
-      vehicle_nom: bc.vehicleName || null,
-      vehicle_immatriculation: bc.vehiclePlate || null,
-      trajet: bc.trajet || {},
-      montant_ht: bc.amountHT || 0,
-      tva_rate: 10,
-      tva: bc.tva || 0,
-      montant_ttc: bc.amount || 0,
-      base_ht: bc.baseHT || 0,
-      supplements_ht: bc.supplementsHT || 0,
-      tva_10_amount: bc.tva10Amount || 0,
-      tva_20_amount: bc.tva20Amount || 0,
-      discount_value: bc.discountValue || 0,
-      discount_type: bc.discountType || "percent",
-      original_ht: bc.originalHT || 0,
-      original_ttc: bc.originalTTC || 0,
-      supplements_list: bc.supplementsList || [],
-      notes: bc.notes || null,
-      cgv_text: bc.cgvText || null,
-      cgv_inclure: bc.cgvInclure !== undefined ? bc.cgvInclure : true,
-    }
-    try {
-      const { data, error } = await supabase
-        .from("bcs")
-        .insert([payload])
-        .select()
-        .single()
-      if (error) {
-        console.error("[NoxStore] addBC FAILED:", error.message)
-        return
-      }
-      if (data) {
-        setBcs(prev => [{ ...bc, id: data.id, number: data.numero }, ...prev])
-      }
-    } catch (e) {
-      console.error("[NoxStore] Uncaught error in addBC", e)
-    }
-  }
-
-  const updateBC = async (id: string, data: Partial<BCDocument>) => {
-    if (!userId) return
-    const payload: any = {}
-    if (data.status !== undefined) payload.status = data.status
-    if (data.notes !== undefined) payload.notes = data.notes || null
-    if (data.amount !== undefined) payload.montant_ttc = data.amount
-    if (data.amountHT !== undefined) payload.montant_ht = data.amountHT
-    if (data.tva !== undefined) payload.tva = data.tva
-    try {
-      const { error } = await supabase
-        .from("bcs")
-        .update(payload)
-        .eq("id", id)
-        .eq("user_id", userId)
-      if (error) {
-        console.error("[NoxStore] updateBC FAILED:", error.message)
-        return
-      }
-      setBcs(prev => prev.map(b => b.id === id ? { ...b, ...data } : b))
-    } catch (e) {
-      console.error("[NoxStore] Uncaught error in updateBC", e)
-    }
-  }
-  // FEATURE 3 — Auto-save brouillon : upsert (1 seul brouillon actif par utilisateur)
-  const saveDraftBC = async (data: Partial<BCDocument>): Promise<string | null> => {
-    if (!userId) return null
-    try {
-      // Chercher un brouillon existant pour cet utilisateur
-      const { data: existing } = await supabase
-        .from("bcs")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("status", "brouillon")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (existing?.id) {
-        // Mettre à jour le brouillon existant
-        const patchPayload: Record<string, unknown> = { status: "brouillon" }
-        if (data.client !== undefined) patchPayload.client_nom = data.client || null
-        if (data.clientId !== undefined) patchPayload.client_id = data.clientId || null
-        if (data.trajet !== undefined) patchPayload.trajet = data.trajet || null
-        if (data.driverName !== undefined) patchPayload.driver_nom = data.driverName || null
-        if (data.notes !== undefined) patchPayload.notes = data.notes || null
-        const { error } = await supabase
-          .from("bcs")
-          .update(patchPayload)
-          .eq("id", existing.id)
-          .eq("user_id", userId)
-        if (!error) {
-          setBcs(prev => prev.map(b => b.id === existing.id ? { ...b, ...data } : b))
-          return existing.id
-        }
-      } else {
-        // Créer un nouveau brouillon
-        const now = new Date()
-        const insertPayload = {
-          user_id: userId,
-          numero: `DRAFT-${now.getTime()}`,
-          status: "brouillon",
-          date_emission: now.toISOString().split("T")[0],
-          client_nom: data.client || null,
-          client_id: data.clientId || null,
-          trajet: data.trajet || null,
-          driver_nom: data.driverName || null,
-          montant_ttc: 0,
-          montant_ht: 0,
-          notes: data.notes || null,
-        }
-        const { data: inserted, error } = await supabase
-          .from("bcs")
-          .insert([insertPayload])
-          .select("id, numero")
-          .single()
-        if (!error && inserted?.id) {
-          const newDraft: BCDocument = {
-            id: inserted.id,
-            number: inserted.numero,
-            client: data.client || "",
-            clientId: data.clientId,
-            amount: 0,
-            date: now.toLocaleDateString("fr-FR"),
-            status: "brouillon",
-            type: "bc",
-            trajet: data.trajet,
-            driverName: data.driverName,
-            notes: data.notes,
-          }
-          setBcs(prev => [newDraft, ...prev])
-          return inserted.id
-        }
-      }
-    } catch (e) {
-      console.warn("[NoxStore] saveDraftBC failed", e)
-    }
-    return null
-  }
-
+  const addClient = (client: Client) => setClients((prev: Client[]) => [client, ...prev])
+  const updateClient = (id: string, data: Partial<Client>) => setClients((prev: Client[]) => prev.map(c => c.id === id ? { ...c, ...data } : c))
+  const deleteClient = (id: string) => setClients((prev: Client[]) => prev.filter(c => c.id !== id))
+  const addBC = (bc: BCDocument) => setBcs((prev: BCDocument[]) => [bc, ...prev])
+  const updateBC = (id: string, data: Partial<BCDocument>) => setBcs((prev: BCDocument[]) => prev.map(b => b.id === id ? { ...b, ...data } : b))
   const addInvoice = (invoice: InvoiceDocument) => setInvoices((prev: InvoiceDocument[]) => [invoice, ...prev])
   const updateInvoice = (id: string, data: Partial<InvoiceDocument>) => setInvoices((prev: InvoiceDocument[]) => prev.map(i => i.id === id ? { ...i, ...data } : i))
 
@@ -1111,7 +725,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       plan, tokens, onboardingStatus, driverCount, vehicleCount,
       upgrade, addTokens, spendToken,
       updateEnterprise, addDriver, updateDriver, deleteDriver, addVehicle, updateVehicle, deleteVehicle,
-      addClient, updateClient, deleteClient, addBC, updateBC, saveDraftBC, addInvoice, updateInvoice, updateTarifs,
+      addClient, updateClient, deleteClient, addBC, updateBC, addInvoice, updateInvoice, updateTarifs,
       tranches, applyWeekend, applyHolidays,
       tariffSettings
     }}>
