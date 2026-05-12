@@ -1,5 +1,6 @@
 import path from "path"
 import { fileURLToPath } from "url"
+import { withSentryConfig } from "@sentry/nextjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -12,4 +13,8 @@ const nextConfig = {
   transpilePackages: ["canvg", "jspdf", "html2canvas"],
 }
 
-export default nextConfig
+export default withSentryConfig(nextConfig, {
+  silent: true,
+  telemetry: false,
+  hideSourceMaps: true,
+})
