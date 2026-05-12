@@ -18,4 +18,13 @@ next-env.d.ts
 npm-debug.log*
 yarn-error.log*
 
+# Claude Code artifacts
+.claude/
+.claude-flow/
+.swarm/
+.mcp.json
+CLAUDE.md
+agentdb.rvf
+agentdb.rvf.lock
+
 
