@@ -224,8 +224,8 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
   const progressScore = score
   const strokeDashoffset = circumference - (progressScore / 100) * circumference
 
-  function handleIssueClick(issue: DocumentIssue) {
-    if (onNavigateToEntity) {
+    function handleIssueClick(issue: DocumentIssue) {
+    if (onNavigateToEntity && issue.entityType !== "enterprise") {
       setShowDetails(false)
       onNavigateToEntity(issue.entityType, issue.entityId, issue.field)
     }

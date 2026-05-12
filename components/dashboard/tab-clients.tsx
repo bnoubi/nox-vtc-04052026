@@ -144,7 +144,9 @@ function ClientDetail({
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [editCivilite, setEditCivilite] = useState(client.civilite || "M.")
+  const [editCivilite, setEditCivilite] = useState<"M." | "Mme">(
+  client.civilite === "Mme" ? "Mme" : "M."
+)
   const [editNom, setEditNom] = useState(client.nom || "")
   const [editPrenom, setEditPrenom] = useState(client.prenom || "")
   const [editRaisonSociale, setEditRaisonSociale] = useState(client.raisonSociale || "")
@@ -192,7 +194,7 @@ function ClientDetail({
   }
 
   function handleCancelEdit() {
-    setEditCivilite(client.civilite || "M.")
+    setEditCivilite(client.civilite === "Mme" ? "Mme" : "M.")
     setEditNom(client.nom || "")
     setEditPrenom(client.prenom || "")
     setEditRaisonSociale(client.raisonSociale || "")
@@ -433,7 +435,7 @@ function ClientDetail({
                     <label className="text-[10px] text-muted-foreground mb-1 block">Civilité</label>
                     <select
                       value={editCivilite}
-                      onChange={(e) => setEditCivilite(e.target.value)}
+                      onChange={(e) => setEditCivilite(e.target.value as "M." | "Mme")}
                       className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
                     >
                       <option value="M.">M.</option>

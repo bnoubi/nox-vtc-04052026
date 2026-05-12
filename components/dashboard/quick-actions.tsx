@@ -42,7 +42,7 @@ function QuickActionTile({ icon, label, locked, onClick, onLockedClick }: QuickA
         className={cn("p-2 rounded-lg", locked ? "bg-zinc-800/60" : "bg-gold/10")}
       >
         <span className={cn(locked ? "text-zinc-400" : "text-gold")}>
-          {React.cloneElement(icon as React.ReactElement, {
+          {React.cloneElement(icon as React.ReactElement<{ className?: string }>, {
             className: "h-4 w-4",
           })}
         </span>

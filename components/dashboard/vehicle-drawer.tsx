@@ -184,7 +184,7 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
     if (!vehicle || !onDelete) return
     onDelete(vehicle)
     toast("Élément supprimé", {
-      description: `${vehicle.model}`,
+      description: `${vehicle.modele}`,
       duration: 2000,
     })
     setConfirmDelete(false)
