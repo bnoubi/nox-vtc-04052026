@@ -1,6 +1,7 @@
 import React from "react"
 import type { Metadata, Viewport } from 'next'
 import { Inter, Montserrat } from 'next/font/google'
+import { headers } from 'next/headers'
 
 import './globals.css'
 
@@ -34,13 +35,14 @@ export const viewport: Viewport = {
   userScalable: false,
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const nonce = (await headers()).get('x-nonce') ?? ''
   return (
-    <html lang="en" className={`${inter.variable} ${montserrat.variable}`} suppressHydrationWarning>
+    <html lang="en" nonce={nonce} className={`${inter.variable} ${montserrat.variable}`} suppressHydrationWarning>
       <body className="font-sans antialiased" suppressHydrationWarning>{children}</body>
     </html>
   )
