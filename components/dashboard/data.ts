@@ -128,6 +128,7 @@ export interface BCDocument {
     luggage?: number
   }
   driverName?: string
+  driverPhone?: string
   driverCarteVTC?: string
   vehicleId?: string
   vehicleName?: string
@@ -236,6 +237,21 @@ export interface TarifSupplement {
   label: string
   price: number
   enabled: boolean // seuls les supplements enabled:true sont affiches
+}
+
+export interface TariffGrid {
+  id: string
+  name: string
+  baseRate: number        // priseEnCharge → base_rate
+  perKm: number           // prixKm → per_km
+  perHour: number         // prixAttente → per_hour
+  courseMinimum: number   // packed in forfaits JSONB
+  supplements: TarifSupplement[]
+  forfaits: TarifForfait[]
+  tranches: TrancheHoraire[]
+  applyWeekend: boolean
+  applyHolidays: boolean
+  isDefault: boolean
 }
 
 export const defaultSupplements: TarifSupplement[] = [

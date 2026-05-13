@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { 
-  Driver, Vehicle, Client, EnterpriseProfile, TarifBase, TarifForfait, TarifSupplement, TrancheHoraire,
+  Driver, Vehicle, Client, EnterpriseProfile, TarifBase, TarifForfait, TarifSupplement, TrancheHoraire, TariffGrid,
   BCDocument, InvoiceDocument, InvoiceStatus, Plan,
   defaultTarifBase, defaultForfaits, defaultSupplements, defaultTranches,
   PLAN_LIMITS
@@ -71,6 +71,10 @@ interface NoxContextType {
   addInvoice: (invoice: InvoiceDocument) => void
   updateInvoice: (id: string, data: Partial<InvoiceDocument>) => void
   deleteInvoice: (id: string) => void
+  tariffGrids: TariffGrid[]
+  addTariffGrid: (grid: TariffGrid) => void
+  updateTariffGrid: (id: string, data: Partial<TariffGrid>) => void
+  deleteTariffGrid: (id: string) => void
   updateTarifs: (base: TarifBase, forfaits: TarifForfait[], supplements: TarifSupplement[], tranches?: TrancheHoraire[], applyWeekend?: boolean, applyHolidays?: boolean) => void
   tariffSettings: {
     base: TarifBase
@@ -126,6 +130,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   }
 
   // ─── Config fonctionnelle : valeurs par défaut système (tarification) ───
+  const [tariffGrids, setTariffGrids] = useState<TariffGrid[]>([])
   const [tarifBase, setTarifBase] = useState<TarifBase>(defaultTarifBase)
   const [forfaits, setForfaits] = useState<TarifForfait[]>(defaultForfaits)
   const [supplements, setSupplements] = useState<TarifSupplement[]>(defaultSupplements)
@@ -343,6 +348,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             type: "bc",
             trajet: b.trajet || {},
             driverName: b.driver_nom || undefined,
+            driverPhone: b.driver_telephone || undefined,
             driverCarteVTC: b.driver_carte_vtc || undefined,
             vehicleId: b.vehicle_id || undefined,
             vehicleName: b.vehicle_nom || undefined,
@@ -398,6 +404,45 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
       }
 
+      // ─── Chargement Tariffs (Supabase) ───
+      try {
+        const { data: dbTariffs } = await supabase
+          .from("tariffs")
+          .select("*")
+          .eq("user_id", uid)
+          .order("created_at", { ascending: true })
+        if (dbTariffs && dbTariffs.length > 0) {
+          const grids: TariffGrid[] = dbTariffs.map(row => ({
+            id: row.id,
+            name: row.name || "default",
+            baseRate: Number(row.base_rate) || defaultTarifBase.priseEnCharge,
+            perKm: Number(row.per_km) || defaultTarifBase.prixKm,
+            perHour: Number(row.per_hour) || defaultTarifBase.prixAttente,
+            courseMinimum: row.forfaits?.courseMinimum ?? defaultTarifBase.courseMinimum,
+            supplements: Array.isArray(row.supplements) ? row.supplements : [],
+            forfaits: Array.isArray(row.forfaits?.items) ? row.forfaits.items : [],
+            tranches: Array.isArray(row.forfaits?.tranches) ? row.forfaits.tranches : defaultTranches,
+            applyWeekend: row.forfaits?.applyWeekend ?? true,
+            applyHolidays: row.forfaits?.applyHolidays ?? true,
+            isDefault: row.is_default ?? false,
+          }))
+          setTariffGrids(grids)
+          const defaultGrid = grids.find(g => g.isDefault) || grids[0]
+          setTarifBase({
+            priseEnCharge: defaultGrid.baseRate,
+            prixKm: defaultGrid.perKm,
+            prixAttente: defaultGrid.perHour,
+            courseMinimum: defaultGrid.courseMinimum,
+          })
+          if (defaultGrid.supplements.length > 0) setSupplements(defaultGrid.supplements)
+          if (defaultGrid.forfaits.length > 0) setForfaits(defaultGrid.forfaits)
+          if (defaultGrid.tranches.length > 0) setTranches(defaultGrid.tranches)
+          setApplyWeekend(defaultGrid.applyWeekend)
+          setApplyHolidays(defaultGrid.applyHolidays)
+        }
+      } catch (err) {
+      }
+
       // Charger les données propres à CET utilisateur depuis son espace isolé
       const storageKey = getStorageKey(uid)
       const savedData = localStorage.getItem(storageKey)
@@ -405,13 +450,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       if (savedData) {
         try {
           const parsed = JSON.parse(savedData)
-          // Config fonctionnelle
-          if (parsed.tarifBase) setTarifBase(parsed.tarifBase)
-          if (Array.isArray(parsed.forfaits)) setForfaits(parsed.forfaits)
-          if (Array.isArray(parsed.supplements)) setSupplements(parsed.supplements)
-          if (Array.isArray(parsed.tranches)) setTranches(parsed.tranches)
-          if (parsed.applyWeekend !== undefined) setApplyWeekend(parsed.applyWeekend)
-          if (parsed.applyHolidays !== undefined) setApplyHolidays(parsed.applyHolidays)
           // We intentionally do not override plan and tokens with local storage
           // if we want the DB to be the source of truth, but we keep it as fallback
           if (!plan && parsed.plan) setPlan(parsed.plan)
@@ -443,15 +481,12 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     if (!isLoaded || !userId) return
     const storageKey = getStorageKey(userId)
     localStorage.setItem(storageKey, JSON.stringify({
-      // clients, bcs & invoices sont dans Supabase — plus en localStorage
-      tarifBase, forfaits, supplements, tranches,
-      applyWeekend, applyHolidays, plan, tokens,
-      // CGV stockées dans Supabase public.profiles — pas en localStorage
+      // clients, bcs, invoices & tariffs sont dans Supabase — plus en localStorage
+      plan, tokens,
     }))
   }, [
     isLoaded, userId,
-    tarifBase, forfaits, supplements, tranches,
-    applyWeekend, applyHolidays, plan, tokens,
+    plan, tokens,
   ])
 
   // ─── Mutations données métier ───
@@ -1113,13 +1148,154 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const updateTarifs = (base: TarifBase, f: TarifForfait[], s: TarifSupplement[], t?: TrancheHoraire[], aw?: boolean, ah?: boolean) => {
+  const updateTarifs = async (base: TarifBase, f: TarifForfait[], s: TarifSupplement[], t?: TrancheHoraire[], aw?: boolean, ah?: boolean) => {
+    const newTranches = t ?? tranches
+    const newAW = aw !== undefined ? aw : applyWeekend
+    const newAH = ah !== undefined ? ah : applyHolidays
     setTarifBase(base)
     setForfaits(f)
     setSupplements(s)
     if (t) setTranches(t)
     if (aw !== undefined) setApplyWeekend(aw)
     if (ah !== undefined) setApplyHolidays(ah)
+    if (!userId) return
+    const forfaitsPayload = {
+      items: f,
+      tranches: newTranches,
+      courseMinimum: base.courseMinimum,
+      applyWeekend: newAW,
+      applyHolidays: newAH,
+    }
+    try {
+      const { data: existing } = await supabase
+        .from("tariffs")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("is_default", true)
+        .maybeSingle()
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("tariffs")
+          .update({
+            base_rate: base.priseEnCharge,
+            per_km: base.prixKm,
+            per_hour: base.prixAttente,
+            supplements: s,
+            forfaits: forfaitsPayload,
+          })
+          .eq("id", existing.id)
+          .eq("user_id", userId)
+        if (!error) {
+          setTariffGrids(prev => prev.map(g => g.isDefault ? {
+            ...g,
+            baseRate: base.priseEnCharge, perKm: base.prixKm, perHour: base.prixAttente,
+            courseMinimum: base.courseMinimum, supplements: s, forfaits: f,
+            tranches: newTranches, applyWeekend: newAW, applyHolidays: newAH,
+          } : g))
+        }
+      } else {
+        const { data: inserted, error } = await supabase
+          .from("tariffs")
+          .insert([{
+            user_id: userId,
+            name: "default",
+            base_rate: base.priseEnCharge,
+            per_km: base.prixKm,
+            per_hour: base.prixAttente,
+            supplements: s,
+            forfaits: forfaitsPayload,
+            is_default: true,
+          }])
+          .select()
+          .single()
+        if (!error && inserted) {
+          setTariffGrids(prev => [...prev, {
+            id: inserted.id, name: "default",
+            baseRate: base.priseEnCharge, perKm: base.prixKm, perHour: base.prixAttente,
+            courseMinimum: base.courseMinimum, supplements: s, forfaits: f,
+            tranches: newTranches, applyWeekend: newAW, applyHolidays: newAH,
+            isDefault: true,
+          }])
+        }
+      }
+    } catch (e) {
+    }
+  }
+
+  const addTariffGrid = async (grid: TariffGrid) => {
+    if (!userId) return
+    try {
+      const { data, error } = await supabase
+        .from("tariffs")
+        .insert([{
+          user_id: userId,
+          name: grid.name,
+          base_rate: grid.baseRate,
+          per_km: grid.perKm,
+          per_hour: grid.perHour,
+          supplements: grid.supplements,
+          forfaits: {
+            items: grid.forfaits,
+            tranches: grid.tranches,
+            courseMinimum: grid.courseMinimum,
+            applyWeekend: grid.applyWeekend,
+            applyHolidays: grid.applyHolidays,
+          },
+          is_default: grid.isDefault,
+        }])
+        .select()
+        .single()
+      if (error) return
+      if (data) setTariffGrids(prev => [...prev, { ...grid, id: data.id }])
+    } catch (e) {
+    }
+  }
+
+  const updateTariffGrid = async (id: string, data: Partial<TariffGrid>) => {
+    if (!userId) return
+    const payload: Record<string, unknown> = {}
+    if (data.name !== undefined) payload.name = data.name
+    if (data.isDefault !== undefined) payload.is_default = data.isDefault
+    if (data.baseRate !== undefined) payload.base_rate = data.baseRate
+    if (data.perKm !== undefined) payload.per_km = data.perKm
+    if (data.perHour !== undefined) payload.per_hour = data.perHour
+    if (data.supplements !== undefined) payload.supplements = data.supplements
+    if (data.forfaits !== undefined || data.tranches !== undefined || data.courseMinimum !== undefined || data.applyWeekend !== undefined || data.applyHolidays !== undefined) {
+      const existing = tariffGrids.find(g => g.id === id)
+      if (existing) {
+        payload.forfaits = {
+          items: data.forfaits ?? existing.forfaits,
+          tranches: data.tranches ?? existing.tranches,
+          courseMinimum: data.courseMinimum ?? existing.courseMinimum,
+          applyWeekend: data.applyWeekend ?? existing.applyWeekend,
+          applyHolidays: data.applyHolidays ?? existing.applyHolidays,
+        }
+      }
+    }
+    try {
+      const { error } = await supabase
+        .from("tariffs")
+        .update(payload)
+        .eq("id", id)
+        .eq("user_id", userId)
+      if (error) return
+      setTariffGrids(prev => prev.map(g => g.id === id ? { ...g, ...data } : g))
+    } catch (e) {
+    }
+  }
+
+  const deleteTariffGrid = async (id: string) => {
+    if (!userId) return
+    try {
+      const { error } = await supabase
+        .from("tariffs")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId)
+      if (error) return
+      setTariffGrids(prev => prev.filter(g => g.id !== id))
+    } catch (e) {
+    }
   }
 
   const upgrade = (target?: Plan) => {
@@ -1157,7 +1333,8 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       plan, tokens, onboardingStatus, driverCount, vehicleCount,
       upgrade, addTokens, spendToken,
       updateEnterprise, addDriver, updateDriver, deleteDriver, addVehicle, updateVehicle, deleteVehicle,
-      addClient, updateClient, deleteClient, addBC, updateBC, saveDraftBC, addInvoice, updateInvoice, deleteInvoice, updateTarifs,
+      addClient, updateClient, deleteClient, addBC, updateBC, saveDraftBC, addInvoice, updateInvoice, deleteInvoice,
+      tariffGrids, addTariffGrid, updateTariffGrid, deleteTariffGrid, updateTarifs,
       tranches, applyWeekend, applyHolidays,
       tariffSettings
     }}>

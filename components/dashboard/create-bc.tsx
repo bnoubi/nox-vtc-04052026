@@ -533,6 +533,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
         luggage,
       },
       driverName: selectedDriver?.name,
+      driverPhone: selectedDriver?.phone,
       driverCarteVTC: selectedDriver?.carteProNumber,
       vehicleId: selectedVehicle?.id,
       vehicleName: vehicleLabel,
