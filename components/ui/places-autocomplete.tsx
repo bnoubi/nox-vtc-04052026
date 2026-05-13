@@ -66,9 +66,9 @@ export function PlacesAutocomplete({
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click/tap (mousedown for desktop, touchstart for mobile)
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
+    function handleOutside(e: Event) {
       if (
         containerRef.current &&
         !containerRef.current.contains(e.target as Node)
@@ -76,8 +76,12 @@ export function PlacesAutocomplete({
         setShowDropdown(false)
       }
     }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
+    document.addEventListener("mousedown", handleOutside)
+    document.addEventListener("touchstart", handleOutside, { passive: true })
+    return () => {
+      document.removeEventListener("mousedown", handleOutside)
+      document.removeEventListener("touchstart", handleOutside)
+    }
   }, [])
 
   // Create fresh session token on mount and after each selection
@@ -229,11 +233,16 @@ export function PlacesAutocomplete({
         onChange={handleInputChange}
         onFocus={() => {
           if (suggestions.length > 0) setShowDropdown(true)
+          // After keyboard appears on mobile, scroll input into view so dropdown is visible
+          setTimeout(() => inputRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 300)
         }}
         placeholder={placeholder}
         className={`w-full ${className ?? ""}`}
         style={style}
         autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
       />
       {showDropdown && suggestions.length > 0 && (
         <div className="absolute z-[100] top-full left-0 right-0 mt-1 rounded-xl bg-[#1a1a1a] border border-[#333] shadow-2xl overflow-hidden">
@@ -241,6 +250,7 @@ export function PlacesAutocomplete({
             <button
               key={s.placeId + i}
               type="button"
+              onTouchEnd={(e) => { e.preventDefault(); handleSelect(s) }}
               onClick={() => handleSelect(s)}
               className="w-full flex items-start gap-2.5 px-3 py-2.5 hover:bg-white/5 transition-colors text-left"
             >

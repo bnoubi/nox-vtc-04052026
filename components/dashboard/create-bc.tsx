@@ -761,7 +761,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                     value={clientSearch}
                     onChange={e => { setClientSearch(e.target.value); setInlineSelectedCompany(null) }}
                     onFocus={() => setClientFocused(true)}
-                    onBlur={() => setTimeout(() => { setClientFocused(false); setInlineSelectedCompany(null) }, 200)}
+                    onBlur={() => setTimeout(() => setClientFocused(false), 200)}
                     placeholder="Nom, société, téléphone..."
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
                     style={{ fontSize: "16px" }}
@@ -778,7 +778,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               </div>
             </div>
 
-            {(clientFocused || clientSearch.trim()) && !selectedClientId && (
+            {(clientFocused || clientSearch.trim() || !!inlineSelectedCompany) && !selectedClientId && (
               <div className="max-h-[200px] overflow-y-auto rounded-xl bg-[#242424] border border-onyx-border/30 divide-y divide-onyx-border/20">
                 {inlineSelectedCompany ? (
                   <>
