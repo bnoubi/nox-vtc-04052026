@@ -217,8 +217,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           .from("drivers")
           .select("*")
           .eq("user_id", uid)
-        if (drvErr) console.error("[NoxStore] Error loading drivers:", drvErr)
-        else if (dbDrivers) {
+        if (dbDrivers) {
           setDrivers(dbDrivers.map(d => {
             // Reconstituer name depuis prenom + nom (source de vérité SQL)
             const fullNameDb = [d.prenom, d.nom].filter(Boolean).join(' ')
@@ -246,7 +245,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           }))
         }
       } catch (err) {
-        console.error("[NoxStore] Uncaught error loading drivers", err)
       }
 
       // ─── Chargement Vehicles (Supabase) ───
@@ -255,8 +253,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           .from("vehicles")
           .select("*")
           .eq("user_id", uid)
-        if (vehErr) console.error("[NoxStore] Error loading vehicles:", vehErr)
-        else if (dbVehicles) {
+        if (dbVehicles) {
           setVehicles(dbVehicles.map(v => ({
             id: v.id,
             marque: v.marque || "",
@@ -272,7 +269,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           })))
         }
       } catch (err) {
-        console.error("[NoxStore] Uncaught error loading vehicles", err)
       }
 
       // ─── Chargement Clients (Supabase) ───
@@ -281,8 +277,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           .from("clients")
           .select("*")
           .eq("user_id", uid)
-        if (cliErr) console.error("[NoxStore] Error loading clients:", cliErr)
-        else if (dbClients) {
+        if (dbClients) {
           setClients(dbClients.map(c => ({
             id: c.id,
             type: c.type || "particulier",
@@ -310,7 +305,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           })))
         }
       } catch (err) {
-        console.error("[NoxStore] Uncaught error loading clients", err)
       }
 
       // ─── Chargement BCs (Supabase) ───
@@ -320,8 +314,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           .select("*")
           .eq("user_id", uid)
           .order("created_at", { ascending: false })
-        if (bcsErr) console.error("[NoxStore] Error loading bcs:", bcsErr)
-        else if (dbBcs) {
+        if (dbBcs) {
           setBcs(dbBcs.map(b => ({
             id: b.id,
             number: b.numero || "",
@@ -359,7 +352,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           })))
         }
       } catch (err) {
-        console.error("[NoxStore] Uncaught error loading bcs", err)
       }
 
             // Charger les données propres à CET utilisateur depuis son espace isolé
@@ -384,7 +376,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           if (tokens === 0 && parsed.tokens) setTokens(parsed.tokens)
           // CGV désormais chargées depuis Supabase public.profiles — plus de localStorage
         } catch (e) {
-          console.error("[NoxStore] Failed to parse user storage", e)
         }
       }
 
@@ -427,12 +418,8 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   const updateEnterprise = async (data: Partial<EnterpriseProfile>) => {
     try {
       if (!userId) {
-        console.error("[NoxStore] Cannot update enterprise: No userId identified")
         return
       }
-
-      // Snapshot prior to mutation
-      console.log("[NoxStore] updateEnterprise initiated with data:", data)
 
       // Map safely using defaults to avoid injecting undefined/inconsistent shapes into DB
       const dbPayload = {
@@ -461,8 +448,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         cgv_text: data.cgvText !== undefined ? (data.cgvText || null) : (enterprise.cgvText || null),
       }
 
-      console.log("[NoxStore] Upserting payload:", dbPayload)
-
       const { data: dbData, error } = await supabase
         .from('profiles')
         .upsert(dbPayload, { onConflict: 'user_id' })
@@ -470,16 +455,8 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         .single()
 
       if (error) {
-        console.error("[NoxStore] Failed to sync enterprise data:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        })
         return
       }
-      
-      console.log("[NoxStore] Supabase returned successful DB row:", dbData)
 
       // Atomically rebuild state with strict shape from DB only (no partial injections)
       // This eliminates the root cause of the crash which occurred if spreading `data` corrupted the object
@@ -514,26 +491,14 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             cgvConfig: dbData.cgv_config || prev.cgvConfig,
             cgvText: dbData.cgv_text || prev.cgvText,
           }
-          console.log("[NoxStore] Setting new Enterprise stable state:", freshState)
           return freshState
         })
       }
     } catch (e) {
-      console.error("[NoxStore] Uncaught exception in updateEnterprise:", e)
     }
   }
   const addDriver = async (driver: Driver) => {
-    console.log('DEBUG CONTEXT: addDriver called', driver)
-
-    console.log('=== DEBUG INSERT DRIVER ===')
-    console.log('context userId:', userId)
-    const sessionResult = await supabase.auth.getSession()
-    const sessionUserId = sessionResult.data.session?.user?.id
-    console.log('session user.id:', sessionUserId)
-    console.log('userId === session.user.id ?', userId === sessionUserId)
-
     if (!userId) {
-      console.error('[NoxStore] addDriver: userId is null or undefined — ABORT')
       return
     }
 
@@ -562,29 +527,21 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       numero_rc_pro: driver.rcProNumber || null,
       date_expiration_rc_pro: driver.rcProExpiration || null,
     }
-    console.log('payload driver:', payloadFinal)
-
     try {
       // ─── INSERT minimal sans .select() ───
-      const { error, status, statusText } = await supabase
+      const { error } = await supabase
         .from('drivers')
         .insert([payloadFinal])
 
-      console.log('drivers insert status:', status, statusText)
-      console.log('drivers insert error:', JSON.stringify(error, null, 2))
-
       if (error) {
-        console.error('[NoxStore] ❌ addDriver INSERT FAILED:', error.message, '| code:', error.code, '| hint:', error.hint)
         return
       }
 
       // ─── Reload complet de la liste depuis Supabase ───
-      const { data: rows, error: selectError } = await supabase
+      const { data: rows } = await supabase
         .from('drivers')
         .select('*')
         .eq('user_id', userId)
-      console.log('drivers post-insert select rows:', rows)
-      console.log('drivers post-insert select error:', selectError)
 
       if (rows) {
         setDrivers(rows.map(d => {
@@ -613,7 +570,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         }))
       }
     } catch (e) {
-      console.error('[NoxStore] Uncaught exception in addDriver', e)
     }
   }
 
@@ -644,14 +600,12 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data: dbData, error } = await supabase.from('drivers').update(payload).eq('id', id).eq('user_id', userId).select().single()
       if (error) {
-        console.error("[NoxStore] Error updating driver:", error)
         return
       }
       if (dbData) {
         setDrivers(prev => prev.map(d => d.id === id ? { ...d, ...data } : d))
       }
     } catch (e) {
-      console.error("[NoxStore] Uncaught error updating driver", e)
     }
   }
 
@@ -660,27 +614,15 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     try {
       const { error } = await supabase.from('drivers').delete().eq('id', id).eq('user_id', userId)
       if (error) {
-        console.error("[NoxStore] Error deleting driver:", error)
         return
       }
       setDrivers(prev => prev.filter(d => d.id !== id))
     } catch (e) {
-      console.error("[NoxStore] Uncaught error deleting driver", e)
     }
   }
 
   const addVehicle = async (vehicle: Vehicle) => {
-    console.log('DEBUG CONTEXT: addVehicle called', vehicle)
-
-    console.log('=== DEBUG INSERT VEHICLE ===')
-    console.log('context userId:', userId)
-    const sessionResult = await supabase.auth.getSession()
-    const sessionUserId = sessionResult.data.session?.user?.id
-    console.log('session user.id:', sessionUserId)
-    console.log('userId === session.user.id ?', userId === sessionUserId)
-
     if (!userId) {
-      console.error('[NoxStore] addVehicle: userId is null or undefined — ABORT')
       return
     }
 
@@ -697,29 +639,21 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       assurance_transport_expiration: vehicle.assuranceTransportExpiration || null,
       controle_technique_expiration: vehicle.controleTechniqueExpiration || null
     }
-    console.log('payload vehicle:', payloadFinal)
-
     try {
       // ─── INSERT minimal sans .select() ───
-      const { error, status, statusText } = await supabase
+      const { error } = await supabase
         .from('vehicles')
         .insert([payloadFinal])
 
-      console.log('vehicles insert status:', status, statusText)
-      console.log('vehicles insert error:', JSON.stringify(error, null, 2))
-
       if (error) {
-        console.error('[NoxStore] ❌ addVehicle INSERT FAILED:', error.message, '| code:', error.code, '| hint:', error.hint)
         return
       }
 
       // ─── Reload complet de la liste depuis Supabase ───
-      const { data: rows, error: selectError } = await supabase
+      const { data: rows } = await supabase
         .from('vehicles')
         .select('*')
         .eq('user_id', userId)
-      console.log('vehicles post-insert select rows:', rows)
-      console.log('vehicles post-insert select error:', selectError)
 
       if (rows) {
         setVehicles(rows.map(v => ({
@@ -737,7 +671,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         })))
       }
     } catch (e) {
-      console.error('[NoxStore] Uncaught exception in addVehicle', e)
     }
   }
 
@@ -758,14 +691,12 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data: dbData, error } = await supabase.from('vehicles').update(payload).eq('id', id).eq('user_id', userId).select().single()
       if (error) {
-        console.error("[NoxStore] Error updating vehicle:", error)
         return
       }
       if (dbData) {
         setVehicles(prev => prev.map(v => v.id === id ? { ...v, ...data } : v))
       }
     } catch (e) {
-      console.error("[NoxStore] Uncaught error updating vehicle", e)
     }
   }
 
@@ -774,18 +705,15 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     try {
       const { error } = await supabase.from('vehicles').delete().eq('id', id).eq('user_id', userId)
       if (error) {
-        console.error("[NoxStore] Error deleting vehicle:", error)
         return
       }
       setVehicles(prev => prev.filter(v => v.id !== id))
     } catch (e) {
-      console.error("[NoxStore] Uncaught error deleting vehicle", e)
     }
   }
   const addClient = async (client: Client): Promise<boolean> => {
     try {
       if (!userId) {
-        console.error("[NoxStore] addClient: userId is null — ABORT")
         return false
       }
 
@@ -815,7 +743,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         .single()
 
       if (error) {
-        console.error("[NoxStore] ❌ addClient RPC FAILED:", error)
         return false
       }
 
@@ -847,7 +774,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
 
       return true
     } catch (e) {
-      console.error("[NoxStore] Uncaught exception in addClient", e)
       return false
     }
   }
@@ -878,12 +804,10 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         .eq("id", id)
         .eq("user_id", userId)
       if (error) {
-        console.error("[NoxStore] updateClient FAILED:", error.message)
         return
       }
       setClients(prev => prev.map(c => c.id === id ? { ...c, ...data } : c))
     } catch (e) {
-      console.error("[NoxStore] Uncaught error in updateClient", e)
     }
   }
 
@@ -896,12 +820,10 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         .eq("id", id)
         .eq("user_id", userId)
       if (error) {
-        console.error("[NoxStore] deleteClient FAILED:", error.message)
         return
       }
       setClients(prev => prev.filter(c => c.id !== id))
     } catch (e) {
-      console.error("[NoxStore] Uncaught error in deleteClient", e)
     }
   }
 
@@ -954,14 +876,12 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         .select()
         .single()
       if (error) {
-        console.error("[NoxStore] addBC FAILED:", error.message)
         return
       }
       if (data) {
         setBcs(prev => [{ ...bc, id: data.id, number: data.numero }, ...prev])
       }
     } catch (e) {
-      console.error("[NoxStore] Uncaught error in addBC", e)
     }
   }
 
@@ -980,12 +900,10 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         .eq("id", id)
         .eq("user_id", userId)
       if (error) {
-        console.error("[NoxStore] updateBC FAILED:", error.message)
         return
       }
       setBcs(prev => prev.map(b => b.id === id ? { ...b, ...data } : b))
     } catch (e) {
-      console.error("[NoxStore] Uncaught error in updateBC", e)
     }
   }
   // FEATURE 3 — Auto-save brouillon : upsert (1 seul brouillon actif par utilisateur)

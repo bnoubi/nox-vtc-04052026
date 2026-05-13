@@ -154,7 +154,7 @@ class SettingsErrorBoundary extends React.Component<{ children: React.ReactNode 
     this.state = { hasError: false, error: null };
   }
   static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) { console.error("Settings ErrorBoundary caught error:", error, errorInfo); }
+  componentDidCatch(_error: Error, _errorInfo: React.ErrorInfo) { }
   render() {
     if (this.state.hasError) {
       return (
@@ -1358,10 +1358,8 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
   }
 
   function handleDriverSave(data: any) {
-    console.log('DEBUG UI: handleDriverSave called, data=', data, 'drawerDriver=', drawerDriver)
     if (drawerDriver) {
       // Edit mode
-      console.log('DEBUG UI: calling updateDriver id=', drawerDriver.id)
       updateDriver(drawerDriver.id, {
         name: `${data.prenom} ${data.nom}`.trim(),
         carteProNumber: data.cartePro || null,
@@ -1394,7 +1392,6 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
         phone: data.phone || '',
         email: data.email || ''
       }
-      console.log('DEBUG UI: calling addDriver with', newDriver)
       addDriver(newDriver)
       setDrawerDriver(null)
     }
@@ -1544,10 +1541,8 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   }
 
   function handleVehicleSave(data: any) {
-    console.log('DEBUG UI: handleVehicleSave called, data=', data, 'drawerVehicle=', drawerVehicle)
     if (drawerVehicle) {
       // Edit mode — mapping sur la nouvelle interface Vehicle
-      console.log('DEBUG UI: calling updateVehicle id=', drawerVehicle.id)
       updateVehicle(drawerVehicle.id, {
         marque: data.brand || null,
         modele: data.model || null,
@@ -1576,7 +1571,6 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
         assuranceTransportExpiration: data.assuranceTransportExpiration || '',
         controleTechniqueExpiration: data.expirationCT || ''
       }
-      console.log('DEBUG UI: calling addVehicle with', newVehicle)
       addVehicle(newVehicle)
       setDrawerVehicle(null)
     }

@@ -32,10 +32,6 @@ export default function ResetPasswordPage() {
 
     setIsLoading(true)
 
-    console.log('=== DEBUG RESET PASSWORD ===')
-    console.log('newPassword length:', password?.length)
-    console.log('session:', await supabase.auth.getSession())
-
     const { error } = await supabase.auth.updateUser({ password })
 
     setIsLoading(false)
