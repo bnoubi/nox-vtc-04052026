@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo } from "
 import { createClient } from "@/lib/supabase/client"
 import { 
   Driver, Vehicle, Client, EnterpriseProfile, TarifBase, TarifForfait, TarifSupplement, TrancheHoraire,
-  BCDocument, InvoiceDocument, Plan,
+  BCDocument, InvoiceDocument, InvoiceStatus, Plan,
   defaultTarifBase, defaultForfaits, defaultSupplements, defaultTranches,
   PLAN_LIMITS
 } from "./data"
@@ -70,6 +70,7 @@ interface NoxContextType {
   saveDraftBC: (data: Partial<BCDocument>) => Promise<string | null>
   addInvoice: (invoice: InvoiceDocument) => void
   updateInvoice: (id: string, data: Partial<InvoiceDocument>) => void
+  deleteInvoice: (id: string) => void
   updateTarifs: (base: TarifBase, forfaits: TarifForfait[], supplements: TarifSupplement[], tranches?: TrancheHoraire[], applyWeekend?: boolean, applyHolidays?: boolean) => void
   tariffSettings: {
     base: TarifBase
@@ -354,15 +355,56 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
       }
 
-            // Charger les données propres à CET utilisateur depuis son espace isolé
+      // ─── Chargement Invoices (Supabase) ───
+      try {
+        const { data: dbInvoices } = await supabase
+          .from("invoices")
+          .select("*")
+          .eq("user_id", uid)
+          .order("created_at", { ascending: false })
+        if (dbInvoices) {
+          setInvoices(dbInvoices.map(inv => ({
+            id: inv.id,
+            number: inv.numero || "",
+            client: inv.client_nom || "",
+            clientPhone: inv.client_telephone || undefined,
+            amount: Number(inv.montant_ttc) || 0,
+            amountHT: inv.montant_ht != null ? Number(inv.montant_ht) : undefined,
+            tva: inv.tva != null ? Number(inv.tva) : undefined,
+            items: inv.items || undefined,
+            baseHT: inv.base_ht != null ? Number(inv.base_ht) : undefined,
+            supplementsHT: inv.supplements_ht != null ? Number(inv.supplements_ht) : undefined,
+            tva10Amount: inv.tva_10_amount != null ? Number(inv.tva_10_amount) : undefined,
+            tva20Amount: inv.tva_20_amount != null ? Number(inv.tva_20_amount) : undefined,
+            tva55Amount: inv.tva_5_5_amount != null ? Number(inv.tva_5_5_amount) : undefined,
+            tvaOtherAmount: inv.tva_other_amount != null ? Number(inv.tva_other_amount) : undefined,
+            discountValue: inv.discount_value != null ? Number(inv.discount_value) : undefined,
+            discountType: inv.discount_type || undefined,
+            originalHT: inv.original_ht != null ? Number(inv.original_ht) : undefined,
+            originalTTC: inv.original_ttc != null ? Number(inv.original_ttc) : undefined,
+            date: inv.date_emission ? new Date(inv.date_emission).toLocaleDateString("fr-FR") : "",
+            echeance: inv.echeance ? new Date(inv.echeance).toLocaleDateString("fr-FR") : "",
+            status: (inv.status as InvoiceStatus) || "brouillon",
+            type: "facture" as const,
+            bcRef: inv.bc_ref || "",
+            driverName: inv.driver_nom || undefined,
+            driverCarteVTC: inv.driver_carte_vtc || undefined,
+            vehicleName: inv.vehicle_nom || undefined,
+            vehiclePlate: inv.vehicle_immatriculation || undefined,
+            notes: inv.notes || undefined,
+            cgvText: inv.cgv_text || undefined,
+          })))
+        }
+      } catch (err) {
+      }
+
+      // Charger les données propres à CET utilisateur depuis son espace isolé
       const storageKey = getStorageKey(uid)
       const savedData = localStorage.getItem(storageKey)
 
       if (savedData) {
         try {
           const parsed = JSON.parse(savedData)
-          // Données métier : ne charger que si existantes pour cet utilisateur
-          if (Array.isArray(parsed.invoices)) setInvoices(parsed.invoices)
           // Config fonctionnelle
           if (parsed.tarifBase) setTarifBase(parsed.tarifBase)
           if (Array.isArray(parsed.forfaits)) setForfaits(parsed.forfaits)
@@ -401,15 +443,13 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     if (!isLoaded || !userId) return
     const storageKey = getStorageKey(userId)
     localStorage.setItem(storageKey, JSON.stringify({
-      // clients & bcs sont dans Supabase — plus en localStorage
-      invoices,
+      // clients, bcs & invoices sont dans Supabase — plus en localStorage
       tarifBase, forfaits, supplements, tranches,
       applyWeekend, applyHolidays, plan, tokens,
       // CGV stockées dans Supabase public.profiles — pas en localStorage
     }))
   }, [
     isLoaded, userId,
-    invoices,
     tarifBase, forfaits, supplements, tranches,
     applyWeekend, applyHolidays, plan, tokens,
   ])
@@ -982,8 +1022,96 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     return null
   }
 
-  const addInvoice = (invoice: InvoiceDocument) => setInvoices((prev: InvoiceDocument[]) => [invoice, ...prev])
-  const updateInvoice = (id: string, data: Partial<InvoiceDocument>) => setInvoices((prev: InvoiceDocument[]) => prev.map(i => i.id === id ? { ...i, ...data } : i))
+  const addInvoice = async (invoice: InvoiceDocument) => {
+    if (!userId) return
+    try {
+      const { count } = await supabase
+        .from("invoices")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
+      const now = new Date()
+      const seq = String((count ?? 0) + 1).padStart(4, "0")
+      const numero = `F-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${seq}`
+      const parts = (invoice.echeance || "").split("/")
+      const echeanceISO = parts.length === 3
+        ? `${parts[2]}-${parts[1]}-${parts[0]}`
+        : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+      const payload = {
+        user_id: userId,
+        numero,
+        status: invoice.status || "brouillon",
+        date_emission: now.toISOString().split("T")[0],
+        echeance: echeanceISO,
+        bc_ref: invoice.bcRef || null,
+        client_nom: invoice.client || null,
+        client_telephone: invoice.clientPhone || null,
+        driver_nom: invoice.driverName || null,
+        driver_carte_vtc: invoice.driverCarteVTC || null,
+        vehicle_nom: invoice.vehicleName || null,
+        vehicle_immatriculation: invoice.vehiclePlate || null,
+        items: invoice.items || null,
+        montant_ht: invoice.amountHT ?? 0,
+        montant_ttc: invoice.amount ?? 0,
+        tva: invoice.tva ?? 0,
+        base_ht: invoice.baseHT ?? null,
+        supplements_ht: invoice.supplementsHT ?? null,
+        tva_10_amount: invoice.tva10Amount ?? null,
+        tva_20_amount: invoice.tva20Amount ?? null,
+        tva_5_5_amount: invoice.tva55Amount ?? null,
+        tva_other_amount: invoice.tvaOtherAmount ?? null,
+        discount_value: invoice.discountValue ?? null,
+        discount_type: invoice.discountType ?? null,
+        original_ht: invoice.originalHT ?? null,
+        original_ttc: invoice.originalTTC ?? null,
+        notes: invoice.notes || null,
+        cgv_text: invoice.cgvText || null,
+      }
+      const { data, error } = await supabase
+        .from("invoices")
+        .insert([payload])
+        .select()
+        .single()
+      if (error) return
+      if (data) {
+        setInvoices(prev => [{ ...invoice, id: data.id, number: data.numero }, ...prev])
+      }
+    } catch (e) {
+    }
+  }
+
+  const updateInvoice = async (id: string, data: Partial<InvoiceDocument>) => {
+    if (!userId) return
+    const payload: Record<string, unknown> = {}
+    if (data.status !== undefined) payload.status = data.status
+    if (data.notes !== undefined) payload.notes = data.notes || null
+    if (data.amount !== undefined) payload.montant_ttc = data.amount
+    if (data.amountHT !== undefined) payload.montant_ht = data.amountHT
+    if (data.tva !== undefined) payload.tva = data.tva
+    try {
+      const { error } = await supabase
+        .from("invoices")
+        .update(payload)
+        .eq("id", id)
+        .eq("user_id", userId)
+      if (error) return
+      setInvoices(prev => prev.map(i => i.id === id ? { ...i, ...data } : i))
+    } catch (e) {
+    }
+  }
+
+  const deleteInvoice = async (id: string) => {
+    if (!userId) return
+    try {
+      const { error } = await supabase
+        .from("invoices")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId)
+      if (error) return
+      setInvoices(prev => prev.filter(i => i.id !== id))
+    } catch (e) {
+    }
+  }
 
   const updateTarifs = (base: TarifBase, f: TarifForfait[], s: TarifSupplement[], t?: TrancheHoraire[], aw?: boolean, ah?: boolean) => {
     setTarifBase(base)
@@ -1029,7 +1157,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       plan, tokens, onboardingStatus, driverCount, vehicleCount,
       upgrade, addTokens, spendToken,
       updateEnterprise, addDriver, updateDriver, deleteDriver, addVehicle, updateVehicle, deleteVehicle,
-      addClient, updateClient, deleteClient, addBC, updateBC, saveDraftBC, addInvoice, updateInvoice, updateTarifs,
+      addClient, updateClient, deleteClient, addBC, updateBC, saveDraftBC, addInvoice, updateInvoice, deleteInvoice, updateTarifs,
       tranches, applyWeekend, applyHolidays,
       tariffSettings
     }}>
