@@ -1,9 +1,10 @@
 import { jsPDF } from "jspdf"
 import type { InvoiceDocument, EnterpriseProfile, BCDocument } from "@/components/dashboard/data"
+import { isVatApplicable, getVatMention } from "@/components/dashboard/data"
 
 const LEGAL_BC_MENTION =
-  "Document obligatoire conformément à l’article L. 3122-2 du Code des transports " +
-  "et au Décret n°2014-1725 du 30 décembre 2014 relatif au transport public particulier de personnes."
+  "JUSTIFICATION DE LA RESERVATION PREALABLE" +
+  " - Article R3120-2 du Code des transports - Arrete du 6 aout 2025"
 
 function formatPrice(value: number | undefined | null): string {
   if (value === undefined || value === null) return "—"
@@ -61,8 +62,8 @@ async function _generateDocumentPDF(
   const gray = "#71717A"
   const lightGray = "#F4F4F5"
 
-  // 7e — micro-entrepreneur sans TVA : proxy = tvaIntra vide
-  const isAssujettiTVA = !!(enterprise.tvaIntra && enterprise.tvaIntra.trim())
+  // Statut TVA via helper centralisé (isVatApplicable)
+  const isAssujettiTVA = isVatApplicable(enterprise)
 
   // 7g — précharger la carte Google Maps (BC uniquement)
   let mapBase64: string | null = null
@@ -72,45 +73,59 @@ async function _generateDocumentPDF(
     if (dep || arr) mapBase64 = await fetchMapImage(dep, arr)
   }
 
-  // ── 1. HEADER ────────────────────────────────────────────────────
-  // 7a — nom société et "BON DE RÉSERVATION" sur deux lignes bien séparées
+  // ── 1. HEADER ─────────────────────────────────────────────────────
   const companyName = enterprise.name || enterprise.denomination || "Entreprise"
 
-  // Colonne gauche : infos société
-  doc.setFontSize(16)
+  // Colonne gauche : nom 12px bold, infos 8.5px
+  doc.setFontSize(12)
   doc.setFont("helvetica", "bold")
   doc.setTextColor(dark)
   doc.text(companyName, 20, 22)
 
-  doc.setFontSize(9)
+  doc.setFontSize(8.5)
   doc.setFont("helvetica", "normal")
   doc.setTextColor(gray)
   let leftY = 29
-  if (enterprise.adresse) { doc.text(enterprise.adresse, 20, leftY); leftY += 5 }
-  if (enterprise.siren) { doc.text(`SIREN : ${enterprise.siren}`, 20, leftY); leftY += 5 }
-  if (enterprise.tvaIntra) { doc.text(`TVA : ${enterprise.tvaIntra}`, 20, leftY); leftY += 5 }
+  if (enterprise.adresse) { doc.text(enterprise.adresse, 20, leftY); leftY += 4.5 }
+  if (enterprise.siren) { doc.text(`SIREN : ${enterprise.siren}`, 20, leftY); leftY += 4.5 }
+  if (isVatApplicable(enterprise) && enterprise.tvaIntra) {
+    doc.text(`TVA : ${enterprise.tvaIntra}`, 20, leftY); leftY += 4.5
+  }
+  if (!isVatApplicable(enterprise)) {
+    doc.setTextColor("#D97706")
+    doc.text("TVA non applicable - art. 293 B du CGI", 20, leftY)
+    doc.setTextColor(gray)
+    leftY += 4.5
+  }
   if (enterprise.evtcNumber) {
     doc.setTextColor(gold)
     doc.text(`EVTC : ${enterprise.evtcNumber}`, 20, leftY)
     doc.setTextColor(gray)
-    leftY += 5
+    leftY += 4.5
   }
 
-  // Colonne droite : titre document + métadonnées
-  doc.setFontSize(20)
+  // Séparateur vertical entre colonnes (x=105)
+  const headerTopY = 18
+  const headerBotEstimate = Math.max(leftY, 45)
+  doc.setDrawColor("#dddddd")
+  doc.setLineWidth(0.5)
+  doc.line(105, headerTopY, 105, headerBotEstimate)
+
+  // Colonne droite : titre 12px bold, numéro/date 10px
+  doc.setFontSize(12)
   doc.setFont("helvetica", "bold")
   doc.setTextColor(dark)
-  doc.text(isInvoice ? "FACTURE" : "BON DE RÉSERVATION", 190, 22, { align: "right" })
+  doc.text(isInvoice ? "FACTURE" : "BON DE RESERVATION", 190, 22, { align: "right" })
 
-  doc.setFontSize(9)
+  doc.setFontSize(10)
   doc.setFont("helvetica", "normal")
   doc.setTextColor(gray)
-  let rightY = 30
-  doc.text(`Numéro : ${d.number}`, 190, rightY, { align: "right" }); rightY += 5
+  let rightY = 29
+  doc.text(`N° : ${d.number}`, 190, rightY, { align: "right" }); rightY += 5
   doc.text(`Date : ${d.date}`, 190, rightY, { align: "right" }); rightY += 5
   if (isInvoice) {
-    if (d.echeance) { doc.text(`Échéance : ${d.echeance}`, 190, rightY, { align: "right" }); rightY += 5 }
-    if (d.bcRef) { doc.text(`Réf. BC : ${d.bcRef}`, 190, rightY, { align: "right" }); rightY += 5 }
+    if (d.echeance) { doc.text(`Echeance : ${d.echeance}`, 190, rightY, { align: "right" }); rightY += 5 }
+    if (d.bcRef) { doc.text(`Ref. BC : ${d.bcRef}`, 190, rightY, { align: "right" }); rightY += 5 }
   }
 
   // 7a — mention légale obligatoire sous le titre (BC uniquement)
@@ -168,16 +183,22 @@ async function _generateDocumentPDF(
     doc.setFont("helvetica", "normal")
     if (d.driverName) {
       doc.text(`Chauffeur : ${d.driverName}`, 110, rightBotY); rightBotY += 5
-      // 7c — téléphone chauffeur
       if (d.driverPhone) {
         doc.setTextColor(gray)
-        doc.text(`Tél : ${d.driverPhone}`, 110, rightBotY); rightBotY += 5
+        doc.text(`Tel : ${d.driverPhone}`, 110, rightBotY); rightBotY += 5
+        doc.setTextColor(dark)
+      }
+      // Carte VTC : masquer si vide ou "—"
+      if (d.driverCarteVTC && d.driverCarteVTC.trim() && d.driverCarteVTC !== "—") {
+        doc.setTextColor(gray)
+        doc.text(`Carte VTC : ${d.driverCarteVTC}`, 110, rightBotY); rightBotY += 5
         doc.setTextColor(dark)
       }
     }
-    if (d.vehicleName) {
+    // Section véhicule : masquer entièrement si vide ou "—"
+    if (d.vehicleName && d.vehicleName.trim() && d.vehicleName !== "—") {
       const plate = d.vehiclePlate ? ` (${d.vehiclePlate})` : ""
-      doc.text(`Véhicule : ${d.vehicleName}${plate}`, 110, rightBotY)
+      doc.text(`Vehicule : ${d.vehicleName}${plate}`, 110, rightBotY)
       rightBotY += 5
     }
   }
@@ -193,7 +214,10 @@ async function _generateDocumentPDF(
 
     const extraParts: string[] = []
     if (d.trajet.time) extraParts.push(`Heure : ${d.trajet.time}`)
-    if (d.trajet.distance) extraParts.push(`${d.trajet.distance} km`)
+    if (d.trajet.distance) {
+      const dur: string = d.trajet.duration || ""
+      extraParts.push(dur ? `Distance - Duree : ${d.trajet.distance} km - ${dur}` : `Distance : ${d.trajet.distance} km`)
+    }
     if (d.trajet.passengers) extraParts.push(`${d.trajet.passengers} passager(s)`)
 
     const contentHeight =
@@ -310,7 +334,7 @@ async function _generateDocumentPDF(
   }
 
   // Remise
-  if (d.discountValue && d.discountValue > 0) {
+  if ((d.discountValue ?? 0) > 0) {
     doc.setTextColor(200, 50, 50)
     let discLabel = "Remise commerciale"
     if (d.discountType === "percent") discLabel += ` (${d.discountValue}%)`
@@ -352,7 +376,7 @@ async function _generateDocumentPDF(
     if (d.tva10Amount && d.tva10Amount > 0) {
       doc.setFontSize(9)
       doc.setFont("helvetica", "normal")
-      doc.text("TVA 10% — Transport de personnes", 140, currentY)
+      doc.text("TVA 10% - Transport de personnes", 140, currentY)
       doc.text(formatPrice(d.tva10Amount), 185, currentY, { align: "right" })
       currentY += 4.5
       doc.setFontSize(7.5)
@@ -365,7 +389,7 @@ async function _generateDocumentPDF(
       currentY += 5.5
     }
     if (d.tva20Amount && d.tva20Amount > 0) {
-      doc.text("TVA 20% — Suppléments & mise à disposition", 140, currentY)
+      doc.text("TVA 20% - Supplements et mise a disposition", 140, currentY)
       doc.text(formatPrice(d.tva20Amount), 185, currentY, { align: "right" })
       currentY += 4.5
       doc.setFontSize(7.5)
@@ -386,7 +410,7 @@ async function _generateDocumentPDF(
     if (!d.tva10Amount && !d.tva20Amount && !d.tva55Amount && d.tva) {
       const tvaRate: number = d.tvaRate ?? 10
       if (tvaRate === 10) {
-        doc.text("TVA 10% — Transport de personnes", 140, currentY)
+        doc.text("TVA 10% - Transport de personnes", 140, currentY)
         doc.text(formatPrice(d.tva), 185, currentY, { align: "right" })
         currentY += 4.5
         doc.setFontSize(7.5)
@@ -435,13 +459,14 @@ async function _generateDocumentPDF(
   doc.text(formatPrice(d.amount), 185, currentY, { align: "right" })
   currentY += 6
 
-  // 7e — mention obligatoire "TVA non applicable, art. 293 B du CGI"
-  if (!isAssujettiTVA) {
+  // Mention TVA franchise via helper centralisé
+  const vatMentionText = getVatMention(enterprise)
+  if (vatMentionText) {
     currentY += 4
     doc.setFontSize(9)
     doc.setFont("helvetica", "bold")
     doc.setTextColor(dark)
-    doc.text("TVA non applicable, art. 293 B du CGI", 130, currentY)
+    doc.text(vatMentionText, 130, currentY)
     currentY += 6
   }
 

@@ -209,10 +209,10 @@ function BCDetail({
                    <span className="text-muted-foreground">Total HT</span>
                    <span className="text-foreground">{bc.amountHT ? new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.amountHT) : "—"} &euro;</span>
                  </div>
-                 {bc.discountValue && bc.discountValue > 0 && (
+                 {(bc.discountValue ?? 0) > 0 && (
                    <div className="flex justify-between items-center text-[10px]">
-                     <span className="text-red-400">Remise ({bc.discountType === "percent" ? `${bc.discountValue}%` : `${bc.discountValue}€`})</span>
-                     <span className="text-red-400">-{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format((bc.originalHT || bc.amountHT || 0) * (bc.discountType === "percent" ? bc.discountValue / 100 : 0) || bc.discountValue)} &euro;</span>
+                     <span className="text-red-400">Remise ({bc.discountType === "percent" ? `${bc.discountValue}%` : `${bc.discountValue ?? 0}€`})</span>
+                     <span className="text-red-400">-{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.discountType === "percent" ? (bc.originalHT || bc.amountHT || 0) * ((bc.discountValue ?? 0) / 100) : (bc.discountValue ?? 0))} &euro;</span>
                    </div>
                  )}
                  {bc.tva10Amount !== undefined && bc.tva10Amount > 0 && (
@@ -482,10 +482,10 @@ function InvoiceDetail({
                  <span className="text-muted-foreground font-medium uppercase tracking-wider">Montant HT</span>
                  <span className="text-foreground font-semibold tabular-nums">{invoice.amountHT ? new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.amountHT) : "—"} &euro;</span>
                </div>
-               {invoice.discountValue && invoice.discountValue > 0 && (
+               {(invoice.discountValue ?? 0) > 0 && (
                  <div className="flex justify-between items-center text-[11px]">
                    <span className="text-red-400 font-medium uppercase tracking-wider">Remise</span>
-                   <span className="text-red-400 font-semibold tabular-nums">-{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format((invoice.originalHT || invoice.amountHT || 0) * (invoice.discountType === "percent" ? invoice.discountValue / 100 : 0) || invoice.discountValue)} &euro;</span>
+                   <span className="text-red-400 font-semibold tabular-nums">-{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.discountType === "percent" ? (invoice.originalHT || invoice.amountHT || 0) * ((invoice.discountValue ?? 0) / 100) : (invoice.discountValue ?? 0))} &euro;</span>
                  </div>
                )}
                {invoice.tva10Amount !== undefined && invoice.tva10Amount > 0 && (

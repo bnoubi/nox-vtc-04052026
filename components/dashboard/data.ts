@@ -81,6 +81,10 @@ export interface EnterpriseProfile {
   cgvMode?: CGVMode
   cgvConfig?: CGVConfig
   cgvText?: string
+  isMicroEntrepreneur?: boolean
+  vatMode?: 'franchise' | 'normal'
+  vatExemptionMention?: string
+  legalNoticeText?: string
 }
 
 export type BCStatus = "brouillon" | "en_attente" | "confirme" | "en_cours" | "termine" | "annule_client" | "annule_chauffeur"
@@ -136,6 +140,10 @@ export interface BCDocument {
   notes?: string
   cgvText?: string
   cgvInclure?: boolean
+  customerAcceptedAt?: string
+  cgvVersionAccepted?: string
+  signatairesNom?: string
+  acceptanceMention?: string
 }
 
 export interface InvoiceItem {
@@ -354,3 +362,64 @@ export interface Client {
 // ─── Mock data supprimée ───
 // allClients et existingClients supprimés.
 // L'état initial des clients est un tableau vide par compte.
+
+// ─── Conformité légale — source de vérité centralisée ─────────────────────────
+
+export const VAT_EXEMPTION_MENTION = "TVA non applicable, art. 293 B du CGI"
+
+export interface TaxConfig {
+  isMicroEntrepreneur: boolean
+  vatMode: "franchise" | "normal"
+  vatExemptionMention: string
+  vatNumber: string | null
+}
+
+export interface DocumentRules {
+  requireIssueDate: true
+  requireSequentialNumber: true
+  requireCustomerIdentity: true
+  requireServiceBreakdown: true
+  showCreationTime: false
+}
+
+export const documentRules: DocumentRules = {
+  requireIssueDate: true,
+  requireSequentialNumber: true,
+  requireCustomerIdentity: true,
+  requireServiceBreakdown: true,
+  showCreationTime: false,
+}
+
+export const invoiceMandatoryFields = ["number", "date", "client", "amount"] as const
+export const orderFormRecommendedFields = ["number", "date", "client", "trajet", "driverName"] as const
+
+export function getTaxConfig(enterprise: EnterpriseProfile): TaxConfig {
+  const vatMode: "franchise" | "normal" = enterprise.vatMode ?? (enterprise.isMicroEntrepreneur ? "franchise" : "normal")
+  const isMicro = vatMode === "franchise"
+  return {
+    isMicroEntrepreneur: isMicro,
+    vatMode,
+    vatExemptionMention: enterprise.vatExemptionMention ?? VAT_EXEMPTION_MENTION,
+    vatNumber: isMicro ? null : (enterprise.tvaIntra || null),
+  }
+}
+
+export function getVatMention(enterprise: EnterpriseProfile): string | null {
+  const vatMode = enterprise.vatMode ?? (enterprise.isMicroEntrepreneur ? "franchise" : "normal")
+  return vatMode === "franchise" ? (enterprise.vatExemptionMention ?? VAT_EXEMPTION_MENTION) : null
+}
+
+export function isVatApplicable(enterprise: EnterpriseProfile): boolean {
+  const vatMode = enterprise.vatMode ?? (enterprise.isMicroEntrepreneur ? "franchise" : "normal")
+  return vatMode === "normal"
+}
+
+export function getLegalSellerIdentity(enterprise: EnterpriseProfile): string {
+  return [
+    enterprise.denomination || enterprise.name,
+    enterprise.adresse,
+    [enterprise.zipCode, enterprise.city].filter(Boolean).join(" "),
+    enterprise.siren ? `SIREN : ${enterprise.siren}` : null,
+    enterprise.evtcNumber ? `EVTC : ${enterprise.evtcNumber}` : null,
+  ].filter(Boolean).join(" - ")
+}

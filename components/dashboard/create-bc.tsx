@@ -67,10 +67,6 @@ function formatDateFr(d: Date): string {
   return d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
 }
 
-function formatTimeFr(d: Date): string {
-  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }).replace(":", "h")
-}
-
 function formatTimeFrFromString(time: string): string {
   return time?.replace(":", "h") ?? ""
 }
@@ -131,7 +127,7 @@ interface CreateBCFlowProps {
 }
 
 export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: CreateBCFlowProps) {
-  const { drivers, clients, vehicles, tariffSettings, enterprise, addBC, bcs, saveDraftBC, updateBC } = useNox()
+  const { drivers, clients, vehicles, tariffSettings, enterprise, addBC, bcs, saveDraftBC, updateBC, legalProfile, validateDocumentCompliance, updateEnterprise } = useNox()
   const [step, setStep] = useState<FlowStep>("menu")
   const [tab, setTab] = useState<FormTab>("formulaire")
 
@@ -149,9 +145,9 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   // Selections — pré-remplissage depuis prefillBC si fourni (FEATURE 2 duplication)
   const [selectedDriverId, setSelectedDriverId] = useState<string>(() => {
     if (prefillBC?.driverName) {
-      return drivers?.find(d => d.name === prefillBC.driverName)?.id ?? drivers?.[0]?.id ?? ""
+      return drivers?.find(d => d.name === prefillBC.driverName)?.id ?? ""
     }
-    return drivers?.[0]?.id ?? ""
+    return ""
   })
   const [selectedClientId, setSelectedClientId] = useState<string>(prefillBC?.clientId ?? "")
   const [clientSearch, setClientSearch] = useState("")
@@ -431,7 +427,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     setStep("menu")
     setIsSubmitting(false)
     setLinkRecipient("")
-    setSelectedDriverId(drivers?.[0]?.id ?? "")
+    setSelectedDriverId("")
     setSelectedClientId("")
     setClientSearch("")
     setSelectedVehicleId(vehicles?.find(v => v.inService)?.id ?? vehicles?.[0]?.id ?? "")
@@ -475,7 +471,6 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   // ── BUG 1 — Génération avec protection anti-doublon ──────────────────────
   const handleGenerate = () => {
     if (isSubmitting) return
-    setIsSubmitting(true)
 
     const clientName = (selectedClient
       ? (selectedClient.type === "particulier"
@@ -486,6 +481,25 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     const clientPhone = selectedClient
       ? selectedClient.phone
       : (manualClient ? manualClient.tel : undefined)
+
+    // Validation champs obligatoires via validateDocumentCompliance
+    const errors = validateDocumentCompliance({
+      client: clientName !== "Client Inconnu" ? clientName : undefined,
+      clientPhone,
+      trajet: {
+        depart: departure || "",
+        arrivee: arrival || "",
+        date: tripDate,
+        time: tripTime,
+        passengers,
+      },
+    })
+    if (errors.length > 0) {
+      toast.error(errors[0])
+      return
+    }
+
+    setIsSubmitting(true)
 
     const resolvedPassagerNom = passagerNom.trim() ||
       (selectedClient?.type === "particulier"
@@ -700,7 +714,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
           <h1 className="text-base font-bold text-foreground">
             {prefillBC ? "Dupliquer le Bon de Réservation" : "Nouveau Bon de Réservation"}
           </h1>
-          <p className="text-[10px] text-muted-foreground">{brNumber} • Établi le {formatDateFr(creationDate)} à {formatTimeFr(creationDate)}</p>
+          <p className="text-[10px] text-muted-foreground">{brNumber} • Émis le {formatDateFr(creationDate)}</p>
         </div>
         <button onClick={handleClose} className="p-2 -mr-2 rounded-lg hover:bg-white/5"><X className="h-5 w-5 text-muted-foreground" /></button>
       </div>
@@ -727,10 +741,28 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               <p className="text-[11px] text-gold">Registre EVTC : {enterprise?.evtcNumber ?? ""}</p>
               <p className="text-[11px] text-muted-foreground">{enterprise?.adresse ?? ""}</p>
             </div>
+            {/* Statut fiscal — pilote l'affichage TVA dans le PDF */}
+            <label className="flex items-center gap-2.5 cursor-pointer py-1">
+              <Checkbox
+                id="micro-entrepreneur"
+                checked={enterprise?.isMicroEntrepreneur ?? false}
+                onCheckedChange={(v) => {
+                  const isMicro = v === true
+                  updateEnterprise({ isMicroEntrepreneur: isMicro, vatMode: isMicro ? 'franchise' : 'normal' })
+                }}
+                className="border-onyx-border/50 data-[state=checked]:bg-gold data-[state=checked]:border-gold data-[state=checked]:text-black"
+              />
+              <span className="text-[12px] text-foreground/80 select-none">Micro-entrepreneur (franchise en base de TVA)</span>
+            </label>
+            {legalProfile.mustDisplayVatExemption && (
+              <p className="text-[11px] text-amber-600 font-medium px-1">TVA non applicable, art. 293 B du CGI</p>
+            )}
+
             <div className="space-y-1">
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Chauffeur assigné</label>
               <select value={selectedDriverId} onChange={e => setSelectedDriverId(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50" style={{ fontSize: "16px" }}>
+                <option value="" disabled>Sélectionner un chauffeur…</option>
                 {(drivers ?? []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
@@ -1189,11 +1221,13 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 <span className="text-muted-foreground">Base HT</span>
                 <span className="text-foreground">{formatPrice(pricing.baseHT)}</span>
               </div>
-              {pricing.supplementsTotal > 0 && (
+              {pricing.supplementsTotal > 0 ? (
                 <div className="flex justify-between items-center text-[10px]">
                   <span className="text-muted-foreground">Suppléments HT</span>
                   <span className="text-foreground">+{formatPrice(pricing.supplementsTotal)}</span>
                 </div>
+              ) : (
+                <div className="h-4" />
               )}
               {pricing.discountAmount > 0 && (
                 <div className="flex justify-between items-center text-[10px]">
@@ -1522,18 +1556,22 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
           <div className="max-w-[400px] mx-auto bg-white rounded-xl shadow-2xl overflow-hidden">
             <div className="p-5 space-y-4">
               <div className="flex justify-between items-start border-b border-gray-200 pb-4">
-                <div>
-                  <p className="text-lg font-bold text-gray-900">{enterprise?.denomination ?? ""}</p>
-                  <p className="text-[10px] text-gray-500">{enterprise?.adresse ?? ""}</p>
-                  <p className="text-[10px] text-gray-500">SIREN : {enterprise?.siren ?? ""}</p>
-                  <p className="text-[10px] text-gray-500">TVA : {enterprise?.tvaIntra ?? ""}</p>
-                  <p className="text-[10px] text-amber-600 font-medium">EVTC : {enterprise?.evtcNumber ?? ""}</p>
+                <div className="flex-1 pr-2 border-r border-gray-200">
+                  <p className="text-[12px] font-bold text-gray-900">{enterprise?.denomination ?? ""}</p>
+                  <p className="text-[8px] text-gray-500">{enterprise?.adresse ?? ""}</p>
+                  <p className="text-[8px] text-gray-500">SIREN : {enterprise?.siren ?? ""}</p>
+                  {legalProfile.mustDisplayVatNumber && (
+                    <p className="text-[8px] text-gray-500">TVA : {enterprise?.tvaIntra ?? ""}</p>
+                  )}
+                  {legalProfile.mustDisplayVatExemption && (
+                    <p className="text-[8px] text-amber-600 font-medium">TVA non applicable, art. 293 B du CGI</p>
+                  )}
+                  <p className="text-[8px] text-amber-600 font-medium">EVTC : {enterprise?.evtcNumber ?? ""}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">BON DE RÉSERVATION</p>
+                <div className="text-right pl-2">
+                  <p className="text-[12px] font-bold text-gray-900">BON DE RÉSERVATION</p>
                   <p className="text-[10px] text-gray-500">{brNumber}</p>
-                  <p className="text-[10px] text-gray-500">Établi le {formatDateFr(creationDate)}</p>
-                  <p className="text-[10px] text-gray-500">à {formatTimeFr(creationDate)}</p>
+                  <p className="text-[10px] text-gray-500">Émis le {formatDateFr(creationDate)}</p>
                 </div>
               </div>
 
@@ -1541,7 +1579,9 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 <div>
                   <p className="font-bold text-gray-700 mb-1">CHAUFFEUR</p>
                   <p className="text-gray-900">{selectedDriver?.name ?? "Non assigné"}</p>
-                  <p className="text-amber-600">Carte VTC : {selectedDriver?.carteProNumber ?? "—"}</p>
+                  {selectedDriver?.carteProNumber && selectedDriver.carteProNumber !== "—" && selectedDriver.carteProNumber.trim() && (
+                    <p className="text-amber-600">Carte VTC : {selectedDriver.carteProNumber}</p>
+                  )}
                 </div>
                 <div>
                   <p className="font-bold text-gray-700 mb-1">CLIENT</p>
@@ -1576,8 +1616,11 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                   <span className="text-gray-900">{tripDate ? new Date(tripDate).toLocaleDateString("fr-FR") : "—"} à {formatTimeFrFromString(tripTime) || "—"}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Distance :</span>
-                  <span className="text-gray-900">{distanceKm} km{durationDisplay ? ` · ${durationDisplay}` : ""}</span>
+                  <span className="text-gray-500">Distance - Durée :</span>
+                  <span className="text-gray-900">
+                    {distanceKm !== null ? `${distanceKm} km` : "—"}
+                    {durationDisplay ? ` - ${durationDisplay}` : ""}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Passagers / Bagages :</span>
@@ -1585,30 +1628,35 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 </div>
               </div>
 
-              <div className="text-[10px]">
-                <p className="font-bold text-gray-700 mb-1">VÉHICULE</p>
-                <p className="text-gray-900">
-                  {selectedVehicle
-                    ? `${[selectedVehicle.marque, selectedVehicle.modele].filter(Boolean).join(' ')} • ${selectedVehicle.immatriculation}`
-                    : "—"}
-                </p>
-              </div>
+              {selectedVehicle && (
+                <div className="text-[10px]">
+                  <p className="font-bold text-gray-700 mb-1">VÉHICULE</p>
+                  <p className="text-gray-900">
+                    {[selectedVehicle.marque, selectedVehicle.modele].filter(Boolean).join(' ')} • {selectedVehicle.immatriculation}
+                  </p>
+                </div>
+              )}
 
               <div className="border-t border-gray-200 pt-3 text-[10px]">
                 <div className="flex justify-between mb-1">
                   <span className="text-gray-500">Total HT</span>
                   <span className="text-gray-900">{formatPrice(pricing.totalHT)}</span>
                 </div>
-                {pricing.tva10 > 0 && (
+                {!legalProfile.isInvoiceWithoutVat && pricing.tva10 > 0 && (
                   <div className="flex justify-between mb-1">
-                    <span className="text-gray-500">TVA (10%)</span>
+                    <span className="text-gray-500">TVA 10% - Transport de personnes</span>
                     <span className="text-gray-900">{formatPrice(pricing.tva10)}</span>
                   </div>
                 )}
-                {pricing.tva20 > 0 && (
+                {!legalProfile.isInvoiceWithoutVat && pricing.tva20 > 0 && (
                   <div className="flex justify-between mb-1">
-                    <span className="text-gray-500">TVA (20%)</span>
+                    <span className="text-gray-500">TVA 20% - Suppléments</span>
                     <span className="text-gray-900">{formatPrice(pricing.tva20)}</span>
+                  </div>
+                )}
+                {legalProfile.isInvoiceWithoutVat && (
+                  <div className="flex justify-between mb-1">
+                    <span className="text-amber-600 font-medium">TVA non applicable, art. 293 B du CGI</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-sm">

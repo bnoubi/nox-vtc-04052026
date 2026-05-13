@@ -1,12 +1,13 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect, useMemo } from "react"
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { 
+import {
   Driver, Vehicle, Client, EnterpriseProfile, TarifBase, TarifForfait, TarifSupplement, TrancheHoraire, TariffGrid,
   BCDocument, InvoiceDocument, InvoiceStatus, Plan,
   defaultTarifBase, defaultForfaits, defaultSupplements, defaultTranches,
-  PLAN_LIMITS
+  PLAN_LIMITS,
+  TaxConfig, getTaxConfig, getVatMention, isVatApplicable, getLegalSellerIdentity,
 } from "./data"
 
 // Profil entreprise vide — chaque nouveau compte démarre sans données pré-remplies
@@ -55,6 +56,15 @@ interface NoxContextType {
   upgrade: (target?: Plan) => void
   addTokens: (n: number) => void
   spendToken: () => boolean
+  legalProfile: {
+    mustDisplayVatExemption: boolean
+    mustDisplayVatNumber: boolean
+    isInvoiceWithoutVat: boolean
+    sellerLegalIdentity: string
+    vatMention: string | null
+    taxConfig: TaxConfig
+  }
+  validateDocumentCompliance: (draft: Partial<BCDocument>) => string[]
   updateEnterprise: (data: Partial<EnterpriseProfile>) => void
   addDriver: (driver: Driver) => void
   updateDriver: (id: string, data: Partial<Driver>) => void
@@ -211,6 +221,10 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             cgvMode: entProfile.cgv_mode || prev.cgvMode,
             cgvConfig: entProfile.cgv_config || prev.cgvConfig,
             cgvText: entProfile.cgv_text || prev.cgvText,
+            isMicroEntrepreneur: entProfile.is_micro_entrepreneur ?? false,
+            vatMode: (entProfile.vat_mode as 'franchise' | 'normal') || undefined,
+            vatExemptionMention: entProfile.vat_exemption_mention || undefined,
+            legalNoticeText: entProfile.legal_notice_text || undefined,
           }))
         }
       } catch (err) {
@@ -356,6 +370,10 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             notes: b.notes || undefined,
             cgvText: b.cgv_text || undefined,
             cgvInclure: b.cgv_inclure ?? true,
+            customerAcceptedAt: b.customer_accepted_at || undefined,
+            cgvVersionAccepted: b.cgv_version_accepted || undefined,
+            signatairesNom: b.signataire_nom || undefined,
+            acceptanceMention: b.acceptance_mention || undefined,
           })))
         }
       } catch (err) {
@@ -521,6 +539,10 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         cgv_mode: data.cgvMode !== undefined ? (data.cgvMode || null) : (enterprise.cgvMode || null),
         cgv_config: data.cgvConfig !== undefined ? (data.cgvConfig || null) : (enterprise.cgvConfig || null),
         cgv_text: data.cgvText !== undefined ? (data.cgvText || null) : (enterprise.cgvText || null),
+        is_micro_entrepreneur: data.isMicroEntrepreneur !== undefined ? data.isMicroEntrepreneur : (enterprise.isMicroEntrepreneur ?? false),
+        vat_mode: data.vatMode !== undefined ? (data.vatMode || null) : (enterprise.vatMode || null),
+        vat_exemption_mention: data.vatExemptionMention !== undefined ? (data.vatExemptionMention || null) : (enterprise.vatExemptionMention || null),
+        legal_notice_text: data.legalNoticeText !== undefined ? (data.legalNoticeText || null) : (enterprise.legalNoticeText || null),
       }
 
       const { data: dbData, error } = await supabase
@@ -565,6 +587,10 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             cgvMode: dbData.cgv_mode || prev.cgvMode,
             cgvConfig: dbData.cgv_config || prev.cgvConfig,
             cgvText: dbData.cgv_text || prev.cgvText,
+            isMicroEntrepreneur: dbData.is_micro_entrepreneur ?? prev.isMicroEntrepreneur ?? false,
+            vatMode: (dbData.vat_mode as 'franchise' | 'normal') || prev.vatMode,
+            vatExemptionMention: dbData.vat_exemption_mention || prev.vatExemptionMention,
+            legalNoticeText: dbData.legal_notice_text || prev.legalNoticeText,
           }
           return freshState
         })
@@ -1327,6 +1353,29 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     applyHolidays
   }), [tarifBase, forfaits, supplements, tranches, applyWeekend, applyHolidays])
 
+  const legalProfile = useMemo(() => {
+    const taxConfig = getTaxConfig(enterprise)
+    return {
+      mustDisplayVatExemption: taxConfig.isMicroEntrepreneur,
+      mustDisplayVatNumber: !taxConfig.isMicroEntrepreneur && !!enterprise.tvaIntra,
+      isInvoiceWithoutVat: taxConfig.isMicroEntrepreneur,
+      sellerLegalIdentity: getLegalSellerIdentity(enterprise),
+      vatMention: getVatMention(enterprise),
+      taxConfig,
+    }
+  }, [enterprise])
+
+  const validateDocumentCompliance = useCallback((draft: Partial<BCDocument>): string[] => {
+    const errors: string[] = []
+    if (!draft.client) errors.push("Nom du client requis")
+    if (!draft.clientPhone && !draft.passagerTelephone) errors.push("Telephone client requis")
+    if (!draft.trajet?.date) errors.push("Date du trajet requise")
+    if (!draft.trajet?.time) errors.push("Heure de prise en charge requise")
+    if (!draft.trajet?.depart || draft.trajet.depart === "Non renseigne") errors.push("Adresse de depart requise")
+    if (!draft.trajet?.arrivee || draft.trajet.arrivee === "Non renseigne") errors.push("Adresse d'arrivee requise")
+    return errors
+  }, [])
+
   return (
     <NoxContext.Provider value={{
       enterprise, userProfile, refreshUserProfile, drivers, vehicles, clients, bcs, invoices, tarifBase, forfaits, supplements,
@@ -1336,7 +1385,8 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       addClient, updateClient, deleteClient, addBC, updateBC, saveDraftBC, addInvoice, updateInvoice, deleteInvoice,
       tariffGrids, addTariffGrid, updateTariffGrid, deleteTariffGrid, updateTarifs,
       tranches, applyWeekend, applyHolidays,
-      tariffSettings
+      tariffSettings,
+      legalProfile, validateDocumentCompliance,
     }}>
       {children}
     </NoxContext.Provider>
