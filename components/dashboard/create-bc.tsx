@@ -129,7 +129,7 @@ interface CreateBCFlowProps {
 
 export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: CreateBCFlowProps) {
   const { drivers, clients, vehicles, tariffSettings, enterprise, addBC, bcs, saveDraftBC, updateBC, legalProfile, validateDocumentCompliance, updateEnterprise } = useNox()
-  const [step, setStep] = useState<FlowStep>("menu")
+  const [step, setStep] = useState<FlowStep>(() => prefillBC ? "form" : "menu")
   const [tab, setTab] = useState<FormTab>("formulaire")
 
   // BUG 1 — état de soumission pour éviter les doublons

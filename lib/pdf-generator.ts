@@ -42,18 +42,23 @@ async function fetchMapImage(depart: string, arrivee: string): Promise<string | 
 }
 
 export function generateInvoicePDF(invoice: InvoiceDocument, enterprise: EnterpriseProfile): void {
-  void _generateDocumentPDF(invoice, enterprise, true)
+  void _buildPDFDoc(invoice, enterprise, true).then(doc => doc.save(`Facture_${invoice.number}.pdf`))
 }
 
 export function generateBCPDF(bc: BCDocument, enterprise: EnterpriseProfile): void {
-  void _generateDocumentPDF(bc, enterprise, false)
+  void _buildPDFDoc(bc, enterprise, false).then(doc => doc.save(`BC_${bc.number}.pdf`))
 }
 
-async function _generateDocumentPDF(
+export async function generateBCPDFBlob(bc: BCDocument, enterprise: EnterpriseProfile): Promise<Blob> {
+  const doc = await _buildPDFDoc(bc, enterprise, false)
+  return doc.output('blob')
+}
+
+async function _buildPDFDoc(
   data: BCDocument | InvoiceDocument,
   enterprise: EnterpriseProfile,
   isInvoice: boolean
-): Promise<void> {
+): Promise<jsPDF> {
   const d = data as any // eslint-disable-line @typescript-eslint/no-explicit-any
   const doc = new jsPDF()
 
@@ -515,5 +520,5 @@ async function _generateDocumentPDF(
   doc.setFont("helvetica", "italic")
   doc.text("Document généré par NoX VTC", 105, 290, { align: "center" })
 
-  doc.save(`${isInvoice ? "Facture" : "BC"}_${d.number}.pdf`)
+  return doc
 }

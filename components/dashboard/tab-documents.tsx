@@ -27,7 +27,7 @@ import { useNav } from "./nav-context"
 import { CreateBCFlow } from "./create-bc"
 import { useNox } from "./nox-context"
 import { type BCDocument, type InvoiceDocument, type BCStatus, type InvoiceStatus, type EnterpriseProfile } from "./data"
-import { generateInvoicePDF, generateBCPDF } from "@/lib/pdf-generator"
+import { generateInvoicePDF, generateBCPDF, generateBCPDFBlob } from "@/lib/pdf-generator"
 
 type DocType = "bc" | "facture"
 
@@ -89,10 +89,12 @@ function BCDetail({
   bc,
   enterprise,
   onClose,
+  onShare,
 }: {
   bc: BCDocument
   enterprise: EnterpriseProfile
   onClose: () => void
+  onShare: (bc: BCDocument) => void
 }) {
   const { updateBC } = useNox()
   const [isLoading, setIsLoading] = useState(false)
@@ -333,6 +335,7 @@ function BCDetail({
                   </button>
                 )}
                 <button
+                  onClick={() => onShare(bc)}
                   disabled={isLoading}
                   className="flex items-center justify-center gap-2 p-4 rounded-2xl bg-secondary/50 border border-onyx-border/50 text-xs font-semibold text-foreground hover:bg-secondary transition-all disabled:opacity-50"
                 >
@@ -577,11 +580,13 @@ function BCCard({
   onInvoice,
   onView,
   onDuplicate,
+  onShare,
 }: {
   doc: BCDocument
   onInvoice: (bc: BCDocument) => void
   onView: (bc: BCDocument) => void
   onDuplicate: (bc: BCDocument) => void
+  onShare: (bc: BCDocument) => void
 }) {
   const { updateBC, invoices } = useNox()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -604,7 +609,7 @@ function BCCard({
       updateBC(doc.id, { status: "termine" })
       toast.success("Course terminée")
     } else if (label === "Partager") {
-      toast.info("Lien de partage copié dans le presse-papier")
+      onShare(doc)
     } else if (label === "Voir") {
       onView(doc)
     } else if (label === "Dupliquer") {
@@ -952,6 +957,34 @@ export function DocumentsTab() {
   const { openWallet } = useNav()
   const isUnlimited = plan === "DUO" || plan === "TEAM"
 
+  async function handleShareBC(bc: BCDocument) {
+    const fileName = `BC_${bc.number}.pdf`
+    const loadingId = toast.loading("Préparation du partage...")
+    try {
+      const blob = await generateBCPDFBlob(bc, enterprise)
+      toast.dismiss(loadingId)
+      const file = new File([blob], fileName, { type: "application/pdf" })
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: `Bon de commande ${bc.number}`,
+            text: `Bon de commande pour ${bc.client}`,
+            files: [file],
+          })
+          return
+        } catch (err) {
+          if ((err as Error).name === "AbortError") return
+        }
+      }
+      // Fallback bureau : téléchargement direct
+      generateBCPDF(bc, enterprise)
+      toast.success("PDF téléchargé — partagez-le depuis vos applications")
+    } catch {
+      toast.dismiss(loadingId)
+      toast.error("Impossible de partager ce document")
+    }
+  }
+
   // FEATURE 2 — Ouvrir le formulaire en mode duplication
   function handleDuplicate(bc: BCDocument) {
     setDuplicateBC(bc)
@@ -1105,7 +1138,7 @@ export function DocumentsTab() {
         {currentDocs.length > 0 ? (
           activeType === "bc" ? (
             filteredBCs.map((doc: BCDocument) => (
-              <BCCard key={doc.id} doc={doc} onInvoice={(bc: BCDocument) => setInvoicingBC(bc)} onView={(bc: BCDocument) => setViewingBC(bc)} onDuplicate={handleDuplicate} />
+              <BCCard key={doc.id} doc={doc} onInvoice={(bc: BCDocument) => setInvoicingBC(bc)} onView={(bc: BCDocument) => setViewingBC(bc)} onDuplicate={handleDuplicate} onShare={handleShareBC} />
             ))
           ) : (
             filteredInvoices.map((doc: InvoiceDocument) => (
@@ -1141,6 +1174,7 @@ export function DocumentsTab() {
             bc={viewingBC}
             enterprise={enterprise}
             onClose={() => setViewingBC(null)}
+            onShare={handleShareBC}
           />
         )}
       </AnimatePresence>
