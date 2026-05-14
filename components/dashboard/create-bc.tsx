@@ -205,6 +205,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
 
   const [discountType, setDiscountType] = useState<DiscountType>("percent")
   const [discountValue, setDiscountValue] = useState(0)
+  const [isMicroBC, setIsMicroBC] = useState<boolean>(enterprise?.isMicroEntrepreneur ?? false)
 
   // CGV — valeurs mémoïsées pour éviter les doubles calculs en render
   const cgvConfigured = useMemo(() => hasCGVConfigured(enterprise), [enterprise.cgvMode, enterprise.cgvConfig, enterprise.cgvText])
@@ -541,6 +542,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
         depart: departure || "Non renseigné",
         arrivee: arrival || "Non renseigné",
         distance: distanceKm ?? undefined,
+        duree: durationDisplay || undefined,
         date: tripDate,
         time: tripTime,
         passengers,
@@ -570,6 +572,15 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   const toggleSupplement = (id: string) => {
     setSupplements(prev => prev.map(s => s.id === id ? { ...s, selected: !s.selected } : s))
   }
+
+  const canGenerate = !!(
+    (selectedClient !== null || manualClient !== null) &&
+    departure.trim() !== "" &&
+    arrival.trim() !== "" &&
+    selectedDriver !== null &&
+    tripDate.trim() !== "" &&
+    tripTime.trim() !== ""
+  )
 
   if (!open) return null
 
@@ -741,25 +752,12 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               <p className="text-[11px] text-gold">Registre EVTC : {enterprise?.evtcNumber ?? ""}</p>
               <p className="text-[11px] text-muted-foreground">{enterprise?.adresse ?? ""}</p>
             </div>
-            {/* Statut fiscal — pilote l'affichage TVA dans le PDF */}
-            <label className="flex items-center gap-2.5 cursor-pointer py-1">
-              <Checkbox
-                id="micro-entrepreneur"
-                checked={enterprise?.isMicroEntrepreneur ?? false}
-                onCheckedChange={(v) => {
-                  const isMicro = v === true
-                  updateEnterprise({ isMicroEntrepreneur: isMicro, vatMode: isMicro ? 'franchise' : 'normal' })
-                }}
-                className="border-onyx-border/50 data-[state=checked]:bg-gold data-[state=checked]:border-gold data-[state=checked]:text-black"
-              />
-              <span className="text-[12px] text-foreground/80 select-none">Micro-entrepreneur (franchise en base de TVA)</span>
-            </label>
             {legalProfile.mustDisplayVatExemption && (
               <p className="text-[11px] text-amber-600 font-medium px-1">TVA non applicable, art. 293 B du CGI</p>
             )}
 
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Chauffeur assigné</label>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Chauffeur assigné <span className="text-red-500">*</span></label>
               <select value={selectedDriverId} onChange={e => setSelectedDriverId(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50" style={{ fontSize: "16px" }}>
                 <option value="" disabled>Sélectionner un chauffeur…</option>
@@ -784,7 +782,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
             )}
 
             <div className="space-y-2">
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Rechercher un client</label>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Rechercher un client <span className="text-red-500">*</span></label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1005,39 +1003,61 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
           {/* SECTION: Trajet */}
           <Section title="Trajet" icon={Navigation}>
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Adresse de départ</label>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Adresse de départ <span className="text-red-500">*</span></label>
               <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 focus-within:border-gold/50">
                 <MapPin className="h-4 w-4 text-green-400 flex-shrink-0" strokeWidth={1.5} />
                 <PlacesAutocomplete value={departure} onChange={setDeparture} placeholder="Rechercher une adresse..."
                   addressMode="full"
                   className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
                   style={{ fontSize: "16px" }} />
+                {departure && (
+                  <button
+                    type="button"
+                    aria-label="Effacer l'adresse"
+                    onClick={() => { setDeparture(""); setDistanceKm(null); setDurationDisplay(""); setEditableBasePrice(null) }}
+                    className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Adresse d&apos;arrivée</label>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Adresse d&apos;arrivée <span className="text-red-500">*</span></label>
               <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 focus-within:border-gold/50">
                 <MapPin className="h-4 w-4 text-red-400 flex-shrink-0" strokeWidth={1.5} />
                 <PlacesAutocomplete value={arrival} onChange={setArrival} placeholder="Rechercher une adresse..."
                   addressMode="full"
                   className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
                   style={{ fontSize: "16px" }} />
+                {arrival && (
+                  <button
+                    type="button"
+                    aria-label="Effacer l'adresse"
+                    onClick={() => { setArrival(""); setDistanceKm(null); setDurationDisplay(""); setEditableBasePrice(null) }}
+                    className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Date du trajet</label>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Date du trajet <span className="text-red-500">*</span></label>
               <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 focus-within:border-gold/50">
                 <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" strokeWidth={1.5} />
                 <input type="date" value={tripDate} onChange={e => setTripDate(e.target.value)}
+                  aria-required="true"
                   className="flex-1 bg-transparent text-sm text-foreground focus:outline-none" style={{ fontSize: "16px" }} />
               </div>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Heure de prise en charge</label>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Heure de prise en charge <span className="text-red-500">*</span></label>
               <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 focus-within:border-gold/50">
                 <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" strokeWidth={1.5} />
                 <input type="time" value={tripTime} onChange={e => setTripTime(e.target.value)}
+                  aria-required="true"
                   className="flex-1 bg-transparent text-sm text-foreground focus:outline-none" style={{ fontSize: "16px" }} />
               </div>
             </div>
@@ -1143,22 +1163,10 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               >Calcul au km</button>
               <button
                 className={cn("flex-1 text-xs py-2 rounded-lg font-medium transition-all text-center", pricingMode === "forfait" ? "bg-onyx-card shadow text-gold border border-gold/20" : "text-muted-foreground hover:text-foreground")}
-                onClick={() => { setPricingMode("forfait"); setBaseTvaRate(20) }}
+                onClick={() => { setPricingMode("forfait"); setBaseTvaRate(10) }}
               >Forfait fixe</button>
             </div>
 
-            {pricingMode === "forfait" && (
-              <div className="mt-3 flex gap-2">
-                <button
-                  className={cn("flex-1 text-[10px] py-1.5 rounded border transition-colors", baseTvaRate === 10 ? "border-gold text-gold bg-gold/10" : "border-onyx-border/50 text-muted-foreground hover:bg-secondary/50")}
-                  onClick={() => setBaseTvaRate(10)}
-                >Transfert (TVA 10%)</button>
-                <button
-                  className={cn("flex-1 text-[10px] py-1.5 rounded border transition-colors", baseTvaRate === 20 ? "border-gold text-gold bg-gold/10" : "border-onyx-border/50 text-muted-foreground hover:bg-secondary/50")}
-                  onClick={() => setBaseTvaRate(20)}
-                >Mise à dispo (TVA 20%)</button>
-              </div>
-            )}
 
             {pricingMode === "forfait" && (
               <select value={selectedForfaitId} onChange={e => { setSelectedForfaitId(e.target.value); setEditableBasePrice(null) }}
@@ -1215,19 +1223,51 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               </div>
             </div>
 
+            {/* Checkbox micro-entrepreneur */}
+            <label className="flex items-center gap-2.5 cursor-pointer py-1">
+              <Checkbox
+                id="micro-bc"
+                checked={isMicroBC}
+                onCheckedChange={(v) => setIsMicroBC(v === true)}
+                className="border-white/40 data-[state=checked]:bg-gold data-[state=checked]:border-gold data-[state=checked]:text-black"
+              />
+              <span className="text-[12px] text-foreground/80 select-none">TVA non applicable (Cocher si micro-entrepreneur)</span>
+            </label>
+
+            {/* Montant éditable — prérempli par la grille tarifaire */}
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                {isMicroBC ? "Montant de la prestation" : "Montant HT"}
+              </label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={editableBasePrice !== null ? editableBasePrice : Math.round(pricing.baseHT * 100) / 100}
+                onChange={e => {
+                  const v = parseFloat(e.target.value)
+                  setEditableBasePrice(isNaN(v) ? null : v)
+                }}
+                placeholder="0.00"
+                className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50"
+                style={{ fontSize: "16px" }}
+              />
+            </div>
+
             {/* Pricing Summary */}
             <div className="p-4 rounded-xl bg-[#242424] border border-gold/20 space-y-2">
-              <div className="flex justify-between items-center text-[10px]">
-                <span className="text-muted-foreground">Base HT</span>
-                <span className="text-foreground">{formatPrice(pricing.baseHT)}</span>
-              </div>
+              {!isMicroBC && (
+                <div className="flex justify-between items-center text-[10px]">
+                  <span className="text-muted-foreground">Base HT</span>
+                  <span className="text-foreground">{formatPrice(pricing.baseHT)}</span>
+                </div>
+              )}
               {pricing.supplementsTotal > 0 ? (
                 <div className="flex justify-between items-center text-[10px]">
                   <span className="text-muted-foreground">Suppléments HT</span>
                   <span className="text-foreground">+{formatPrice(pricing.supplementsTotal)}</span>
                 </div>
               ) : (
-                <div className="h-4" />
+                !isMicroBC && <div className="h-4" />
               )}
               {pricing.discountAmount > 0 && (
                 <div className="flex justify-between items-center text-[10px]">
@@ -1236,32 +1276,51 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 </div>
               )}
               <div className="border-t border-onyx-border/30 pt-2 flex justify-between text-sm">
-                <span className="text-muted-foreground">Total HT</span>
+                <span className="text-muted-foreground">{isMicroBC ? "Montant de la prestation" : "Total HT"}</span>
                 <span className="text-foreground font-medium">{formatPrice(pricing.totalHT)}</span>
               </div>
-              {pricing.tva10 > 0 && (
+              {!isMicroBC && pricing.tva10 > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">TVA (10%)</span>
                   <span className="text-foreground font-medium">{formatPrice(pricing.tva10)}</span>
                 </div>
               )}
-              {pricing.tva20 > 0 && (
+              {!isMicroBC && pricing.tva20 > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">TVA (20%)</span>
                   <span className="text-foreground font-medium">{formatPrice(pricing.tva20)}</span>
                 </div>
               )}
-              <div className="border-t border-onyx-border/30 pt-2 flex justify-between items-end">
-                <span className="text-foreground font-bold">Total TTC</span>
-                {pricing.discountAmount > 0 ? (
-                  <div className="text-right">
-                    <span className="text-muted-foreground line-through text-xs mr-2">{formatPrice(pricing.originalTTC)}</span>
+              {isMicroBC && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-amber-600 font-medium text-[11px]">TVA non applicable, art. 293 B du CGI</span>
+                </div>
+              )}
+              {!isMicroBC ? (
+                <div className="border-t border-onyx-border/30 pt-2 flex justify-between items-end">
+                  <span className="text-foreground font-bold">Total TTC</span>
+                  {pricing.discountAmount > 0 ? (
+                    <div className="text-right">
+                      <span className="text-muted-foreground line-through text-xs mr-2">{formatPrice(pricing.originalTTC)}</span>
+                      <span className="text-gold font-bold text-lg">{formatPrice(pricing.totalTTC)}</span>
+                    </div>
+                  ) : (
                     <span className="text-gold font-bold text-lg">{formatPrice(pricing.totalTTC)}</span>
-                  </div>
-                ) : (
-                  <span className="text-gold font-bold text-lg">{formatPrice(pricing.totalTTC)}</span>
-                )}
-              </div>
+                  )}
+                </div>
+              ) : (
+                <div className="border-t border-onyx-border/30 pt-2 flex justify-between items-end">
+                  <span className="text-foreground font-bold">Total</span>
+                  {pricing.discountAmount > 0 ? (
+                    <div className="text-right">
+                      <span className="text-muted-foreground line-through text-xs mr-2">{formatPrice(pricing.originalHT)}</span>
+                      <span className="text-gold font-bold text-lg">{formatPrice(pricing.totalHT)}</span>
+                    </div>
+                  ) : (
+                    <span className="text-gold font-bold text-lg">{formatPrice(pricing.totalHT)}</span>
+                  )}
+                </div>
+              )}
               <div className="pt-2 border-t border-onyx-border/30">
                 <p className="text-[9px] text-muted-foreground leading-relaxed">Détail : {pricing.fullDetail}</p>
               </div>
@@ -1638,30 +1697,32 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               )}
 
               <div className="border-t border-gray-200 pt-3 text-[10px]">
-                <div className="flex justify-between mb-1">
-                  <span className="text-gray-500">Total HT</span>
-                  <span className="text-gray-900">{formatPrice(pricing.totalHT)}</span>
-                </div>
-                {!legalProfile.isInvoiceWithoutVat && pricing.tva10 > 0 && (
+                {!isMicroBC && (
+                  <div className="flex justify-between mb-1">
+                    <span className="text-gray-500">Total HT</span>
+                    <span className="text-gray-900">{formatPrice(pricing.totalHT)}</span>
+                  </div>
+                )}
+                {!isMicroBC && pricing.tva10 > 0 && (
                   <div className="flex justify-between mb-1">
                     <span className="text-gray-500">TVA 10% - Transport de personnes</span>
                     <span className="text-gray-900">{formatPrice(pricing.tva10)}</span>
                   </div>
                 )}
-                {!legalProfile.isInvoiceWithoutVat && pricing.tva20 > 0 && (
+                {!isMicroBC && pricing.tva20 > 0 && (
                   <div className="flex justify-between mb-1">
                     <span className="text-gray-500">TVA 20% - Suppléments</span>
                     <span className="text-gray-900">{formatPrice(pricing.tva20)}</span>
                   </div>
                 )}
-                {legalProfile.isInvoiceWithoutVat && (
+                {isMicroBC && (
                   <div className="flex justify-between mb-1">
                     <span className="text-amber-600 font-medium">TVA non applicable, art. 293 B du CGI</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-sm">
-                  <span className="text-gray-900">TOTAL TTC</span>
-                  <span className="text-amber-600">{formatPrice(pricing.totalTTC)}</span>
+                  <span className="text-gray-900">{isMicroBC ? "TOTAL" : "TOTAL TTC"}</span>
+                  <span className="text-amber-600">{formatPrice(isMicroBC ? pricing.totalHT : pricing.totalTTC)}</span>
                 </div>
               </div>
 
@@ -1683,16 +1744,21 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
         {/* BUG 1 — Bouton désactivé après premier clic */}
         <button
           onClick={handleGenerate}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !canGenerate}
           className={cn(
             "w-full py-3.5 rounded-full font-bold text-sm transition-all",
-            isSubmitting
-              ? "bg-muted text-muted-foreground cursor-not-allowed opacity-60"
+            isSubmitting || !canGenerate
+              ? "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
               : "bg-gold text-black hover:bg-gold/90 active:scale-[0.98]"
           )}
         >
           {isSubmitting ? "Bon de réservation généré ✓" : "Générer le bon de réservation"}
         </button>
+        {!canGenerate && !isSubmitting && (
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">
+            <span className="text-red-500">*</span> Obligatoires pour générer le bon
+          </p>
+        )}
       </div>
     </motion.div>
   )

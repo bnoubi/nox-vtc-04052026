@@ -212,19 +212,30 @@ async function _generateDocumentPDF(
     const departLines = doc.splitTextToSize(d.trajet.depart || "Non renseigné", 152) as string[]
     const arriveeLines = doc.splitTextToSize(d.trajet.arrivee || "Non renseigné", 152) as string[]
 
-    const extraParts: string[] = []
-    if (d.trajet.time) extraParts.push(`Heure : ${d.trajet.time}`)
-    if (d.trajet.distance) {
-      const dur: string = d.trajet.duration || ""
-      extraParts.push(dur ? `Distance - Duree : ${d.trajet.distance} km - ${dur}` : `Distance : ${d.trajet.distance} km`)
+    type InfoRow = { label: string; value: string }
+    const infoRows: InfoRow[] = []
+    if (d.trajet.time || d.trajet.date) {
+      const depDate: string = d.trajet.date || d.date || ""
+      const depTime: string = d.trajet.time
+        ? (d.trajet.time as string).replace(/^(\d{1,2}):(\d{2}).*/, "$1h$2")
+        : ""
+      const depVal = depDate && depTime ? `${depDate} à ${depTime}` : depDate || depTime
+      infoRows.push({ label: "Date & Heure de départ :", value: depVal })
     }
-    if (d.trajet.passengers) extraParts.push(`${d.trajet.passengers} passager(s)`)
+    if (d.trajet.distance) {
+      const dur: string = d.trajet.duree || ""
+      infoRows.push({ label: "Distance - Durée (estimée) :", value: dur ? `${d.trajet.distance} km - ${dur}` : `${d.trajet.distance} km` })
+    }
+    if (d.trajet.passengers) {
+      const bags: number = d.trajet.luggage ?? 0
+      infoRows.push({ label: "Passagers / Bagages :", value: `${d.trajet.passengers} / ${bags}` })
+    }
 
     const contentHeight =
       15 +
       5 + departLines.length * 5 + 2 +
       5 + arriveeLines.length * 5 + 2 +
-      (extraParts.length > 0 ? 6 : 0)
+      (infoRows.length > 0 ? infoRows.length * 5 + 4 : 0)
     const bgH = contentHeight + 6
 
     const sectionTop = currentY
@@ -264,11 +275,16 @@ async function _generateDocumentPDF(
     doc.setTextColor(dark)
     tY += 5 + arriveeLines.length * 5 + 2
 
-    if (extraParts.length > 0) {
-      doc.setFontSize(8)
-      doc.setTextColor(gray)
-      doc.text(extraParts.join("  |  "), 185, tY, { align: "right" })
-      doc.setTextColor(dark)
+    if (infoRows.length > 0) {
+      doc.setFontSize(8.5)
+      doc.setFont("helvetica", "normal")
+      infoRows.forEach((row) => {
+        doc.setTextColor(gray)
+        doc.text(row.label, 28, tY)
+        doc.setTextColor(dark)
+        doc.text(row.value, 185, tY, { align: "right" })
+        tY += 5
+      })
     }
 
     currentY = sectionTop + bgH + 4
@@ -376,12 +392,15 @@ async function _generateDocumentPDF(
     if (d.tva10Amount && d.tva10Amount > 0) {
       doc.setFontSize(9)
       doc.setFont("helvetica", "normal")
-      doc.text("TVA 10% - Transport de personnes", 140, currentY)
+      doc.text("TVA 10%", 140, currentY)
       doc.text(formatPrice(d.tva10Amount), 185, currentY, { align: "right" })
       currentY += 4.5
-      doc.setFontSize(7.5)
-      doc.setFont("helvetica", "italic")
+      doc.setFontSize(8)
       doc.setTextColor(gray)
+      doc.text("Transport de personnes", 142, currentY)
+      currentY += 4
+      doc.setFont("helvetica", "italic")
+      doc.setFontSize(7.5)
       doc.text("(art. 279 b du CGI)", 142, currentY)
       doc.setFont("helvetica", "normal")
       doc.setTextColor(dark)
@@ -389,12 +408,15 @@ async function _generateDocumentPDF(
       currentY += 5.5
     }
     if (d.tva20Amount && d.tva20Amount > 0) {
-      doc.text("TVA 20% - Supplements et mise a disposition", 140, currentY)
+      doc.text("TVA 20%", 140, currentY)
       doc.text(formatPrice(d.tva20Amount), 185, currentY, { align: "right" })
       currentY += 4.5
-      doc.setFontSize(7.5)
-      doc.setFont("helvetica", "italic")
+      doc.setFontSize(8)
       doc.setTextColor(gray)
+      doc.text("Suppléments et mise à disposition", 142, currentY)
+      currentY += 4
+      doc.setFont("helvetica", "italic")
+      doc.setFontSize(7.5)
       doc.text("(art. 278 du CGI)", 142, currentY)
       doc.setFont("helvetica", "normal")
       doc.setTextColor(dark)
@@ -410,12 +432,15 @@ async function _generateDocumentPDF(
     if (!d.tva10Amount && !d.tva20Amount && !d.tva55Amount && d.tva) {
       const tvaRate: number = d.tvaRate ?? 10
       if (tvaRate === 10) {
-        doc.text("TVA 10% - Transport de personnes", 140, currentY)
+        doc.text("TVA 10%", 140, currentY)
         doc.text(formatPrice(d.tva), 185, currentY, { align: "right" })
         currentY += 4.5
-        doc.setFontSize(7.5)
-        doc.setFont("helvetica", "italic")
+        doc.setFontSize(8)
         doc.setTextColor(gray)
+        doc.text("Transport de personnes", 142, currentY)
+        currentY += 4
+        doc.setFont("helvetica", "italic")
+        doc.setFontSize(7.5)
         doc.text("(art. 279 b du CGI)", 142, currentY)
         doc.setFont("helvetica", "normal")
         doc.setTextColor(dark)

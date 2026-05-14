@@ -126,6 +126,7 @@ export interface BCDocument {
     depart: string
     arrivee: string
     distance?: number
+    duree?: string
     date?: string
     time?: string
     passengers?: number
