@@ -209,6 +209,11 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   const [discountValue, setDiscountValue] = useState(0)
   const [isMicroBC, setIsMicroBC] = useState<boolean>(enterprise?.isMicroEntrepreneur ?? false)
 
+  // Sync isMicroBC when enterprise profile loads from Supabase
+  useEffect(() => {
+    setIsMicroBC(legalProfile.taxConfig.isMicroEntrepreneur)
+  }, [legalProfile.taxConfig.isMicroEntrepreneur])
+
   // CGV — valeurs mémoïsées pour éviter les doubles calculs en render
   const cgvConfigured = useMemo(() => hasCGVConfigured(enterprise), [enterprise.cgvMode, enterprise.cgvConfig, enterprise.cgvText])
   const cgvSummary = useMemo(() => generateCGVSummary(enterprise), [enterprise.cgvMode, enterprise.cgvConfig, enterprise.cgvText])
@@ -764,7 +769,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               <p className="text-[11px] text-muted-foreground">{enterprise?.adresse ?? ""}</p>
             </div>
             {legalProfile.mustDisplayVatExemption && (
-              <p className="text-[11px] text-amber-600 font-medium px-1">TVA non applicable, art. 293 B du CGI</p>
+              <p className="text-[11px] text-amber-600 font-medium px-1">{legalProfile.vatMention ?? "TVA non applicable, art. 293 B du CGI"}</p>
             )}
 
             <div className="space-y-1">
@@ -1317,7 +1322,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               )}
               {isMicroBC && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-amber-600 font-medium text-[11px]">TVA non applicable, art. 293 B du CGI</span>
+                  <span className="text-amber-600 font-medium text-[11px]">{legalProfile.vatMention ?? "TVA non applicable, art. 293 B du CGI"}</span>
                 </div>
               )}
               {!isMicroBC ? (
@@ -1647,7 +1652,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                     <p className="text-[8px] text-gray-500">TVA : {enterprise?.tvaIntra ?? ""}</p>
                   )}
                   {legalProfile.mustDisplayVatExemption && (
-                    <p className="text-[8px] text-amber-600 font-medium">TVA non applicable, art. 293 B du CGI</p>
+                    <p className="text-[8px] text-amber-600 font-medium">{legalProfile.vatMention ?? "TVA non applicable, art. 293 B du CGI"}</p>
                   )}
                   <p className="text-[8px] text-amber-600 font-medium">EVTC : {enterprise?.evtcNumber ?? ""}</p>
                 </div>
@@ -1741,7 +1746,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 )}
                 {isMicroBC && (
                   <div className="flex justify-between mb-1">
-                    <span className="text-amber-600 font-medium">TVA non applicable, art. 293 B du CGI</span>
+                    <span className="text-amber-600 font-medium">{legalProfile.vatMention ?? "TVA non applicable, art. 293 B du CGI"}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-sm">

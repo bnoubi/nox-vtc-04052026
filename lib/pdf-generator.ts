@@ -98,7 +98,7 @@ async function _buildPDFDoc(
   }
   if (!isVatApplicable(enterprise)) {
     doc.setTextColor("#D97706")
-    doc.text("TVA non applicable - art. 293 B du CGI", 20, leftY)
+    doc.text(getVatMention(enterprise) ?? "TVA non applicable, art. 293 B du CGI", 20, leftY)
     doc.setTextColor(gray)
     leftY += 4.5
   }
@@ -485,7 +485,7 @@ async function _buildPDFDoc(
   doc.setFontSize(13)
   doc.setFont("helvetica", "bold")
   doc.setTextColor(gold)
-  doc.text("TOTAL TTC", 130, currentY)
+  doc.text(isVatApplicable(enterprise) ? "TOTAL TTC" : "TOTAL", 130, currentY)
   doc.text(formatPrice(d.amount), 185, currentY, { align: "right" })
   currentY += 6
 
