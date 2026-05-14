@@ -20,7 +20,9 @@ import {
   Copy,
   Play,
   Flag,
+  Trash2,
 } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useNav } from "./nav-context"
@@ -30,6 +32,7 @@ import { type BCDocument, type InvoiceDocument, type BCStatus, type InvoiceStatu
 import { generateInvoicePDF, generateBCPDF, generateBCPDFBlob } from "@/lib/pdf-generator"
 
 type DocType = "bc" | "facture"
+type BCFilter = "tous" | "brouillon" | "en_attente" | "confirme" | "en_cours" | "termine" | "annule" | "converti"
 
 
 // ── Status configs ───────────────────────────────────────────────
@@ -581,13 +584,18 @@ function BCCard({
   onView,
   onDuplicate,
   onShare,
+  isSelected,
+  onToggleSelect,
 }: {
   doc: BCDocument
   onInvoice: (bc: BCDocument) => void
   onView: (bc: BCDocument) => void
   onDuplicate: (bc: BCDocument) => void
   onShare: (bc: BCDocument) => void
+  isSelected: boolean
+  onToggleSelect: (id: string) => void
 }) {
+  const isSelectable = doc.status === "brouillon"
   const { updateBC, invoices } = useNox()
   const [menuOpen, setMenuOpen] = useState(false)
   const status = bcStatusConfig[doc.status] ?? bcStatusConfig.en_attente
@@ -624,9 +632,19 @@ function BCCard({
     null
 
   return (
-    <div className="relative p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 hover:border-gold/20 transition-colors">
+    <div className={cn(
+      "relative p-4 rounded-2xl bg-onyx-card border transition-colors",
+      isSelectable && isSelected ? "border-red-500/40 bg-red-500/5" : "border-onyx-border/50 hover:border-gold/20"
+    )}>
       <div className="flex items-start justify-between mb-2.5">
         <div className="flex items-center gap-2.5">
+          {isSelectable && (
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => onToggleSelect(doc.id)}
+              className="shrink-0 border-onyx-border/60 data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
+            />
+          )}
           <div className="w-8 h-8 rounded-lg bg-gold/10 flex items-center justify-center shrink-0">
             <FileText className="h-3.5 w-3.5 text-gold" strokeWidth={1.5} />
           </div>
@@ -945,9 +963,13 @@ function GenerateInvoiceModal({
 // ── Main Documents Tab ───────────────────────────────────────────
 
 export function DocumentsTab() {
-  const { bcs, invoices, addInvoice, enterprise, plan, tokens, spendToken } = useNox()
+  const { bcs, invoices, addInvoice, enterprise, plan, tokens, spendToken, deleteBC } = useNox()
   const [activeType, setActiveType] = useState<DocType>("bc")
   const [search, setSearch] = useState("")
+  const [bcStatusFilter, setBcStatusFilter] = useState<BCFilter>("tous")
+  const [selectedBCIds, setSelectedBCIds] = useState<Set<string>>(new Set())
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [showBCFlow, setShowBCFlow] = useState(false)
   const [duplicateBC, setDuplicateBC] = useState<BCDocument | null>(null)
   const [invoicingBC, setInvoicingBC] = useState<BCDocument | null>(null)
@@ -956,6 +978,33 @@ export function DocumentsTab() {
   const [showNoTokens, setShowNoTokens] = useState(false)
   const { openWallet } = useNav()
   const isUnlimited = plan === "DUO" || plan === "TEAM"
+
+  function handleStatusFilterChange(filter: BCFilter) {
+    setBcStatusFilter(filter)
+    setSelectedBCIds(new Set())
+  }
+
+  function toggleBCSelection(id: string) {
+    setSelectedBCIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleDeleteSelected() {
+    setIsDeleting(true)
+    const toDelete = Array.from(selectedBCIds).filter(id => {
+      const bc = bcs.find(b => b.id === id)
+      return bc && bc.status === "brouillon" && !invoices.some(inv => inv.bcRef === bc.number)
+    })
+    await Promise.all(toDelete.map(id => deleteBC(id)))
+    setSelectedBCIds(new Set())
+    setShowDeleteConfirm(false)
+    setIsDeleting(false)
+    toast.success(`${toDelete.length} bon${toDelete.length > 1 ? "s" : ""} supprimé${toDelete.length > 1 ? "s" : ""}`)
+  }
 
   async function handleShareBC(bc: BCDocument) {
     const fileName = `BC_${bc.number}.pdf`
@@ -1043,11 +1092,23 @@ export function DocumentsTab() {
     setActiveType("facture")
   }
 
-  const filteredBCs = bcs.filter(
-    (d: BCDocument) =>
-      d.number.toLowerCase().includes(search.toLowerCase()) ||
-      d.client.toLowerCase().includes(search.toLowerCase()),
-  )
+  const filteredBCs = (() => {
+    let list = bcs
+    if (bcStatusFilter === "tous") {
+      list = list.filter(d => d.status !== "annule_client" && d.status !== "annule_chauffeur")
+    } else if (bcStatusFilter === "annule") {
+      list = list.filter(d => d.status === "annule_client" || d.status === "annule_chauffeur")
+    } else if (bcStatusFilter === "converti") {
+      list = list.filter(d => invoices.some((inv: InvoiceDocument) => inv.bcRef === d.number))
+    } else {
+      list = list.filter(d => d.status === bcStatusFilter)
+    }
+    if (search) {
+      const s = search.toLowerCase()
+      list = list.filter(d => d.number.toLowerCase().includes(s) || d.client.toLowerCase().includes(s))
+    }
+    return list
+  })()
 
   const filteredInvoices = invoices.filter(
     (d: InvoiceDocument) =>
@@ -1071,7 +1132,7 @@ export function DocumentsTab() {
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveType(tab.id)}
+              onClick={() => { setActiveType(tab.id); setSelectedBCIds(new Set()) }}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-medium border transition-all duration-200",
                 activeType === tab.id
@@ -1105,6 +1166,35 @@ export function DocumentsTab() {
             className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/40 transition-colors"
           />
         </div>
+
+        {/* Status filter pills — BC only */}
+        {activeType === "bc" && (
+          <div className="flex gap-1.5 mt-3 overflow-x-auto pb-0.5 scrollbar-hide">
+            {([
+              { id: "tous", label: "Tous" },
+              { id: "brouillon", label: "Brouillon" },
+              { id: "en_attente", label: "En attente" },
+              { id: "confirme", label: "Confirmé" },
+              { id: "en_cours", label: "En cours" },
+              { id: "termine", label: "Terminé" },
+              { id: "annule", label: "Annulés" },
+              { id: "converti", label: "Convertis" },
+            ] as { id: BCFilter; label: string }[]).map((pill) => (
+              <button
+                key={pill.id}
+                onClick={() => handleStatusFilterChange(pill.id)}
+                className={cn(
+                  "shrink-0 px-3 py-1 rounded-full text-[10px] font-semibold border transition-all",
+                  bcStatusFilter === pill.id
+                    ? "bg-gold/20 border-gold/40 text-gold"
+                    : "bg-onyx-card border-onyx-border/40 text-muted-foreground hover:border-onyx-border"
+                )}
+              >
+                {pill.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Summary */}
@@ -1122,7 +1212,10 @@ export function DocumentsTab() {
       {/* Floating add button */}
       <button
         onClick={() => setShowBCFlow(true)}
-        className="fixed bottom-28 right-5 z-30 w-12 h-12 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 transition-transform"
+        className={cn(
+          "fixed right-5 z-30 w-12 h-12 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 transition-all duration-200",
+          selectedBCIds.size > 0 ? "bottom-44" : "bottom-28"
+        )}
       >
         <Plus className="h-5 w-5 text-primary-foreground" strokeWidth={2} />
       </button>
@@ -1138,7 +1231,7 @@ export function DocumentsTab() {
         {currentDocs.length > 0 ? (
           activeType === "bc" ? (
             filteredBCs.map((doc: BCDocument) => (
-              <BCCard key={doc.id} doc={doc} onInvoice={(bc: BCDocument) => setInvoicingBC(bc)} onView={(bc: BCDocument) => setViewingBC(bc)} onDuplicate={handleDuplicate} onShare={handleShareBC} />
+              <BCCard key={doc.id} doc={doc} onInvoice={(bc: BCDocument) => setInvoicingBC(bc)} onView={(bc: BCDocument) => setViewingBC(bc)} onDuplicate={handleDuplicate} onShare={handleShareBC} isSelected={selectedBCIds.has(doc.id)} onToggleSelect={toggleBCSelection} />
             ))
           ) : (
             filteredInvoices.map((doc: InvoiceDocument) => (
@@ -1237,6 +1330,87 @@ export function DocumentsTab() {
               >
                 Ouvrir la Boutique
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Action bar — sélection brouillons */}
+      <AnimatePresence>
+        {selectedBCIds.size > 0 && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 20, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 400 }}
+            className="fixed bottom-20 left-4 right-4 z-40 flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-onyx-card border border-red-500/30 shadow-2xl shadow-black/60"
+          >
+            <span className="text-sm font-semibold text-foreground">
+              {selectedBCIds.size} sélectionné{selectedBCIds.size > 1 ? "s" : ""}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedBCIds(new Set())}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-muted-foreground bg-secondary/50 hover:bg-secondary transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-red-500 hover:bg-red-600 active:scale-[0.97] transition-all"
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                Supprimer la sélection
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirmation suppression */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-4"
+          >
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => !isDeleting && setShowDeleteConfirm(false)} />
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 500, damping: 35 }}
+              className="relative w-full max-w-sm rounded-2xl bg-onyx-card border border-red-500/30 shadow-2xl shadow-black/60 p-5"
+            >
+              <div className="flex justify-center mb-4">
+                <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                  <Trash2 className="h-5 w-5 text-red-400" strokeWidth={1.5} />
+                </div>
+              </div>
+              <p className="text-base font-bold text-foreground text-center mb-1">
+                Supprimer {selectedBCIds.size} bon{selectedBCIds.size > 1 ? "s" : ""} ?
+              </p>
+              <p className="text-xs text-muted-foreground text-center leading-relaxed mb-5">
+                Cette action est irréversible. Ces bons seront définitivement supprimés.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeleting}
+                  className="flex-1 py-3 rounded-xl bg-secondary/50 border border-onyx-border/50 text-sm font-semibold text-foreground hover:bg-secondary transition-colors disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleDeleteSelected}
+                  disabled={isDeleting}
+                  className="flex-1 py-3 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 active:scale-[0.97] transition-all disabled:opacity-50"
+                >
+                  {isDeleting ? "Suppression…" : "Confirmer"}
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}

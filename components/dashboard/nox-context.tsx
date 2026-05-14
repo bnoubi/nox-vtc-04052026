@@ -78,6 +78,7 @@ interface NoxContextType {
   addBC: (bc: BCDocument) => void
   updateBC: (id: string, data: Partial<BCDocument>) => void
   saveDraftBC: (data: Partial<BCDocument>) => Promise<string | null>
+  deleteBC: (id: string) => Promise<void>
   addInvoice: (invoice: InvoiceDocument) => void
   updateInvoice: (id: string, data: Partial<InvoiceDocument>) => void
   deleteInvoice: (id: string) => void
@@ -1083,6 +1084,16 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     return null
   }
 
+  const deleteBC = async (id: string) => {
+    if (!userId) return
+    try {
+      const { error } = await supabase.from("bcs").delete().eq("id", id).eq("user_id", userId)
+      if (error) return
+      setBcs(prev => prev.filter(b => b.id !== id))
+    } catch (e) {
+    }
+  }
+
   const addInvoice = async (invoice: InvoiceDocument) => {
     if (!userId) return
     try {
@@ -1382,7 +1393,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       plan, tokens, onboardingStatus, driverCount, vehicleCount,
       upgrade, addTokens, spendToken,
       updateEnterprise, addDriver, updateDriver, deleteDriver, addVehicle, updateVehicle, deleteVehicle,
-      addClient, updateClient, deleteClient, addBC, updateBC, saveDraftBC, addInvoice, updateInvoice, deleteInvoice,
+      addClient, updateClient, deleteClient, addBC, updateBC, saveDraftBC, deleteBC, addInvoice, updateInvoice, deleteInvoice,
       tariffGrids, addTariffGrid, updateTariffGrid, deleteTariffGrid, updateTarifs,
       tranches, applyWeekend, applyHolidays,
       tariffSettings,
