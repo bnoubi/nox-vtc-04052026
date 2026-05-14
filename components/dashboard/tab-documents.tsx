@@ -244,9 +244,9 @@ function BCDetail({
                 <div className="space-y-1">
                   <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Total TTC</p>
                   <div>
-                    {bc.discountValue && bc.originalTTC && bc.discountValue > 0 && (
+                    {(bc.discountValue ?? 0) > 0 && (bc.originalTTC ?? 0) > 0 && (
                       <span className="text-xs text-muted-foreground line-through mr-2">
-                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.originalTTC)} &euro;
+                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.originalTTC!)} &euro;
                       </span>
                     )}
                     <span className="text-2xl font-black text-gold">
@@ -583,10 +583,11 @@ function BCCard({
   onView: (bc: BCDocument) => void
   onDuplicate: (bc: BCDocument) => void
 }) {
-  const { updateBC } = useNox()
+  const { updateBC, invoices } = useNox()
   const [menuOpen, setMenuOpen] = useState(false)
   const status = bcStatusConfig[doc.status] ?? bcStatusConfig.en_attente
   const canInvoice = doc.status === "confirme" || doc.status === "termine"
+  const alreadyInvoiced = invoices.some((inv: InvoiceDocument) => inv.bcRef === doc.number)
 
   const handleAction = (label: string) => {
     setMenuOpen(false)
@@ -654,12 +655,18 @@ function BCCard({
       {/* Facturer button for signed BCs */}
       {canInvoice && (
         <button
-          onClick={() => onInvoice(doc)}
-          className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-gold/10 border border-gold/30 text-gold text-xs font-semibold hover:bg-gold/20 active:scale-[0.98] transition-all"
+          onClick={() => { if (!alreadyInvoiced) onInvoice(doc) }}
+          disabled={alreadyInvoiced}
+          className={cn(
+            "mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-all",
+            alreadyInvoiced
+              ? "bg-onyx-card border border-onyx-border/50 text-muted-foreground cursor-not-allowed opacity-60"
+              : "bg-gold/10 border border-gold/30 text-gold hover:bg-gold/20 active:scale-[0.98]"
+          )}
         >
           <Receipt className="h-3.5 w-3.5" strokeWidth={1.5} />
-          Facturer
-          <ArrowRight className="h-3 w-3" strokeWidth={1.5} />
+          {alreadyInvoiced ? "Facture déjà créée" : "Facturer"}
+          {!alreadyInvoiced && <ArrowRight className="h-3 w-3" strokeWidth={1.5} />}
         </button>
       )}
 

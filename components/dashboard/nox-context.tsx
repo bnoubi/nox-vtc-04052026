@@ -72,7 +72,7 @@ interface NoxContextType {
   addVehicle: (vehicle: Vehicle) => void
   updateVehicle: (id: string, data: Partial<Vehicle>) => void
   deleteVehicle: (id: string) => void
-  addClient: (client: Client) => Promise<boolean>
+  addClient: (client: Client) => Promise<string | null>
   updateClient: (id: string, data: Partial<Client>) => void
   deleteClient: (id: string) => void
   addBC: (bc: BCDocument) => void
@@ -812,10 +812,10 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
     }
   }
-  const addClient = async (client: Client): Promise<boolean> => {
+  const addClient = async (client: Client): Promise<string | null> => {
     try {
       if (!userId) {
-        return false
+        return null
       }
 
       const { data: c, error } = await supabase
@@ -844,7 +844,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         .single()
 
       if (error) {
-        return false
+        return null
       }
 
       setClients(prev => [...prev, {
@@ -873,9 +873,9 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         preferences: c.preferences || "",
       }])
 
-      return true
+      return c.id
     } catch (e) {
-      return false
+      return null
     }
   }
 

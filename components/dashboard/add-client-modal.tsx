@@ -77,14 +77,14 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
       notes: "Nouveau client",
     }
 
-    let success = false
+    let newId: string | null = null
     try {
-      success = await addClient(newClient)
+      newId = await addClient(newClient)
     } catch (e) {
       console.error("[AddClientModal] addClient failed:", e)
     }
 
-    if (success) {
+    if (newId) {
       toast.success("Client ajouté", {
         description: clientType === "particulier" ? `${prenom} ${nom} a été ajouté.` : `${raisonSociale} a été ajouté.`
       })

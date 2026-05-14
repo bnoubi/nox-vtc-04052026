@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   X, ChevronLeft, ChevronRight, ChevronDown, FileText, Link2, MessageSquare, Phone, Copy, Check,
   MapPin, Navigation, Car, Euro, Building2, User, Users, Search, Sparkles, Clock, Calendar,
-  RotateCcw, Loader2,
+  RotateCcw, Loader2, Plus,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -17,6 +17,7 @@ import {
   type BCDocument, type EnterpriseProfile, type BCStatus,
 } from "./data"
 import { toast } from "sonner"
+import { QuickAddClientModal } from "./quick-add-client-modal"
 
 // ============================================================================
 // TYPES & HELPERS
@@ -167,6 +168,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   const [modalSearch, setModalSearch] = useState("")
   const [modalSelectedCompany, setModalSelectedCompany] = useState<Client | null>(null)
   const [inlineSelectedCompany, setInlineSelectedCompany] = useState<Client | null>(null)
+  const [showQuickAddClient, setShowQuickAddClient] = useState(false)
 
   // Client manuel (prefillClient ou pré-rempli depuis BC)
   const [manualClient, setManualClient] = useState<BCPrefillClient | null>(prefillClient || null)
@@ -713,6 +715,15 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     )
   }
 
+  function handleClientCreated(clientId: string, passagerNom?: string, passagerTel?: string) {
+    setSelectedClientId(clientId)
+    setClientSearch("")
+    setClientFocused(false)
+    setShowQuickAddClient(false)
+    if (passagerNom) setPassagerNom(passagerNom)
+    if (passagerTel) setPassagerTelephone(passagerTel)
+  }
+
   // ============================================================================
   // STEP 3: FORM
   // ============================================================================
@@ -780,6 +791,15 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 </button>
               </div>
             )}
+
+            <button
+              type="button"
+              onClick={() => { setShowQuickAddClient(true) }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-[#242424] border border-dashed border-gold/30 text-gold text-[11px] font-medium hover:bg-gold/5 hover:border-gold/50 transition-all"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+              Ajouter un nouveau client
+            </button>
 
             <div className="space-y-2">
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Rechercher un client <span className="text-red-500">*</span></label>
@@ -867,47 +887,51 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                     ))}
                   </>
                 ) : filteredClients.length === 0 ? (
-                  <p className="px-4 py-3 text-[11px] text-muted-foreground italic">
-                    {(clients ?? []).length === 0
-                      ? "Aucun client enregistré — vous pouvez saisir manuellement"
-                      : "Aucun résultat"}
-                  </p>
+                  <>
+                    <p className="px-4 py-3 text-[11px] text-muted-foreground italic">
+                      {(clients ?? []).length === 0
+                        ? "Aucun client enregistré"
+                        : "Aucun résultat"}
+                    </p>
+                  </>
                 ) : (
-                  filteredClients.slice(0, 8).map(c => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => {
-                        if (c.type === "professionnel" && (c.contacts?.length ?? 0) > 0) {
-                          setInlineSelectedCompany(c)
-                        } else {
-                          setSelectedClientId(c.id)
-                          setClientSearch("")
-                          setClientFocused(false)
-                        }
-                      }}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-left"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-gold/10 flex items-center justify-center text-gold text-xs font-bold flex-shrink-0">
-                        {c.type === "particulier"
-                          ? `${c.prenom?.[0] ?? ""}${c.nom?.[0] ?? ""}`.toUpperCase()
-                          : (c.raisonSociale?.[0] ?? "").toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {c.type === "particulier" ? `${c.prenom ?? ""} ${c.nom ?? ""}`.trim() : (c.raisonSociale ?? "")}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground truncate">
-                          {c.type === "professionnel"
-                            ? `${(c.contacts?.length ?? 0)} passager${(c.contacts?.length ?? 0) !== 1 ? "s" : ""}`
-                            : (c.phone ?? "")}
-                        </p>
-                      </div>
-                      {c.type === "professionnel" && (c.contacts?.length ?? 0) > 0 && (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" strokeWidth={1.5} />
-                      )}
-                    </button>
-                  ))
+                  <>
+                    {filteredClients.slice(0, 8).map(c => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          if (c.type === "professionnel" && (c.contacts?.length ?? 0) > 0) {
+                            setInlineSelectedCompany(c)
+                          } else {
+                            setSelectedClientId(c.id)
+                            setClientSearch("")
+                            setClientFocused(false)
+                          }
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-left"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-gold/10 flex items-center justify-center text-gold text-xs font-bold flex-shrink-0">
+                          {c.type === "particulier"
+                            ? `${c.prenom?.[0] ?? ""}${c.nom?.[0] ?? ""}`.toUpperCase()
+                            : (c.raisonSociale?.[0] ?? "").toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {c.type === "particulier" ? `${c.prenom ?? ""} ${c.nom ?? ""}`.trim() : (c.raisonSociale ?? "")}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground truncate">
+                            {c.type === "professionnel"
+                              ? `${(c.contacts?.length ?? 0)} passager${(c.contacts?.length ?? 0) !== 1 ? "s" : ""}`
+                              : (c.phone ?? "")}
+                          </p>
+                        </div>
+                        {c.type === "professionnel" && (c.contacts?.length ?? 0) > 0 && (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" strokeWidth={1.5} />
+                        )}
+                      </button>
+                    ))}
+                  </>
                 )}
               </div>
             )}
@@ -1760,6 +1784,13 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
           </p>
         )}
       </div>
+
+      <QuickAddClientModal
+        open={showQuickAddClient}
+        onClose={() => setShowQuickAddClient(false)}
+        clients={clients ?? []}
+        onClientCreated={handleClientCreated}
+      />
     </motion.div>
   )
 }
