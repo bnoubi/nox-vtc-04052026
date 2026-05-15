@@ -3,7 +3,7 @@
 import { createContext, useContext, useCallback, useRef, useState } from "react"
 import type { TabId } from "./bottom-nav"
 
-type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security"
+type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security" | "cgv"
 
 export interface EntityNavigation {
   entityType: "driver" | "vehicle"
@@ -14,6 +14,7 @@ export interface EntityNavigation {
 interface NavContextValue {
   switchTab: (tab: TabId) => void
   navigateToSubscription: () => void
+  navigateToCGV: () => void
   registerSettingsNavigator: (fn: (screen: SettingsScreen) => void) => void
   openWallet: () => void
   registerWalletOpener: (fn: () => void) => void
@@ -21,6 +22,9 @@ interface NavContextValue {
   navigateToEntity: (entityType: "driver" | "vehicle", entityId: string, field: string) => void
   pendingEntityNavigation: EntityNavigation | null
   clearPendingEntityNavigation: () => void
+  pendingBcId: string | null
+  navigateToBC: (id: string) => void
+  clearPendingBcId: () => void
 }
 
 const NavContext = createContext<NavContextValue | null>(null)
@@ -37,6 +41,7 @@ export function NavProvider({
   const settingsNavigatorRef = useRef<((screen: SettingsScreen) => void) | null>(null)
   const walletOpenerRef = useRef<(() => void) | null>(null)
   const [pendingEntityNavigation, setPendingEntityNavigation] = useState<EntityNavigation | null>(null)
+  const [pendingBcId, setPendingBcId] = useState<string | null>(null)
 
   const registerSettingsNavigator = useCallback((fn: (screen: SettingsScreen) => void) => {
     settingsNavigatorRef.current = fn
@@ -66,6 +71,13 @@ export function NavProvider({
     }, 50)
   }, [onTabChange])
 
+  const navigateToCGV = useCallback(() => {
+    onTabChange("settings")
+    setTimeout(() => {
+      settingsNavigatorRef.current?.("cgv")
+    }, 50)
+  }, [onTabChange])
+
   const navigateToEntity = useCallback((entityType: "driver" | "vehicle", entityId: string, field: string) => {
     // Store the pending navigation
     setPendingEntityNavigation({ entityType, entityId, field })
@@ -85,17 +97,29 @@ export function NavProvider({
     setPendingEntityNavigation(null)
   }, [])
 
+  const navigateToBC = useCallback((id: string) => {
+    setPendingBcId(id)
+  }, [])
+
+  const clearPendingBcId = useCallback(() => {
+    setPendingBcId(null)
+  }, [])
+
   return (
-    <NavContext.Provider value={{ 
-      switchTab, 
-      navigateToSubscription, 
-      registerSettingsNavigator, 
-      openWallet, 
-      registerWalletOpener, 
+    <NavContext.Provider value={{
+      switchTab,
+      navigateToSubscription,
+      navigateToCGV,
+      registerSettingsNavigator,
+      openWallet,
+      registerWalletOpener,
       logout,
       navigateToEntity,
       pendingEntityNavigation,
-      clearPendingEntityNavigation
+      clearPendingEntityNavigation,
+      pendingBcId,
+      navigateToBC,
+      clearPendingBcId,
     }}>
       {children}
     </NavContext.Provider>

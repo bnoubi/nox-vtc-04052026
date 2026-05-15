@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   Search,
@@ -976,7 +976,14 @@ export function DocumentsTab() {
   const [viewingBC, setViewingBC] = useState<BCDocument | null>(null)
   const [viewingInvoice, setViewingInvoice] = useState<InvoiceDocument | null>(null)
   const [showNoTokens, setShowNoTokens] = useState(false)
-  const { openWallet } = useNav()
+  const { openWallet, pendingBcId, clearPendingBcId } = useNav()
+
+  useEffect(() => {
+    if (!pendingBcId) return
+    const bc = bcs.find((b) => b.id === pendingBcId)
+    if (bc) { setViewingBC(bc); setActiveType("bc") }
+    clearPendingBcId()
+  }, [pendingBcId, bcs, clearPendingBcId])
   const isUnlimited = plan === "DUO" || plan === "TEAM"
 
   function handleStatusFilterChange(filter: BCFilter) {
