@@ -375,6 +375,8 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             cgvVersionAccepted: b.cgv_version_accepted || undefined,
             signatairesNom: b.signataire_nom || undefined,
             acceptanceMention: b.acceptance_mention || undefined,
+            mode_horaire: (b.mode_horaire as 'depart' | 'arrivee') || 'depart',
+            heure_arrivee_souhaitee: b.heure_arrivee_souhaitee || null,
           })))
         }
       } catch (err) {
@@ -970,6 +972,8 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       notes: bc.notes || null,
       cgv_text: bc.cgvText || null,
       cgv_inclure: bc.cgvInclure !== undefined ? bc.cgvInclure : true,
+      mode_horaire: bc.mode_horaire || 'depart',
+      heure_arrivee_souhaitee: bc.heure_arrivee_souhaitee || null,
     }
     try {
       const { data, error } = await supabase

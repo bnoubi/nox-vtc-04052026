@@ -72,6 +72,41 @@ function formatTimeFrFromString(time: string): string {
   return time?.replace(":", "h") ?? ""
 }
 
+function computeDepartureTime(date: string, arrivalTime: string, durationSec: number): string | null {
+  try {
+    const arrMs = new Date(`${date}T${arrivalTime}:00`).getTime()
+    if (isNaN(arrMs)) return null
+    const depMs = arrMs - durationSec * 1000
+    const d = new Date(depMs)
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+  } catch { return null }
+}
+
+function computeArrivalTime(date: string, departureTime: string, durationSec: number): string | null {
+  try {
+    const depMs = new Date(`${date}T${departureTime}:00`).getTime()
+    if (isNaN(depMs)) return null
+    const arrMs = depMs + durationSec * 1000
+    const d = new Date(arrMs)
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+  } catch { return null }
+}
+
+function formatCombinedDateTime(date: string, time: string): string {
+  try {
+    let label = ""
+    if (date) {
+      const d = new Date(date + "T12:00:00")
+      const w = d.toLocaleDateString("fr-FR", { weekday: "short" })
+      const weekday = w.charAt(0).toUpperCase() + w.slice(1)
+      const month = d.toLocaleDateString("fr-FR", { month: "long" })
+      label = `${weekday} ${d.getDate()} ${month}`
+    }
+    if (time) label = label ? `${label} · ${time.replace(":", "h")}` : time.replace(":", "h")
+    return label || "Non défini"
+  } catch { return "Non défini" }
+}
+
 function generateCGVSummary(enterprise: EnterpriseProfile): string {
   if (!enterprise.cgvMode || enterprise.cgvMode === "configurator") {
     const config = enterprise.cgvConfig
@@ -88,6 +123,149 @@ function hasCGVConfigured(enterprise: EnterpriseProfile): boolean {
   if (enterprise.cgvMode === "freetext") return !!(enterprise.cgvText?.trim())
   if (enterprise.cgvMode === "import") return true
   return !!(enterprise.cgvConfig)
+}
+
+// ============================================================================
+// DRUM-ROLL PICKER — colonne scrollable avec snap
+// ============================================================================
+function ScrollColumn({ items, initialIndex, onSelect }: {
+  items: string[]
+  initialIndex: number
+  onSelect: (i: number) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const ITEM_H = 44
+  const current = useRef(initialIndex)
+  const [displayIdx, setDisplayIdx] = useState(initialIndex)
+
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = initialIndex * ITEM_H
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onScroll = () => {
+    if (!ref.current) return
+    const idx = Math.round(ref.current.scrollTop / ITEM_H)
+    const clamped = Math.max(0, Math.min(items.length - 1, idx))
+    if (clamped !== current.current) {
+      current.current = clamped
+      setDisplayIdx(clamped)
+      onSelect(clamped)
+    }
+  }
+
+  return (
+    <div className="relative flex-1 overflow-hidden" style={{ minWidth: 44 }}>
+      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-11 bg-white/5 rounded-lg pointer-events-none z-10" />
+      <div ref={ref} onScroll={onScroll} className="h-[220px] overflow-y-scroll snap-y snap-mandatory" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
+        <div style={{ height: ITEM_H * 2 }} />
+        {items.map((item, i) => (
+          <div key={i} style={{ height: ITEM_H }}
+            className={cn("flex items-center justify-center text-sm snap-center px-1 cursor-pointer transition-colors duration-100 select-none",
+              i === displayIdx ? "text-amber-400 font-semibold" : "text-muted-foreground/50")}
+            onClick={() => {
+              current.current = i; setDisplayIdx(i); onSelect(i)
+              ref.current?.scrollTo({ top: i * ITEM_H, behavior: "smooth" })
+            }}>
+            {item}
+          </div>
+        ))}
+        <div style={{ height: ITEM_H * 2 }} />
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// DATE/TIME PICKER BOTTOM SHEET
+// ============================================================================
+function DateTimePickerSheet({ open, initialDate, initialTime, onClose, onConfirm }: {
+  open: boolean
+  initialDate: string
+  initialTime: string
+  onClose: () => void
+  onConfirm: (date: string, time: string) => void
+}) {
+  const dayItems = useMemo(() => {
+    const items: { label: string; value: string }[] = []
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    for (let i = 0; i < 90; i++) {
+      const d = new Date(today); d.setDate(today.getDate() + i)
+      const value = d.toISOString().split("T")[0]
+      let label: string
+      if (i === 0) label = "Aujourd'hui"
+      else if (i === 1) label = "Demain"
+      else {
+        const w = d.toLocaleDateString("fr-FR", { weekday: "short" })
+        const wd = w.charAt(0).toUpperCase() + w.slice(1)
+        const mo = d.toLocaleDateString("fr-FR", { month: "short" })
+        label = `${wd} ${d.getDate()} ${mo}`
+      }
+      items.push({ label, value })
+    }
+    return items
+  }, [])
+
+  const hourItems = useMemo(() => Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")), [])
+  const minItems = ["00", "15", "30", "45"]
+
+  const initDay = useMemo(() => { const i = dayItems.findIndex(d => d.value === initialDate); return i >= 0 ? i : 0 }, [initialDate, dayItems])
+  const initHour = useMemo(() => { if (!initialTime) return 8; return Math.max(0, Math.min(23, parseInt(initialTime.split(":")[0] || "8", 10))) }, [initialTime])
+  const initMin = useMemo(() => {
+    if (!initialTime) return 0
+    const m = parseInt(initialTime.split(":")[1] || "0", 10)
+    const idx = [0, 15, 30, 45].indexOf(Math.round(m / 15) * 15)
+    return Math.max(0, idx)
+  }, [initialTime])
+
+  const [dayIdx, setDayIdx] = useState(initDay)
+  const [hourIdx, setHourIdx] = useState(initHour)
+  const [minIdx, setMinIdx] = useState(initMin)
+
+  useEffect(() => {
+    if (!open) return
+    setDayIdx(initDay); setHourIdx(initHour); setMinIdx(initMin)
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[99999] bg-black/60 flex items-end justify-center" onClick={onClose}>
+          <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 28, stiffness: 320 }}
+            className="w-full max-w-md bg-[#1a1a1a] rounded-t-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mt-3" />
+            <p className="text-center text-[10px] uppercase tracking-wider text-muted-foreground/60 pt-3 pb-1 px-5">
+              Choisir la date et l'heure
+            </p>
+            <div className="grid grid-cols-3 px-4 mb-1">
+              {["Jour", "Heure", "Min"].map(h => (
+                <p key={h} className="text-center text-[10px] text-muted-foreground/50 uppercase tracking-wider">{h}</p>
+              ))}
+            </div>
+            <div className="flex gap-1 px-2 pb-2">
+              <ScrollColumn key={`day-${String(open)}`} items={dayItems.map(d => d.label)} initialIndex={dayIdx} onSelect={setDayIdx} />
+              <ScrollColumn key={`h-${String(open)}`} items={hourItems} initialIndex={hourIdx} onSelect={setHourIdx} />
+              <ScrollColumn key={`m-${String(open)}`} items={minItems} initialIndex={minIdx} onSelect={setMinIdx} />
+            </div>
+            <div className="flex gap-3 px-4 pb-6 pt-1">
+              <button onClick={onClose}
+                className="flex-1 py-3.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-muted-foreground font-semibold">
+                Annuler
+              </button>
+              <button onClick={() => {
+                const date = dayItems[dayIdx]?.value ?? ""
+                const time = `${hourItems[hourIdx]}:${minItems[minIdx]}`
+                onConfirm(date, time)
+              }} className="flex-1 py-3.5 rounded-xl bg-gold text-black text-sm font-bold">
+                OK
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
 }
 
 // ============================================================================
@@ -184,7 +362,17 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
 
   // BUG 5 — calcul automatique distance
   const [durationDisplay, setDurationDisplay] = useState("")
+  const [durationSec, setDurationSec] = useState(0)
   const [isAutoCalculating, setIsAutoCalculating] = useState(false)
+
+  // Lot 4 — mode horaire et sélecteur date/heure combiné
+  const [modeHoraire, setModeHoraire] = useState<'depart' | 'arrivee'>('depart')
+  const [heureArriveesouhaitee, setHeureArriveesouhaitee] = useState("")
+  const [showDateTimePicker, setShowDateTimePicker] = useState(false)
+
+  // Refs pour accéder aux dernières valeurs dans les effets sans les ajouter aux deps
+  const modeHoraireRef = useRef(modeHoraire)
+  const heureArriveesouhaiteeRef = useRef(heureArriveesouhaitee)
 
   // FEATURE 3 — auto-save brouillon
   const [draftId, setDraftId] = useState<string | null>(null)
@@ -331,6 +519,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   }, [pricingMode, selectedForfait, distanceKm, tarif, supplements, discountType, discountValue, editableBasePrice, baseTvaRate, tariffSettings])
 
   // ── Calcul automatique distance + durée avec trafic via Routes API ──────
+  // departureTime = tripTime (toujours l'heure de départ, calculée ou saisie)
   useEffect(() => {
     if (!departure || !arrival || departure.length < 5 || arrival.length < 5) return
     if (!tripDate || !tripTime) return
@@ -369,13 +558,14 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
         if (!cancelled && data.routes?.[0]) {
           const route = data.routes[0]
           const km = Math.round((route.distanceMeters ?? 0) / 1000)
-          const durationSec = parseInt((route.duration ?? "0s").replace("s", ""), 10)
+          const rawSec = parseInt((route.duration ?? "0s").replace("s", ""), 10)
           if (km > 0) {
             setDistanceKm(km)
             setEditableBasePrice(null)
           }
-          if (durationSec > 0) {
-            setDurationDisplay(formatDuration(durationSec))
+          if (rawSec > 0) {
+            setDurationSec(rawSec)
+            setDurationDisplay(formatDuration(rawSec))
           }
         }
       } catch {
@@ -387,6 +577,77 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
 
     return () => { cancelled = true }
   }, [departure, arrival, tripDate, tripTime])
+
+  // ── Mode Arrivée : reset heure départ si adresses/mode changent ──────────
+  useEffect(() => {
+    if (modeHoraire !== 'arrivee') return
+    setTripTime("")
+    setDurationSec(0)
+    setDurationDisplay("")
+    setDistanceKm(null)
+  }, [modeHoraire, departure, arrival])
+
+  // ── Mode Arrivée : appel initial TRAFFIC_UNAWARE quand tripTime inconnu ──
+  useEffect(() => {
+    if (modeHoraire !== 'arrivee') return
+    if (!departure || !arrival || departure.length < 5 || arrival.length < 5) return
+    if (!tripDate || !heureArriveesouhaitee) return
+    if (tripTime) return // départ déjà calculé, l'effet principal prend le relais
+
+    let cancelled = false
+    setIsAutoCalculating(true)
+    setDistanceKm(null)
+    setDurationDisplay("")
+
+    ;(async () => {
+      try {
+        const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+        if (!apiKey) throw new Error("Clé API Google manquante")
+
+        const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": apiKey,
+            "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
+          },
+          body: JSON.stringify({
+            origin: { address: departure },
+            destination: { address: arrival },
+            travelMode: "DRIVE",
+            routingPreference: "TRAFFIC_UNAWARE",
+          }),
+        })
+
+        if (!res.ok) throw new Error(`Routes API ${res.status}`)
+        const data = await res.json()
+
+        if (!cancelled && data.routes?.[0]) {
+          const route = data.routes[0]
+          const km = Math.round((route.distanceMeters ?? 0) / 1000)
+          const rawSec = parseInt((route.duration ?? "0s").replace("s", ""), 10)
+          if (km > 0) { setDistanceKm(km); setEditableBasePrice(null) }
+          if (rawSec > 0) {
+            setDurationSec(rawSec)
+            setDurationDisplay(formatDuration(rawSec))
+            const computed = computeDepartureTime(tripDate, heureArriveesouhaitee, rawSec)
+            if (computed) setTripTime(computed)
+          }
+        }
+      } catch {
+        // Gestion défensive — utiliser l'heure d'arrivée comme fallback départ
+        if (!cancelled && heureArriveesouhaitee) setTripTime(heureArriveesouhaitee)
+      } finally {
+        if (!cancelled) setIsAutoCalculating(false)
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [departure, arrival, tripDate, heureArriveesouhaitee, modeHoraire, tripTime])
+
+  // Mettre à jour les refs à chaque render
+  modeHoraireRef.current = modeHoraire
+  heureArriveesouhaiteeRef.current = heureArriveesouhaitee
 
   // ── FEATURE 3 — Auto-save brouillon ─────────────────────────────────────
   // Mettre à jour la ref à chaque render pour éviter les closures périmées
@@ -459,6 +720,10 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     setDiscountType("percent")
     setDiscountValue(0)
     setDurationDisplay("")
+    setDurationSec(0)
+    setModeHoraire('depart')
+    setHeureArriveesouhaitee("")
+    setShowDateTimePicker(false)
     setDraftId(null)
     setCgvInclure(cgvConfigured)
     setClientFocused(false)
@@ -564,6 +829,8 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
       notes: instructions || undefined,
       cgvText,
       cgvInclure,
+      mode_horaire: modeHoraire,
+      heure_arrivee_souhaitee: modeHoraire === 'arrivee' ? (heureArriveesouhaitee || null) : null,
     }
 
     // Si un brouillon existait, on l'annule avant de créer le BC définitif
@@ -579,6 +846,55 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   const toggleSupplement = (id: string) => {
     setSupplements(prev => prev.map(s => s.id === id ? { ...s, selected: !s.selected } : s))
   }
+
+  // ── Mode horaire : bascule Départ à / Arrivée à ─────────────────────────
+  const handleModeChange = (mode: 'depart' | 'arrivee') => {
+    if (mode === modeHoraire) return
+    if (mode === 'arrivee') {
+      // Initialiser l'heure d'arrivée souhaitée depuis l'arrivée estimée ou l'heure de départ
+      if (durationSec > 0 && tripTime && tripDate) {
+        const arr = computeArrivalTime(tripDate, tripTime, durationSec)
+        setHeureArriveesouhaitee(arr ?? tripTime)
+      } else {
+        setHeureArriveesouhaitee(tripTime)
+      }
+    } else {
+      setHeureArriveesouhaitee("")
+    }
+    setModeHoraire(mode)
+  }
+
+  // ── Confirmation du sélecteur date/heure ────────────────────────────────
+  const handlePickerConfirm = (date: string, time: string) => {
+    setTripDate(date)
+    if (modeHoraireRef.current === 'depart') {
+      setTripTime(time)
+    } else {
+      setHeureArriveesouhaitee(time)
+      if (durationSec > 0) {
+        const computed = computeDepartureTime(date, time, durationSec)
+        setTripTime(computed ?? "")
+      } else {
+        setTripTime("")
+      }
+    }
+    setShowDateTimePicker(false)
+  }
+
+  // ── Message contextuel (arrivée estimée / départ recommandé) ─────────────
+  const contextualMessage = useMemo((): string | null => {
+    try {
+      if (modeHoraire === 'depart') {
+        if (!tripDate || !tripTime || !durationSec) return null
+        const arr = computeArrivalTime(tripDate, tripTime, durationSec)
+        if (!arr) return null
+        return `Arrivée estimée vers ${arr.replace(":", "h")} · avec trafic`
+      } else {
+        if (!tripTime || !heureArriveesouhaitee) return null
+        return `Départ recommandé à ${tripTime.replace(":", "h")} pour arriver à ${heureArriveesouhaitee.replace(":", "h")}`
+      }
+    } catch { return null }
+  }, [modeHoraire, tripDate, tripTime, durationSec, heureArriveesouhaitee])
 
   const canGenerate = !!(
     (selectedClient !== null || manualClient !== null) &&
@@ -1072,27 +1388,56 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Date du trajet <span className="text-red-500">*</span></label>
-              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 focus-within:border-gold/50">
-                <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" strokeWidth={1.5} />
-                <input type="date" value={tripDate} onChange={e => setTripDate(e.target.value)}
-                  aria-required="true"
-                  className="flex-1 bg-transparent text-sm text-foreground focus:outline-none" style={{ fontSize: "16px" }} />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Heure de prise en charge <span className="text-red-500">*</span></label>
-              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 focus-within:border-gold/50">
-                <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" strokeWidth={1.5} />
-                <input type="time" value={tripTime} onChange={e => setTripTime(e.target.value)}
-                  aria-required="true"
-                  className="flex-1 bg-transparent text-sm text-foreground focus:outline-none" style={{ fontSize: "16px" }} />
+            {/* Toggle Départ à / Arrivée à */}
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                Mode horaire <span className="text-red-500">*</span>
+              </label>
+              <div className="flex bg-[#242424] border border-onyx-border/30 rounded-xl p-1 mt-1.5">
+                <button type="button" onClick={() => handleModeChange('depart')}
+                  className={cn("flex-1 py-2 rounded-lg text-xs font-semibold transition-all text-center",
+                    modeHoraire === 'depart' ? "bg-gold text-black" : "text-muted-foreground hover:text-foreground")}>
+                  Départ à
+                </button>
+                <button type="button" onClick={() => handleModeChange('arrivee')}
+                  className={cn("flex-1 py-2 rounded-lg text-xs font-semibold transition-all text-center",
+                    modeHoraire === 'arrivee' ? "bg-gold text-black" : "text-muted-foreground hover:text-foreground")}>
+                  Arrivée à
+                </button>
               </div>
             </div>
 
+            {/* Sélecteur date/heure combiné */}
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                {modeHoraire === 'depart' ? "Date et heure de départ" : "Date et heure d'arrivée souhaitée"}{" "}
+                <span className="text-red-500">*</span>
+              </label>
+              <button type="button" onClick={() => setShowDateTimePicker(true)}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 hover:border-gold/50 transition-colors text-left">
+                <Calendar className="h-4 w-4 text-gold/70 flex-shrink-0" strokeWidth={1.5} />
+                <span className={cn("flex-1 text-sm",
+                  (modeHoraire === 'depart' ? (tripDate || tripTime) : (tripDate || heureArriveesouhaitee))
+                    ? "text-foreground" : "text-muted-foreground/50")}>
+                  {modeHoraire === 'depart'
+                    ? (tripDate || tripTime ? formatCombinedDateTime(tripDate, tripTime) : "Choisir la date et l'heure")
+                    : (tripDate || heureArriveesouhaitee ? formatCombinedDateTime(tripDate, heureArriveesouhaitee) : "Choisir la date et l'heure")
+                  }
+                </span>
+                <span className="text-[11px] text-gold font-medium">Modifier</span>
+              </button>
+            </div>
+
+            {/* Message contextuel arrivée estimée / départ recommandé */}
+            {contextualMessage && (
+              <div className="flex items-center gap-1.5 px-1">
+                <Clock className="h-3 w-3 text-gold/60 flex-shrink-0" strokeWidth={1.5} />
+                <p className="text-[11px] text-muted-foreground/80">{contextualMessage}</p>
+              </div>
+            )}
+
             {/* Distance & Durée — calculées après saisie adresses + date + heure */}
-            {(!tripDate || !tripTime) && (departure.length >= 5 || arrival.length >= 5) && (
+            {modeHoraire === 'depart' && !tripDate && !tripTime && (departure.length >= 5 || arrival.length >= 5) && (
               <p className="text-[11px] text-muted-foreground/50 italic">
                 Renseignez la date et l&apos;heure pour obtenir une durée avec trafic
               </p>
@@ -1795,6 +2140,14 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
         onClose={() => setShowQuickAddClient(false)}
         clients={clients ?? []}
         onClientCreated={handleClientCreated}
+      />
+
+      <DateTimePickerSheet
+        open={showDateTimePicker}
+        initialDate={tripDate}
+        initialTime={modeHoraire === 'depart' ? tripTime : heureArriveesouhaitee}
+        onClose={() => setShowDateTimePicker(false)}
+        onConfirm={handlePickerConfirm}
       />
     </motion.div>
   )

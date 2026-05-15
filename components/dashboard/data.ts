@@ -145,6 +145,8 @@ export interface BCDocument {
   cgvVersionAccepted?: string
   signatairesNom?: string
   acceptanceMention?: string
+  mode_horaire?: 'depart' | 'arrivee'
+  heure_arrivee_souhaitee?: string | null
 }
 
 export interface InvoiceItem {
