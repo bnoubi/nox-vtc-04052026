@@ -1,8 +1,9 @@
 "use client"
 
-import { MapPin, Navigation, CalendarOff, Phone } from "lucide-react"
+import { MapPin, Navigation, CalendarOff, Phone, ArrowRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useNox } from "./nox-context"
+import { useNav } from "./nav-context"
 import type { BCStatus } from "./data"
 
 const STATUS_CONFIG: Partial<Record<BCStatus, { label: string; className: string }>> = {
@@ -71,6 +72,7 @@ function formatPassengers(passengers?: number, luggage?: number): string | null 
 
 export function UpcomingTrips() {
   const { bcs } = useNox()
+  const { switchTab } = useNav()
 
   const upcomingTrips = bcs
     .filter((bc) => bc.status === "en_attente" || bc.status === "confirme")
@@ -179,6 +181,14 @@ export function UpcomingTrips() {
               </div>
             )
           })}
+
+          <button
+            onClick={() => switchTab("documents")}
+            className="flex items-center justify-center gap-1.5 w-full pt-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.5} />
+            Voir toutes les réservations
+          </button>
         </div>
       )}
     </section>

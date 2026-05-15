@@ -5,6 +5,7 @@ import { GuardianScore } from "./guardian-score"
 import { QuickActions } from "./quick-actions"
 import { UpcomingTrips } from "./upcoming-trips"
 import { StatsWidget } from "./stats-widget"
+import { NextTripWidget } from "./next-trip-widget"
 import { useNav } from "./nav-context"
 
 export function DashboardTab() {
@@ -16,6 +17,7 @@ export function DashboardTab() {
       <div className="space-y-6 pt-2 pb-8">
         <GuardianScore onNavigateToEntity={navigateToEntity} />
         <QuickActions />
+        <NextTripWidget />
         <UpcomingTrips />
         <StatsWidget />
       </div>
