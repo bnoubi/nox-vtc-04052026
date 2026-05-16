@@ -85,6 +85,8 @@ export interface EnterpriseProfile {
   vatMode?: 'franchise' | 'normal'
   vatExemptionMention?: string
   legalNoticeText?: string
+  rcProNumber?: string
+  rcProCompany?: string
 }
 
 export type BCStatus = "brouillon" | "en_attente" | "confirme" | "en_cours" | "termine" | "annule_client" | "annule_chauffeur"
@@ -193,10 +195,19 @@ export interface InvoiceDocument {
     passengers?: number
     luggage?: number
   }
+  passagerNom?: string
+  passagerTelephone?: string
   driverName?: string
+  driverPhone?: string
   driverCarteVTC?: string
+  vehicleId?: string
   vehicleName?: string
   vehiclePlate?: string
+  vehicleTypeEnergie?: string
+  clientType?: "particulier" | "professionnel"
+  clientSiren?: string
+  clientAddress?: { rue?: string; codePostal?: string; ville?: string; pays?: string }
+  supplementsList?: string[]
   notes?: string
   cgvText?: string
 }

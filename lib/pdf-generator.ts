@@ -92,7 +92,9 @@ async function _buildPDFDoc(
   doc.setTextColor(gray)
   let leftY = 29
   if (enterprise.adresse) { doc.text(enterprise.adresse, 20, leftY); leftY += 4.5 }
+  // [Factur-X] BT-29 SellerIdentifier (SIRET/SIREN)
   if (enterprise.siren) { doc.text(`SIREN : ${enterprise.siren}`, 20, leftY); leftY += 4.5 }
+  // [Factur-X] BT-48 SellerVATIdentifier
   if (isVatApplicable(enterprise) && enterprise.tvaIntra) {
     doc.text(`TVA : ${enterprise.tvaIntra}`, 20, leftY); leftY += 4.5
   }
@@ -106,6 +108,15 @@ async function _buildPDFDoc(
     doc.setTextColor(gold)
     doc.text(`EVTC : ${enterprise.evtcNumber}`, 20, leftY)
     doc.setTextColor(gray)
+    leftY += 4.5
+  }
+  // [Factur-X] BT-23 BusinessProcessType (RC Pro émetteur)
+  if (isInvoice && enterprise.rcProNumber) {
+    const rcLine = enterprise.rcProCompany
+      ? `RC Pro : ${enterprise.rcProNumber} (${enterprise.rcProCompany})`
+      : `RC Pro : ${enterprise.rcProNumber}`
+    doc.setTextColor(gray)
+    doc.text(rcLine, 20, leftY)
     leftY += 4.5
   }
 
@@ -126,10 +137,14 @@ async function _buildPDFDoc(
   doc.setFont("helvetica", "normal")
   doc.setTextColor(gray)
   let rightY = 29
+  // [Factur-X] BT-1 InvoiceNumber
   doc.text(`N° : ${d.number}`, 190, rightY, { align: "right" }); rightY += 5
+  // [Factur-X] BT-2 InvoiceIssueDate
   doc.text(`Date : ${d.date}`, 190, rightY, { align: "right" }); rightY += 5
   if (isInvoice) {
+    // [Factur-X] BT-9 PaymentDueDate
     if (d.echeance) { doc.text(`Echeance : ${d.echeance}`, 190, rightY, { align: "right" }); rightY += 5 }
+    // [Factur-X] BT-10 BuyerReference
     if (d.bcRef) { doc.text(`Ref. BC : ${d.bcRef}`, 190, rightY, { align: "right" }); rightY += 5 }
   }
 
@@ -176,6 +191,21 @@ async function _buildPDFDoc(
   } else if (d.clientPhone) {
     doc.setTextColor(gray)
     doc.text(d.clientPhone, 20, leftBotY); leftBotY += 5
+    doc.setTextColor(dark)
+  }
+
+  // [Factur-X] BT-50 BuyerPostalAddress / BT-47 BuyerLegalRegistration (SIREN client)
+  if (isInvoice) {
+    doc.setTextColor(gray)
+    if (d.clientAddress?.rue) {
+      doc.text(d.clientAddress.rue, 20, leftBotY); leftBotY += 5
+      const cityLine = [d.clientAddress.codePostal, d.clientAddress.ville].filter(Boolean).join(" ")
+      if (cityLine) { doc.text(cityLine, 20, leftBotY); leftBotY += 5 }
+      if (d.clientAddress.pays && d.clientAddress.pays.toLowerCase() !== "france") {
+        doc.text(d.clientAddress.pays, 20, leftBotY); leftBotY += 5
+      }
+    }
+    if (d.clientSiren) { doc.text(`SIREN : ${d.clientSiren}`, 20, leftBotY); leftBotY += 5 }
     doc.setTextColor(dark)
   }
 
@@ -234,6 +264,16 @@ async function _buildPDFDoc(
     if (d.trajet.passengers) {
       const bags: number = d.trajet.luggage ?? 0
       infoRows.push({ label: "Passagers / Bagages :", value: `${d.trajet.passengers} / ${bags}` })
+    }
+    // [art. L1431-3 Code des transports] Émissions CO₂ (isInvoice uniquement)
+    if (isInvoice && d.vehicleTypeEnergie && d.trajet.distance) {
+      const co2Map: Record<string, number> = { electrique: 0, hybride: 50, essence: 120, diesel: 110 }
+      const gPerKm: number = co2Map[d.vehicleTypeEnergie as string] ?? 110
+      const totalG: number = Math.round(gPerKm * (d.trajet.distance as number))
+      infoRows.push({
+        label: "Émissions CO₂ (art. L1431-3 C. transp.) :",
+        value: `${gPerKm} g/km × ${d.trajet.distance} km = ${totalG} g`
+      })
     }
 
     const contentHeight =
@@ -333,11 +373,57 @@ async function _buildPDFDoc(
       doc.text(formatPrice(item.amountHT), 185, currentY, { align: "right" })
       currentY += descStr.length * 5 + 3
     })
+  } else if (isInvoice) {
+    // Désignation facture : "Transport de personnes VTC (Réf. BC-XXXX)"
+    const bcRefStr = d.bcRef ? ` (Réf. ${d.bcRef})` : ""
+    const descStr = doc.splitTextToSize(`Transport de personnes VTC${bcRefStr}`, 120) as string[]
+    doc.text(descStr, 25, currentY)
+    doc.text(formatPrice(d.baseHT || d.amountHT || d.amount), 185, currentY, { align: "right" })
+    currentY += descStr.length * 5 + 3
+
+    // Passager si différent du client payeur
+    if (d.passagerNom && d.passagerNom !== d.client) {
+      doc.setFont("helvetica", "italic")
+      doc.setTextColor(gray)
+      const pasStr = doc.splitTextToSize(`Passager : ${d.passagerNom}`, 140) as string[]
+      doc.text(pasStr, 25, currentY)
+      currentY += pasStr.length * 5 + 2
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(dark)
+    }
+
+    // Suppléments : une ligne par supplément, montant total sur la dernière
+    if (d.supplementsList && (d.supplementsList as string[]).length > 0 && d.supplementsHT && d.supplementsHT > 0) {
+      ;(d.supplementsList as string[]).forEach((supp: string, idx: number) => {
+        doc.setFont("helvetica", "italic")
+        doc.setTextColor(gray)
+        const suppStr = doc.splitTextToSize(supp, 140) as string[]
+        doc.text(suppStr, 25, currentY)
+        if (idx === (d.supplementsList as string[]).length - 1) {
+          doc.setTextColor(dark)
+          doc.text(formatPrice(d.supplementsHT), 185, currentY, { align: "right" })
+        }
+        currentY += suppStr.length * 5 + 2
+      })
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(dark)
+    }
+
+    // Notes en italique sous la désignation
+    if (d.notes) {
+      doc.setFont("helvetica", "italic")
+      doc.setTextColor(gray)
+      const notesStr = doc.splitTextToSize(d.notes as string, 140) as string[]
+      doc.text(notesStr, 25, currentY)
+      currentY += notesStr.length * 5 + 2
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(dark)
+    }
   } else {
-    const title = isInvoice
-      ? `Prestation de transport VTC (Réf ${d.bcRef})`
+    // BC : désignation générique
+    const fullTitle = d.notes
+      ? `Prestation de transport avec chauffeur — ${d.notes}`
       : "Prestation de transport avec chauffeur"
-    const fullTitle = d.notes ? `${title} — ${d.notes}` : title
     const descStr = doc.splitTextToSize(fullTitle, 120) as string[]
     doc.text(descStr, 25, currentY)
     doc.text(formatPrice(d.baseHT || d.amountHT || d.amount), 185, currentY, { align: "right" })
@@ -345,7 +431,7 @@ async function _buildPDFDoc(
 
     if (d.supplementsHT && d.supplementsHT > 0) {
       doc.setFont("helvetica", "italic")
-      const suppList: string = d.supplementsList?.join(", ") || ""
+      const suppList: string = (d.supplementsList as string[] | undefined)?.join(", ") || ""
       const suppStr = doc.splitTextToSize(`Suppléments : ${suppList}`, 120) as string[]
       doc.text(suppStr, 25, currentY)
       doc.text(formatPrice(d.supplementsHT), 185, currentY, { align: "right" })
@@ -500,6 +586,28 @@ async function _buildPDFDoc(
     currentY += 6
   }
 
+  // ── 5b. CONDITIONS DE RÈGLEMENT (isInvoice uniquement) ───────────────────
+  if (isInvoice) {
+    currentY += 6
+    if (currentY + 30 > 278) { doc.addPage(); currentY = 20 }
+    doc.setFontSize(8)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(dark)
+    doc.text("CONDITIONS DE RÈGLEMENT", 20, currentY)
+    currentY += 5
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(gray)
+    doc.text("Nature de l'opération : Prestation de services — Transport de personnes", 20, currentY)
+    currentY += 4.5
+    const paymentLine = d.clientType === "professionnel"
+      ? "Paiement sous 30 jours. Pénalités de retard : 3× taux légal en vigueur. Indemnité forfaitaire recouvrement : 40 €."
+      : "Paiement comptant à réception."
+    const payLines = doc.splitTextToSize(paymentLine, 170) as string[]
+    doc.text(payLines, 20, currentY)
+    currentY += payLines.length * 4.5 + 4
+    doc.setTextColor(dark)
+  }
+
   // ── 6. CGV ────────────────────────────────────────────────────────
   currentY += 14
   if (d.cgvText) {
@@ -519,6 +627,27 @@ async function _buildPDFDoc(
   doc.setTextColor("#A0A0A0")
   doc.setFont("helvetica", "italic")
   doc.text("Document généré par NoX VTC", 105, 290, { align: "center" })
+
+  // ── [Factur-X] BT field map (EN 16931 / Factur-X CII profile COMFORT) ──
+  // BT-1   InvoiceNumber          → d.number
+  // BT-2   InvoiceIssueDate       → d.date
+  // BT-9   PaymentDueDate         → d.echeance
+  // BT-10  BuyerReference         → d.bcRef
+  // BT-23  BusinessProcessType    → enterprise.rcProNumber
+  // BT-29  SellerIdentifier       → enterprise.siren
+  // BT-31  SellerVATId            → enterprise.tvaIntra
+  // BT-44  BuyerName              → d.client
+  // BT-47  BuyerLegalRegistration → d.clientSiren
+  // BT-48  BuyerVATId             → (non collecté)
+  // BT-50  BuyerAddress           → d.clientAddress
+  // BT-55  BuyerCountryCode       → d.clientAddress.pays
+  // BT-73  DeliveryDate           → d.trajet.date
+  // BT-92  DocumentLevelCharge    → d.supplementsHT
+  // BT-106 InvoiceTotalAmountHT   → d.amountHT
+  // BT-110 InvoiceTotalVATAmount  → d.tva
+  // BT-112 InvoiceTotalAmountTTC  → d.amount
+  // BT-115 AmountDueForPayment    → d.amount
+  // BT-131 InvoiceLineNetAmount   → item.amountHT
 
   return doc
 }

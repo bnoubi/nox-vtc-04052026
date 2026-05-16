@@ -181,7 +181,7 @@ function FromBCScreen({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const { bcs, invoices, addInvoice } = useNox()
+  const { bcs, invoices, addInvoice, vehicles, clients } = useNox()
   const [search, setSearch] = useState("")
   const [converting, setConverting] = useState<string | null>(null)
   const [tvaRate, setTvaRate] = useState<Record<string, number>>({})
@@ -203,31 +203,62 @@ function FromBCScreen({
 
   function handleConvert(bc: BCDocument) {
     setConverting(bc.id)
-    
+
+    const vehicle = vehicles.find(v => v.id === bc.vehicleId)
+    const clientRecord = clients.find(c => c.id === bc.clientId)
+
     setTimeout(() => {
-      const mHT = bc.amountHT ?? bc.amount
-      const rate = getTva(bc.id)
-      const tva = (mHT * rate) / 100
-      const ttc = mHT + tva
+      // Si le BC a déjà un split multi-TVA, conserver les montants tels quels
+      let amount: number, amountHT: number, tva: number, tvaRateUsed: number
+      if ((bc.tva10Amount ?? 0) > 0 || (bc.tva20Amount ?? 0) > 0) {
+        amount = bc.amount
+        amountHT = bc.amountHT ?? bc.amount
+        tva = bc.tva ?? Math.round((amount - amountHT) * 100) / 100
+        tvaRateUsed = bc.tvaRate ?? 10
+      } else {
+        const mHT = bc.amountHT ?? bc.amount
+        const rate = getTva(bc.id)
+        tva = Math.round((mHT * rate) / 100 * 100) / 100
+        amount = Math.round((mHT + tva) * 100) / 100
+        amountHT = Math.round(mHT * 100) / 100
+        tvaRateUsed = rate
+      }
+
       const nextNum = invoices.length + 1
       const padded = String(nextNum).padStart(3, "0")
-
-      // Calculate J+30 echeance
       const today = new Date()
       const echeance = new Date(today)
       echeance.setDate(echeance.getDate() + 30)
       const fmtDate = (d: Date) =>
         `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`
 
+      const clientAddress = clientRecord?.billingAddress ? {
+        rue: clientRecord.billingAddress.rue,
+        codePostal: clientRecord.billingAddress.codePostal,
+        ville: clientRecord.billingAddress.ville,
+        pays: clientRecord.billingAddress.pays,
+      } : undefined
+
       const newInvoice: InvoiceDocument = {
         id: `fac-gen-${Date.now()}`,
         number: `F-2026-${padded}`,
         client: bc.client,
         clientPhone: bc.clientPhone,
-        amount: Math.round(ttc * 100) / 100,
-        amountHT: Math.round(mHT * 100) / 100,
-        tva: Math.round(tva * 100) / 100,
-        tvaRate: rate,
+        passagerNom: bc.passagerNom,
+        passagerTelephone: bc.passagerTelephone,
+        amount,
+        amountHT,
+        tva,
+        tvaRate: tvaRateUsed,
+        baseHT: bc.baseHT,
+        tva10Amount: bc.tva10Amount,
+        tva20Amount: bc.tva20Amount,
+        supplementsHT: bc.supplementsHT,
+        supplementsList: bc.supplementsList,
+        discountValue: bc.discountValue,
+        discountType: bc.discountType,
+        originalHT: bc.originalHT,
+        originalTTC: bc.originalTTC,
         date: fmtDate(today),
         echeance: fmtDate(echeance),
         status: "brouillon",
@@ -235,9 +266,15 @@ function FromBCScreen({
         bcRef: bc.number,
         trajet: bc.trajet,
         driverName: bc.driverName,
+        driverPhone: bc.driverPhone,
         driverCarteVTC: bc.driverCarteVTC,
+        vehicleId: bc.vehicleId,
         vehicleName: bc.vehicleName,
         vehiclePlate: bc.vehiclePlate,
+        vehicleTypeEnergie: vehicle?.type_energie,
+        clientType: clientRecord?.type,
+        clientSiren: clientRecord?.siren,
+        clientAddress,
         notes: bc.notes,
         cgvText: bc.cgvText,
       }
