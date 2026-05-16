@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useNox } from "./nox-context"
+import { useNav } from "./nav-context"
 import {
   type Client, type Driver, type Vehicle, type TarifForfait, type TarifSupplement,
   type BCDocument, type EnterpriseProfile, type BCStatus,
@@ -190,7 +191,7 @@ function DateTimePickerSheet({ open, initialDate, initialTime, onClose, onConfir
     const today = new Date(); today.setHours(0, 0, 0, 0)
     for (let i = 0; i < 90; i++) {
       const d = new Date(today); d.setDate(today.getDate() + i)
-      const value = d.toISOString().split("T")[0]
+      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
       let label: string
       if (i === 0) label = "Aujourd'hui"
       else if (i === 1) label = "Demain"
@@ -307,6 +308,7 @@ interface CreateBCFlowProps {
 
 export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: CreateBCFlowProps) {
   const { drivers, clients, vehicles, tariffSettings, enterprise, addBC, bcs, saveDraftBC, updateBC, legalProfile, validateDocumentCompliance, updateEnterprise } = useNox()
+  const { navigateToCGV } = useNav()
   const [step, setStep] = useState<FlowStep>(() => prefillBC ? "form" : "menu")
   const [tab, setTab] = useState<FormTab>("formulaire")
 
@@ -1084,10 +1086,6 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               <p className="text-[11px] text-gold">Registre EVTC : {enterprise?.evtcNumber ?? ""}</p>
               <p className="text-[11px] text-muted-foreground">{enterprise?.adresse ?? ""}</p>
             </div>
-            {legalProfile.mustDisplayVatExemption && (
-              <p className="text-[11px] text-amber-600 font-medium px-1">{legalProfile.vatMention ?? "TVA non applicable, art. 293 B du CGI"}</p>
-            )}
-
             <div className="space-y-1">
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Chauffeur assigné <span className="text-red-500">*</span></label>
               <select value={selectedDriverId} onChange={e => setSelectedDriverId(e.target.value)}
@@ -1723,8 +1721,17 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 "text-[11px] leading-relaxed whitespace-pre-wrap",
                 cgvConfigured ? "text-foreground/80" : "text-muted-foreground italic"
               )}>
-                {cgvConfigured ? cgvPreview : "Aucune condition générale de vente n'a été configurée. Rendez-vous dans Réglages → Mes conditions de vente."}
+                {cgvConfigured ? cgvPreview : "Aucune condition générale de vente n'a été configurée."}
               </p>
+              {!cgvConfigured && (
+                <button
+                  type="button"
+                  onClick={() => { handleClose(); navigateToCGV() }}
+                  className="text-[11px] text-gold font-medium hover:underline"
+                >
+                  Configurer maintenant
+                </button>
+              )}
               <label htmlFor="cgv-inclure" className={cn(
                 "flex items-center gap-2.5 cursor-pointer",
                 !cgvConfigured && "opacity-50 cursor-not-allowed"
