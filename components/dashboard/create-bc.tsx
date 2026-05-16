@@ -36,6 +36,16 @@ export interface BCPrefillClient {
 }
 
 interface SupplementSelection { id: string; label: string; price: number; selected: boolean }
+interface FormErrors { client?: string; departure?: string; arrival?: string; date?: string; time?: string; vehicle?: string; cgv?: string }
+
+function defaultTime(): string {
+  const now = new Date()
+  const totalMin = now.getHours() * 60 + now.getMinutes()
+  const rounded = Math.ceil(totalMin / 5) * 5
+  const h = Math.floor(rounded / 60) % 24
+  const m = rounded % 60
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+}
 
 function detectTarif(time: string, date: string): { id: string; name: string; coef: number } {
   if (date) {
@@ -357,7 +367,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   const [departure, setDeparture] = useState(prefillBC?.trajet?.depart ?? "")
   const [arrival, setArrival] = useState(prefillBC?.trajet?.arrivee ?? "")
   const [tripDate, setTripDate] = useState(prefillBC?.trajet?.date ?? "")
-  const [tripTime, setTripTime] = useState(prefillBC?.trajet?.time ?? "")
+  const [tripTime, setTripTime] = useState(() => prefillBC?.trajet?.time ?? defaultTime())
   const [passengers, setPassengers] = useState(prefillBC?.trajet?.passengers ?? 1)
   const [luggage, setLuggage] = useState(prefillBC?.trajet?.luggage ?? 0)
   const [instructions, setInstructions] = useState(prefillBC?.notes ?? "")
@@ -404,6 +414,15 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     setIsMicroBC(legalProfile.taxConfig.isMicroEntrepreneur)
   }, [legalProfile.taxConfig.isMicroEntrepreneur])
 
+  // Validation inline
+  const [formErrors, setFormErrors] = useState<FormErrors>({})
+  const clientRef = useRef<HTMLDivElement>(null)
+  const departureRef = useRef<HTMLDivElement>(null)
+  const arrivalRef = useRef<HTMLDivElement>(null)
+  const dateRef = useRef<HTMLDivElement>(null)
+  const vehicleRef = useRef<HTMLDivElement>(null)
+  const cgvRef = useRef<HTMLDivElement>(null)
+
   // CGV — valeurs mémoïsées pour éviter les doubles calculs en render
   const cgvConfigured = useMemo(() => hasCGVConfigured(enterprise), [enterprise.cgvMode, enterprise.cgvConfig, enterprise.cgvText])
   const cgvSummary = useMemo(() => generateCGVSummary(enterprise), [enterprise.cgvMode, enterprise.cgvConfig, enterprise.cgvText])
@@ -416,6 +435,28 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   useEffect(() => {
     setCgvInclure(hasCGVConfigured(enterprise))
   }, [enterprise.cgvMode, enterprise.cgvConfig, enterprise.cgvText])
+
+  // Auto-clear des erreurs de validation dès que le champ est rempli
+  useEffect(() => {
+    if (selectedClientId || manualClient)
+      setFormErrors(prev => { const e = { ...prev }; delete e.client; return e })
+  }, [selectedClientId, manualClient])
+  useEffect(() => {
+    if (departure.trim()) setFormErrors(prev => { const e = { ...prev }; delete e.departure; return e })
+  }, [departure])
+  useEffect(() => {
+    if (arrival.trim()) setFormErrors(prev => { const e = { ...prev }; delete e.arrival; return e })
+  }, [arrival])
+  useEffect(() => {
+    if (tripDate.trim()) setFormErrors(prev => { const e = { ...prev }; delete e.date; return e })
+    if (tripTime.trim()) setFormErrors(prev => { const e = { ...prev }; delete e.time; return e })
+  }, [tripDate, tripTime])
+  useEffect(() => {
+    if (selectedVehicleId) setFormErrors(prev => { const e = { ...prev }; delete e.vehicle; return e })
+  }, [selectedVehicleId])
+  useEffect(() => {
+    if (enterprise.cgvMode) setFormErrors(prev => { const e = { ...prev }; delete e.cgv; return e })
+  }, [enterprise.cgvMode])
 
   // Computed
   const selectedDriver = drivers?.find(d => d.id === selectedDriverId) ?? null
@@ -757,20 +798,27 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
       ? selectedClient.phone
       : (manualClient ? manualClient.tel : undefined)
 
-    // Validation champs obligatoires via validateDocumentCompliance
-    const errors = validateDocumentCompliance({
-      client: clientName !== "Client Inconnu" ? clientName : undefined,
-      clientPhone,
-      trajet: {
-        depart: departure || "",
-        arrivee: arrival || "",
-        date: tripDate,
-        time: tripTime,
-        passengers,
-      },
-    })
-    if (errors.length > 0) {
-      toast.error(errors[0])
+    // Validation champs obligatoires
+    const newErrors: FormErrors = {}
+    if (!selectedClient && !manualClient) newErrors.client = "Le client est obligatoire"
+    if (!departure.trim()) newErrors.departure = "L'adresse de départ est obligatoire"
+    if (!arrival.trim()) newErrors.arrival = "L'adresse d'arrivée est obligatoire"
+    if (!tripDate.trim()) newErrors.date = "La date est obligatoire"
+    if (!tripTime.trim()) newErrors.time = "L'heure est obligatoire"
+    if (!selectedVehicleId) newErrors.vehicle = "Le véhicule est obligatoire"
+    if (!enterprise.cgvMode) newErrors.cgv = "Les CGV doivent être configurées"
+    setFormErrors(newErrors)
+    if (Object.keys(newErrors).length > 0) {
+      const anchors: Array<{ ref: React.RefObject<HTMLDivElement | null>; key: keyof FormErrors }> = [
+        { ref: clientRef, key: "client" },
+        { ref: departureRef, key: "departure" },
+        { ref: arrivalRef, key: "arrival" },
+        { ref: dateRef, key: "date" },
+        { ref: vehicleRef, key: "vehicle" },
+        { ref: cgvRef, key: "cgv" },
+      ]
+      const first = anchors.find(a => newErrors[a.key])
+      first?.ref.current?.scrollIntoView({ behavior: "smooth", block: "center" })
       return
     }
 
@@ -898,14 +946,6 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     } catch { return null }
   }, [modeHoraire, tripDate, tripTime, durationSec, heureArriveesouhaitee])
 
-  const canGenerate = !!(
-    (selectedClient !== null || manualClient !== null) &&
-    departure.trim() !== "" &&
-    arrival.trim() !== "" &&
-    selectedDriver !== null &&
-    tripDate.trim() !== "" &&
-    tripTime.trim() !== ""
-  )
 
   if (!open) return null
 
@@ -1120,7 +1160,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               Ajouter un nouveau client
             </button>
 
-            <div className="space-y-2">
+            <div ref={clientRef} className="space-y-2">
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Rechercher un client <span className="text-red-500">*</span></label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -1132,7 +1172,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                     onFocus={() => setClientFocused(true)}
                     onBlur={() => setTimeout(() => setClientFocused(false), 200)}
                     placeholder="Nom, société, téléphone..."
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
+                    className={cn("w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#242424] border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50", formErrors.client ? "border-red-500" : "border-onyx-border/30")}
                     style={{ fontSize: "16px" }}
                   />
                 </div>
@@ -1145,6 +1185,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                   Voir tous
                 </button>
               </div>
+              {formErrors.client && <p className="text-xs text-red-500 mt-1">{formErrors.client}</p>}
             </div>
 
             {(clientFocused || clientSearch.trim() || !!inlineSelectedCompany) && !selectedClientId && (
@@ -1345,9 +1386,9 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
 
           {/* SECTION: Trajet */}
           <Section title="Trajet" icon={Navigation}>
-            <div className="space-y-1">
+            <div ref={departureRef} className="space-y-1">
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Adresse de départ <span className="text-red-500">*</span></label>
-              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 focus-within:border-gold/50">
+              <div className={cn("flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border focus-within:border-gold/50", formErrors.departure ? "border-red-500" : "border-onyx-border/30")}>
                 <MapPin className="h-4 w-4 text-green-400 flex-shrink-0" strokeWidth={1.5} />
                 <PlacesAutocomplete value={departure} onChange={setDeparture} placeholder="Rechercher une adresse..."
                   addressMode="full"
@@ -1364,10 +1405,11 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                   </button>
                 )}
               </div>
+              {formErrors.departure && <p className="text-xs text-red-500 mt-1">{formErrors.departure}</p>}
             </div>
-            <div className="space-y-1">
+            <div ref={arrivalRef} className="space-y-1">
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Adresse d&apos;arrivée <span className="text-red-500">*</span></label>
-              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 focus-within:border-gold/50">
+              <div className={cn("flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border focus-within:border-gold/50", formErrors.arrival ? "border-red-500" : "border-onyx-border/30")}>
                 <MapPin className="h-4 w-4 text-red-400 flex-shrink-0" strokeWidth={1.5} />
                 <PlacesAutocomplete value={arrival} onChange={setArrival} placeholder="Rechercher une adresse..."
                   addressMode="full"
@@ -1384,6 +1426,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                   </button>
                 )}
               </div>
+              {formErrors.arrival && <p className="text-xs text-red-500 mt-1">{formErrors.arrival}</p>}
             </div>
 
             {/* Toggle Départ à / Arrivée à */}
@@ -1406,13 +1449,13 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
             </div>
 
             {/* Sélecteur date/heure combiné */}
-            <div className="space-y-1">
+            <div ref={dateRef} className="space-y-1">
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                 {modeHoraire === 'depart' ? "Date et heure de départ" : "Date et heure d'arrivée souhaitée"}{" "}
                 <span className="text-red-500">*</span>
               </label>
               <button type="button" onClick={() => setShowDateTimePicker(true)}
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 hover:border-gold/50 transition-colors text-left">
+                className={cn("w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-[#242424] border hover:border-gold/50 transition-colors text-left", (formErrors.date || formErrors.time) ? "border-red-500" : "border-onyx-border/30")}>
                 <Calendar className="h-4 w-4 text-gold/70 flex-shrink-0" strokeWidth={1.5} />
                 <span className={cn("flex-1 text-sm",
                   (modeHoraire === 'depart' ? (tripDate || tripTime) : (tripDate || heureArriveesouhaitee))
@@ -1424,6 +1467,9 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 </span>
                 <span className="text-[11px] text-gold font-medium">Modifier</span>
               </button>
+              {(formErrors.date || formErrors.time) && (
+                <p className="text-xs text-red-500 mt-1">{formErrors.date ?? formErrors.time}</p>
+              )}
             </div>
 
             {/* Message contextuel arrivée estimée / départ recommandé */}
@@ -1494,9 +1540,12 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
           </Section>
 
           {/* SECTION: Véhicule */}
+          <div ref={vehicleRef}>
           <Section title="Véhicule" icon={Car}>
+            <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Véhicule <span className="text-red-500">*</span></label>
             <select value={selectedVehicleId} onChange={e => setSelectedVehicleId(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50" style={{ fontSize: "16px" }}>
+              className={cn("w-full px-3 py-2.5 rounded-xl bg-[#242424] border text-sm text-foreground focus:outline-none focus:border-gold/50", formErrors.vehicle ? "border-red-500" : "border-onyx-border/30")} style={{ fontSize: "16px" }}>
               <option value="">Sélectionner un véhicule...</option>
               {(vehicles ?? []).filter(v => v.inService).map(v => (
                 <option key={v.id} value={v.id}>
@@ -1514,6 +1563,8 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 </>
               )}
             </select>
+            {formErrors.vehicle && <p className="text-xs text-red-500 mt-1">{formErrors.vehicle}</p>}
+            </div>
             {selectedVehicle && (
               <div className="p-3 rounded-xl bg-[#242424] space-y-1">
                 <p className="text-sm font-semibold text-foreground">
@@ -1525,6 +1576,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               </div>
             )}
           </Section>
+          </div>
 
           {/* SECTION: Tarification */}
           <Section title="Tarification" icon={Euro}>
@@ -1699,12 +1751,12 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
             </div>
           </Section>
 
-          {/* SECTION: Conditions applicables */}
-          <div className="border border-onyx-border/30 rounded-xl bg-[#1a1a1a] overflow-hidden">
+          {/* SECTION: Conditions Générales de Vente applicables */}
+          <div ref={cgvRef} className={cn("border rounded-xl bg-[#1a1a1a] overflow-hidden", !enterprise.cgvMode ? "border-red-500/60" : "border-emerald-500/50")}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-onyx-border/20">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-gold" strokeWidth={1.5} />
-                <span className="text-sm font-semibold text-foreground">Conditions applicables</span>
+                <span className="text-sm font-semibold text-foreground">Conditions Générales de Vente applicables</span>
               </div>
               {cgvConfigured && (
                 <button
@@ -1717,13 +1769,23 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               )}
             </div>
             <div className="px-4 py-3 space-y-3">
-              <p className={cn(
-                "text-[11px] leading-relaxed whitespace-pre-wrap",
-                cgvConfigured ? "text-foreground/80" : "text-muted-foreground italic"
-              )}>
-                {cgvConfigured ? cgvPreview : "Aucune condition générale de vente n'a été configurée."}
-              </p>
-              {!cgvConfigured && (
+              {!enterprise.cgvMode ? (
+                <p className="text-[11px] text-red-400">
+                  Les CGV sont obligatoires —{" "}
+                  <button
+                    type="button"
+                    onClick={() => { handleClose(); navigateToCGV() }}
+                    className="underline font-medium hover:text-red-300 transition-colors"
+                  >
+                    Configurer maintenant
+                  </button>
+                </p>
+              ) : (
+                <p className={cn("text-[11px] leading-relaxed whitespace-pre-wrap", cgvConfigured ? "text-foreground/80" : "text-muted-foreground italic")}>
+                  {cgvConfigured ? cgvPreview : "Aucune condition générale de vente n'a été configurée."}
+                </p>
+              )}
+              {!cgvConfigured && enterprise.cgvMode && (
                 <button
                   type="button"
                   onClick={() => { handleClose(); navigateToCGV() }}
@@ -1732,6 +1794,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                   Configurer maintenant
                 </button>
               )}
+              {formErrors.cgv && <p className="text-xs text-red-500">{formErrors.cgv}</p>}
               <label htmlFor="cgv-inclure" className={cn(
                 "flex items-center gap-2.5 cursor-pointer",
                 !cgvConfigured && "opacity-50 cursor-not-allowed"
@@ -2122,24 +2185,18 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
 
       {/* Action Bar */}
       <div className="px-4 py-4 border-t border-onyx-border/30 bg-[#0d0d0d]">
-        {/* BUG 1 — Bouton désactivé après premier clic */}
         <button
           onClick={handleGenerate}
-          disabled={isSubmitting || !canGenerate}
+          disabled={isSubmitting}
           className={cn(
             "w-full py-3.5 rounded-full font-bold text-sm transition-all",
-            isSubmitting || !canGenerate
+            isSubmitting
               ? "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
               : "bg-gold text-black hover:bg-gold/90 active:scale-[0.98]"
           )}
         >
           {isSubmitting ? "Bon de réservation généré ✓" : "Générer le bon de réservation"}
         </button>
-        {!canGenerate && !isSubmitting && (
-          <p className="mt-2 text-center text-[11px] text-muted-foreground">
-            <span className="text-red-500">*</span> Obligatoires pour générer le bon
-          </p>
-        )}
       </div>
 
       <QuickAddClientModal
