@@ -24,7 +24,10 @@ const MONTH_NAMES = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Jui
 const MONTH_SHORT = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"]
 
 function isoDate(d: Date): string {
-  return d.toISOString().split("T")[0]
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
 }
 
 function getWeekDays(weekOffset: number) {
@@ -156,7 +159,12 @@ export function CalendarTab() {
   const [showBCFlow, setShowBCFlow] = useState(false)
 
   const calendarBcs = useMemo(
-    () => bcs.filter((bc) => bc.status !== "annule_client" && bc.status !== "annule_chauffeur" && bc.trajet?.date),
+    () => bcs.filter((bc) =>
+      bc.status !== "annule_client" &&
+      bc.status !== "annule_chauffeur" &&
+      bc.trajet?.date &&
+      !bc.number?.startsWith("DRAFT")
+    ),
     [bcs]
   )
 
