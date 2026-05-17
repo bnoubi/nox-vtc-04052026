@@ -1458,10 +1458,10 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 className={cn("w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-[#242424] border hover:border-gold/50 transition-colors text-left", (formErrors.date || formErrors.time) ? "border-red-500" : "border-onyx-border/30")}>
                 <Calendar className="h-4 w-4 text-gold/70 flex-shrink-0" strokeWidth={1.5} />
                 <span className={cn("flex-1 text-sm",
-                  (modeHoraire === 'depart' ? (tripDate || tripTime) : (tripDate || heureArriveesouhaitee))
+                  (modeHoraire === 'depart' ? tripDate : (tripDate || heureArriveesouhaitee))
                     ? "text-foreground" : "text-muted-foreground/50")}>
                   {modeHoraire === 'depart'
-                    ? (tripDate || tripTime ? formatCombinedDateTime(tripDate, tripTime) : "Choisir la date et l'heure")
+                    ? (tripDate ? formatCombinedDateTime(tripDate, tripTime) : "Choisir la date et l'heure")
                     : (tripDate || heureArriveesouhaitee ? formatCombinedDateTime(tripDate, heureArriveesouhaitee) : "Choisir la date et l'heure")
                   }
                 </span>
