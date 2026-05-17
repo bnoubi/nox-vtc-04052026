@@ -134,6 +134,7 @@ export interface BCDocument {
     passengers?: number
     luggage?: number
   }
+  driverId?: string
   driverName?: string
   driverPhone?: string
   driverCarteVTC?: string
@@ -206,6 +207,8 @@ export interface InvoiceDocument {
   vehicleTypeEnergie?: string
   clientType?: "particulier" | "professionnel"
   clientSiren?: string
+  clientTvaIntra?: string | null
+  clientRaisonSociale?: string | null
   clientAddress?: { rue?: string; codePostal?: string; ville?: string; pays?: string }
   supplementsList?: string[]
   notes?: string

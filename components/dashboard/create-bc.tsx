@@ -407,12 +407,12 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
 
   const [discountType, setDiscountType] = useState<DiscountType>("percent")
   const [discountValue, setDiscountValue] = useState(0)
-  const [isMicroBC, setIsMicroBC] = useState<boolean>(enterprise?.isMicroEntrepreneur ?? false)
+  const [isMicroBC, setIsMicroBC] = useState<boolean>(enterprise?.vatMode === 'franchise')
 
   // Sync isMicroBC when enterprise profile loads from Supabase
   useEffect(() => {
-    setIsMicroBC(legalProfile.taxConfig.isMicroEntrepreneur)
-  }, [legalProfile.taxConfig.isMicroEntrepreneur])
+    setIsMicroBC(enterprise?.vatMode === 'franchise')
+  }, [enterprise?.vatMode])
 
   // Validation inline
   const [formErrors, setFormErrors] = useState<FormErrors>({})
@@ -807,7 +807,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     if (!tripTime.trim()) newErrors.time = "L'heure est obligatoire"
     if (!selectedVehicleId) newErrors.vehicle = "Le véhicule est obligatoire"
     if (!enterprise.cgvMode) newErrors.cgv = "Les CGV doivent être configurées"
-    else if (cgvConfigured && !cgvInclure) newErrors.cgv = "Vous devez accepter les CGV"
+    else if (cgvConfigured && !cgvInclure) newErrors.cgv = "Vous devez cocher 'Inclure les CGV dans le PDF'."
     setFormErrors(newErrors)
     if (Object.keys(newErrors).length > 0) {
       const anchors: Array<{ ref: React.RefObject<HTMLDivElement | null>; key: keyof FormErrors }> = [
@@ -1655,7 +1655,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 onCheckedChange={(v) => setIsMicroBC(v === true)}
                 className="border-white/40 data-[state=checked]:bg-gold data-[state=checked]:border-gold data-[state=checked]:text-black"
               />
-              <span className="text-[12px] text-foreground/80 select-none">TVA non applicable (Cocher si micro-entrepreneur)</span>
+              <span className="text-[12px] text-foreground/80 select-none">TVA non applicable (art. 293B CGI)</span>
             </label>
 
             {/* Montant éditable — prérempli par la grille tarifaire */}

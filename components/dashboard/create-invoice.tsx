@@ -17,7 +17,7 @@ import {
   FilePlus2,
 } from "lucide-react"
 import { useNox } from "./nox-context"
-import { type BCDocument, type InvoiceDocument, type Client } from "./data"
+import { type BCDocument, type InvoiceDocument, type Client, type Driver } from "./data"
 import { CreateBCFlow } from "./create-bc"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -181,7 +181,7 @@ function FromBCScreen({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const { bcs, invoices, addInvoice, vehicles, clients } = useNox()
+  const { bcs, invoices, addInvoice, vehicles, clients, enterprise, drivers } = useNox()
   const [search, setSearch] = useState("")
   const [converting, setConverting] = useState<string | null>(null)
   const [tvaRate, setTvaRate] = useState<Record<string, number>>({})
@@ -205,12 +205,20 @@ function FromBCScreen({
     setConverting(bc.id)
 
     const vehicle = vehicles.find(v => v.id === bc.vehicleId)
-    const clientRecord = clients.find(c => c.id === bc.clientId)
+    const clientRecord = clients.find((c: Client) => c.id === bc.clientId)
+    const driverRecord = drivers.find((d: Driver) => d.id === bc.driverId)
+    const isFranchise = enterprise?.vatMode === 'franchise'
 
     setTimeout(() => {
-      // Si le BC a déjà un split multi-TVA, conserver les montants tels quels
       let amount: number, amountHT: number, tva: number, tvaRateUsed: number
-      if ((bc.tva10Amount ?? 0) > 0 || (bc.tva20Amount ?? 0) > 0) {
+      if (isFranchise) {
+        // franchise TVA (art. 293B CGI) : montant HT = TTC, TVA = 0
+        amount = bc.amountHT ?? bc.amount
+        amountHT = amount
+        tva = 0
+        tvaRateUsed = 0
+      } else if ((bc.tva10Amount ?? 0) > 0 || (bc.tva20Amount ?? 0) > 0) {
+        // BC avec split multi-TVA : conserver les montants tels quels
         amount = bc.amount
         amountHT = bc.amountHT ?? bc.amount
         tva = bc.tva ?? Math.round((amount - amountHT) * 100) / 100
@@ -251,8 +259,8 @@ function FromBCScreen({
         tva,
         tvaRate: tvaRateUsed,
         baseHT: bc.baseHT,
-        tva10Amount: bc.tva10Amount,
-        tva20Amount: bc.tva20Amount,
+        tva10Amount: isFranchise ? 0 : bc.tva10Amount,
+        tva20Amount: isFranchise ? 0 : bc.tva20Amount,
         supplementsHT: bc.supplementsHT,
         supplementsList: bc.supplementsList,
         discountValue: bc.discountValue,
@@ -266,7 +274,7 @@ function FromBCScreen({
         bcRef: bc.number,
         trajet: bc.trajet,
         driverName: bc.driverName,
-        driverPhone: bc.driverPhone,
+        driverPhone: driverRecord?.phone ?? bc.driverPhone,
         driverCarteVTC: bc.driverCarteVTC,
         vehicleId: bc.vehicleId,
         vehicleName: bc.vehicleName,
@@ -274,6 +282,8 @@ function FromBCScreen({
         vehicleTypeEnergie: vehicle?.type_energie,
         clientType: clientRecord?.type,
         clientSiren: clientRecord?.siren,
+        clientTvaIntra: clientRecord?.tvaIntra ?? null,
+        clientRaisonSociale: clientRecord?.raisonSociale ?? null,
         clientAddress,
         notes: bc.notes,
         cgvText: bc.cgvText,

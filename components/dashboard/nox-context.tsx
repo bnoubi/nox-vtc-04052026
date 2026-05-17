@@ -340,6 +340,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
             id: b.id,
             number: b.numero || "",
             clientId: b.client_id || undefined,
+            driverId: b.driver_id || undefined,
             client: b.client_nom || "",
             clientPhone: b.client_telephone || undefined,
             passagerNom: b.passager_nom || undefined,
