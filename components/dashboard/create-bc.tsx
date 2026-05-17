@@ -807,6 +807,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     if (!tripTime.trim()) newErrors.time = "L'heure est obligatoire"
     if (!selectedVehicleId) newErrors.vehicle = "Le véhicule est obligatoire"
     if (!enterprise.cgvMode) newErrors.cgv = "Les CGV doivent être configurées"
+    else if (cgvConfigured && !cgvInclure) newErrors.cgv = "Vous devez accepter les CGV"
     setFormErrors(newErrors)
     if (Object.keys(newErrors).length > 0) {
       const anchors: Array<{ ref: React.RefObject<HTMLDivElement | null>; key: keyof FormErrors }> = [
@@ -1458,11 +1459,10 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 className={cn("w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-[#242424] border hover:border-gold/50 transition-colors text-left", (formErrors.date || formErrors.time) ? "border-red-500" : "border-onyx-border/30")}>
                 <Calendar className="h-4 w-4 text-gold/70 flex-shrink-0" strokeWidth={1.5} />
                 <span className={cn("flex-1 text-sm",
-                  (modeHoraire === 'depart' ? tripDate : (tripDate || heureArriveesouhaitee))
-                    ? "text-foreground" : "text-muted-foreground/50")}>
+                  tripDate ? "text-foreground" : "text-muted-foreground/50")}>
                   {modeHoraire === 'depart'
                     ? (tripDate ? formatCombinedDateTime(tripDate, tripTime) : "Choisir la date et l'heure")
-                    : (tripDate || heureArriveesouhaitee ? formatCombinedDateTime(tripDate, heureArriveesouhaitee) : "Choisir la date et l'heure")
+                    : (tripDate ? formatCombinedDateTime(tripDate, heureArriveesouhaitee) : "Choisir la date et l'heure")
                   }
                 </span>
                 <span className="text-[11px] text-gold font-medium">Modifier</span>
@@ -1752,7 +1752,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
           </Section>
 
           {/* SECTION: Conditions Générales de Vente applicables */}
-          <div ref={cgvRef} className={cn("border rounded-xl bg-[#1a1a1a] overflow-hidden", !enterprise.cgvMode ? "border-red-500/60" : "border-emerald-500/50")}>
+          <div ref={cgvRef} className={cn("border rounded-xl bg-[#1a1a1a] overflow-hidden", (!enterprise.cgvMode || formErrors.cgv) ? "border-red-500/60" : "border-emerald-500/50")}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-onyx-border/20">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-gold" strokeWidth={1.5} />
