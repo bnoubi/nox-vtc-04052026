@@ -163,7 +163,6 @@ export interface InvoiceDocument {
   id: string
   number: string
   client: string
-  clientPhone?: string
   amount: number
   amountHT?: number
   tva?: number

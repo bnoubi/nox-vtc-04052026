@@ -443,7 +443,6 @@ function InvoiceDetail({
               <div className="space-y-1.5">
                 <p className="text-[10px] text-muted-foreground uppercase font-black tracking-[0.2em]">Destinataire</p>
                 <p className="text-base font-bold text-foreground leading-tight">{invoice.client}</p>
-                {invoice.clientPhone && <p className="text-[11px] text-muted-foreground">{invoice.clientPhone}</p>}
                 <p className="text-[11px] text-muted-foreground mt-1">Réf: {invoice.bcRef}</p>
               </div>
               <div className="text-right space-y-1.5">

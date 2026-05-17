@@ -1129,12 +1129,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         date_emission: now.toISOString().split("T")[0],
         echeance: echeanceISO,
         bc_ref: invoice.bcRef || null,
-        client_nom: invoice.client || null,
-        client_telephone: invoice.clientPhone || null,
-        driver_nom: invoice.driverName || null,
-        driver_carte_vtc: invoice.driverCarteVTC || null,
-        vehicle_nom: invoice.vehicleName || null,
-        vehicle_immatriculation: invoice.vehiclePlate || null,
+        vehicle_id: invoice.vehicleId || null,
         items: invoice.items || null,
         montant_ht: invoice.amountHT ?? 0,
         montant_ttc: invoice.amount ?? 0,
@@ -1152,14 +1147,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         notes: invoice.notes || null,
         cgv_text: invoice.cgvText || null,
         trajet: invoice.trajet || null,
-        passager_nom: invoice.passagerNom || null,
-        passager_telephone: invoice.passagerTelephone || null,
-        driver_phone: invoice.driverPhone || null,
-        vehicle_type_energie: invoice.vehicleTypeEnergie || null,
         supplements_list: invoice.supplementsList || null,
-        client_type: invoice.clientType || null,
-        client_siren: invoice.clientSiren || null,
-        client_address: invoice.clientAddress || null,
       }
       const { data, error } = await supabase
         .from("invoices")

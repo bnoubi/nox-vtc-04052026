@@ -6,9 +6,16 @@ const LEGAL_BC_MENTION =
   "JUSTIFICATION DE LA RESERVATION PREALABLE" +
   " - Article R3120-2 du Code des transports - Arrete du 6 aout 2025"
 
+function formatAmount(value: number): string {
+  return new Intl.NumberFormat("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value).replace(/ /g, " ")
+}
+
 function formatPrice(value: number | undefined | null): string {
   if (value === undefined || value === null) return "—"
-  return new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(value) + " €"
+  return formatAmount(value) + " €"
 }
 
 async function fetchMapImage(depart: string, arrivee: string): Promise<string | null> {
@@ -269,10 +276,11 @@ async function _buildPDFDoc(
     if (isInvoice && d.vehicleTypeEnergie && d.trajet.distance) {
       const co2Map: Record<string, number> = { electrique: 0, hybride: 50, essence: 120, diesel: 110 }
       const gPerKm: number = co2Map[d.vehicleTypeEnergie as string] ?? 110
-      const totalG: number = Math.round(gPerKm * (d.trajet.distance as number))
+      const totalG = gPerKm * (d.trajet.distance as number)
+      const totalKgStr = (totalG / 1000).toFixed(1).replace(".", ",")
       infoRows.push({
-        label: "Émissions CO₂ (art. L1431-3 C. transp.) :",
-        value: `${gPerKm} g/km × ${d.trajet.distance} km = ${totalG} g`
+        label: "Émissions CO₂ estimées :",
+        value: `${totalKgStr} kg (${gPerKm} g/km × ${d.trajet.distance} km)`
       })
     }
 

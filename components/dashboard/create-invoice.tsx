@@ -212,8 +212,8 @@ function FromBCScreen({
     setTimeout(() => {
       let amount: number, amountHT: number, tva: number, tvaRateUsed: number
       if (isFranchise) {
-        // franchise TVA (art. 293B CGI) : montant HT = TTC, TVA = 0
-        amount = bc.amountHT ?? bc.amount
+        // franchise TVA (art. 293B CGI) : HT = TTC du BC (montant accepté par le client), TVA = 0
+        amount = bc.amount
         amountHT = amount
         tva = 0
         tvaRateUsed = 0
@@ -251,16 +251,17 @@ function FromBCScreen({
         id: `fac-gen-${Date.now()}`,
         number: `F-2026-${padded}`,
         client: bc.client,
-        clientPhone: bc.clientPhone,
         passagerNom: bc.passagerNom,
         passagerTelephone: bc.passagerTelephone,
         amount,
         amountHT,
         tva,
         tvaRate: tvaRateUsed,
-        baseHT: bc.baseHT,
+        baseHT: isFranchise ? amountHT - (bc.supplementsHT ?? 0) : bc.baseHT,
         tva10Amount: isFranchise ? 0 : bc.tva10Amount,
         tva20Amount: isFranchise ? 0 : bc.tva20Amount,
+        tva55Amount: isFranchise ? 0 : bc.tva55Amount,
+        tvaOtherAmount: isFranchise ? 0 : bc.tvaOtherAmount,
         supplementsHT: bc.supplementsHT,
         supplementsList: bc.supplementsList,
         discountValue: bc.discountValue,
