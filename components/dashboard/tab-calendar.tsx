@@ -122,7 +122,9 @@ function DayBCsSheet({ date, bcs, onClose, onSelectBC }: { date: string; bcs: BC
           </button>
         </div>
         <div className="space-y-2">
-          {bcs.map((bc) => (
+          {bcs.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-4">Aucune course ce jour</p>
+          ) : bcs.map((bc) => (
             <button
               key={bc.id}
               onClick={() => onSelectBC(bc)}
@@ -332,7 +334,7 @@ export function CalendarTab() {
               return (
                 <button
                   key={iso}
-                  onClick={() => { if (dayBcsList.length > 0) setDaySheetDate(iso) }}
+                  onClick={() => setDaySheetDate(iso)}
                   className={cn(
                     "flex flex-col items-center py-2 rounded-xl border transition-all",
                     isToday ? "border-gold/30 bg-gold/5" : "border-transparent",

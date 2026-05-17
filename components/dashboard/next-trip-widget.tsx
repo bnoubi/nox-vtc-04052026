@@ -4,14 +4,29 @@ import { useEffect, useMemo, useState } from "react"
 import { Clock } from "lucide-react"
 import { useNox } from "./nox-context"
 
-function formatCountdown(ms: number): string {
-  if (ms <= 0) return "Maintenant"
-  const totalMin = Math.floor(ms / 60000)
-  const hours = Math.floor(totalMin / 60)
-  const mins = totalMin % 60
-  if (hours > 0 && mins > 0) return `Dans ${hours}h ${mins}min`
-  if (hours > 0) return `Dans ${hours}h`
-  return `Dans ${mins}min`
+const THIRTY_MIN_MS = 30 * 60 * 1000
+const ONE_HOUR_MS = 60 * 60 * 1000
+const TWENTY_FOUR_H_MS = 24 * 60 * 60 * 1000
+const FORTY_EIGHT_H_MS = 48 * 60 * 60 * 1000
+
+function formatCountdown(diffMs: number, tripDate: Date, tripTime?: string): string {
+  if (diffMs <= 0) return "En cours"
+  if (diffMs < ONE_HOUR_MS) {
+    const mins = Math.floor(diffMs / 60000)
+    return `Dans ${mins} min`
+  }
+  if (diffMs < TWENTY_FOUR_H_MS) {
+    const totalMin = Math.floor(diffMs / 60000)
+    const hours = Math.floor(totalMin / 60)
+    const mins = totalMin % 60
+    return mins > 0 ? `Dans ${hours}h${String(mins).padStart(2, "0")}` : `Dans ${hours}h`
+  }
+  if (diffMs < FORTY_EIGHT_H_MS) {
+    const timeStr = tripTime ? tripTime.replace(":", "h") : ""
+    return timeStr ? `Demain à ${timeStr}` : "Demain"
+  }
+  const dateStr = tripDate.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
+  return dateStr.charAt(0).toUpperCase() + dateStr.slice(1)
 }
 
 function formatTripDate(date: string, time?: string): string {
@@ -40,7 +55,8 @@ export function NextTripWidget() {
       .filter((bc) => {
         if (bc.status !== "confirme" && bc.status !== "en_attente") return false
         if (!bc.trajet?.date) return false
-        return new Date(`${bc.trajet.date}T${bc.trajet.time ?? "00:00"}`).getTime() > now
+        const tripMs = new Date(`${bc.trajet.date}T${bc.trajet.time ?? "00:00"}`).getTime()
+        return tripMs > now - THIRTY_MIN_MS
       })
       .sort((a, b) => {
         const ta = `${a.trajet?.date ?? "9999-12-31"}T${a.trajet?.time ?? "00:00"}`
@@ -51,10 +67,9 @@ export function NextTripWidget() {
 
   if (!nextTrip) return null
 
-  const tripMs = new Date(
-    `${nextTrip.trajet!.date}T${nextTrip.trajet?.time ?? "00:00"}`
-  ).getTime()
-  const countdown = formatCountdown(tripMs - now)
+  const tripDate = new Date(`${nextTrip.trajet!.date}T${nextTrip.trajet?.time ?? "00:00"}`)
+  const diffMs = tripDate.getTime() - now
+  const countdown = formatCountdown(diffMs, tripDate, nextTrip.trajet?.time)
   const dateLabel = formatTripDate(nextTrip.trajet!.date!, nextTrip.trajet?.time)
 
   return (

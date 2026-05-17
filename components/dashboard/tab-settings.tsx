@@ -254,6 +254,7 @@ export interface SettingItem {
   label: string
   description?: string
   badge?: string
+  alertBadge?: boolean
   screen?: SettingsScreen
 }
 
@@ -287,6 +288,11 @@ export function SettingRow({ item, onPress }: { item: SettingItem; onPress?: () 
           {item.badge && (
             <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-gold/10 text-gold border border-gold/20">
               {item.badge}
+            </span>
+          )}
+          {item.alertBadge && (
+            <span className="w-4 h-4 flex items-center justify-center text-[9px] font-bold rounded-full bg-red-500 text-white shrink-0">
+              !
             </span>
           )}
         </div>
@@ -487,6 +493,7 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
   const { enterprise, updateEnterprise } = useNox()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [saved, setSaved] = useState(false)
+  const [logoUploading, setLogoUploading] = useState(false)
 
   // Identité visuelle
   const [logoPreview, setLogoPreview] = useState<string | null>(enterprise.logo || null)
@@ -512,16 +519,24 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
     dateAssurance: enterprise.dateAssurance || "",
   })
 
-  function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    setLogoName(file.name)
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const b64 = ev.target?.result as string
-      setLogoPreview(b64)
+    setLogoUploading(true)
+    try {
+      const form = new FormData()
+      form.append("file", file)
+      const res = await fetch("/api/enterprise/upload-logo", { method: "POST", body: form })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Erreur upload")
+      setLogoPreview(json.url)
+      setLogoName(file.name)
+    } catch (err) {
+      toast.error("Échec de l'upload du logo. Veuillez réessayer.")
+      console.error(err)
+    } finally {
+      setLogoUploading(false)
     }
-    reader.readAsDataURL(file)
   }
 
   function handleSave() {
@@ -571,8 +586,9 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
               className="hidden"
             />
             <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-onyx-border/50 hover:border-gold/40 hover:bg-gold/5 active:scale-[0.99] transition-all group"
+              onClick={() => !logoUploading && fileInputRef.current?.click()}
+              disabled={logoUploading}
+              className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-onyx-border/50 hover:border-gold/40 hover:bg-gold/5 active:scale-[0.99] transition-all group disabled:opacity-60 disabled:cursor-wait"
             >
               {logoPreview ? (
                 <div className="w-11 h-11 rounded-lg border border-gold/30 overflow-hidden bg-onyx-card shrink-0 flex items-center justify-center">
@@ -584,7 +600,12 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
                 </div>
               )}
               <div className="flex-1 text-left min-w-0">
-                {logoName ? (
+                {logoUploading ? (
+                  <>
+                    <p className="text-sm font-medium text-foreground">Upload en cours…</p>
+                    <p className="text-[10px] text-gold animate-pulse">Envoi vers le serveur</p>
+                  </>
+                ) : logoName ? (
                   <>
                     <p className="text-sm font-medium text-foreground truncate">{logoName}</p>
                     <p className="text-[10px] text-emerald-400">Importé</p>
@@ -1959,7 +1980,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
   const accountSettings: SettingItem[] = [
     { icon: <User className="h-4 w-4" strokeWidth={1.5} />, label: "Compte & Sécurité", description: "Gérer l'accès et les infos", screen: "accountSecurity" },
     { icon: <Building2 className="h-4 w-4" strokeWidth={1.5} />, label: "Profil Entreprise", description: enterpriseDesc, screen: "enterprise" },
-    { icon: <FileText className="h-4 w-4" strokeWidth={1.5} />, label: "Mes Conditions de Vente", description: "CGV rattachées à vos documents", screen: "cgv" },
+    { icon: <FileText className="h-4 w-4" strokeWidth={1.5} />, label: "Mes Conditions de Vente", description: "CGV rattachées à vos documents", screen: "cgv", alertBadge: !enterprise?.cgvMode },
     { icon: <Calculator className="h-4 w-4" strokeWidth={1.5} />, label: "Mes Grilles Tarifaires", description: "Tarifs, suppléments et forfaits", screen: "tarifs" },
     { icon: <Landmark className="h-4 w-4" strokeWidth={1.5} />, label: "Infos Bancaires", description: "Non renseigné", badge: "AES-256", screen: "banking" },
     { icon: <Crown className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Abonnement", description: isTeam ? "Offre TEAM active" : plan === "DUO" ? "Offre DUO active" : "Offre SOLO active", screen: "subscription" },

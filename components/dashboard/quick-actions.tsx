@@ -74,7 +74,6 @@ export function QuickActions() {
   const vehiclesFull = vehicleCount >= limits.vehicles
 
   function handleQuickDriverSave(data: any) {
-    console.log('DEBUG quick-actions: handleQuickDriverSave called', data)
     const newDriver = {
       id: '',
       name: `${data.prenom} ${data.nom}`.trim(),
@@ -91,13 +90,11 @@ export function QuickActions() {
       phone: data.phone || '',
       email: data.email || ''
     }
-    console.log('DEBUG quick-actions: calling addDriver with', newDriver)
     addDriver(newDriver)
     setShowDriverDrawer(false)
   }
 
   function handleQuickVehicleSave(data: any) {
-    console.log('DEBUG quick-actions: handleQuickVehicleSave called', data)
     const newVehicle = {
       id: '',
       marque: data.brand || '',
@@ -111,7 +108,6 @@ export function QuickActions() {
       assuranceTransportExpiration: data.assuranceTransportExpiration || '',
       controleTechniqueExpiration: data.expirationCT || ''
     }
-    console.log('DEBUG quick-actions: calling addVehicle with', newVehicle)
     addVehicle(newVehicle)
     setShowVehicleDrawer(false)
   }
