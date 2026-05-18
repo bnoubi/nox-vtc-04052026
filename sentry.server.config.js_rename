@@ -1,0 +1,11 @@
+import * as Sentry from "@sentry/nextjs";
+
+Sentry.init({
+  dsn: "https://978ba9a4ca9ac98a803d8b3af9dd1c61@o4511378306891776.ingest.de.sentry.io/4511378317377616",
+  integrations: [
+    // send console.log, console.warn, and console.error calls as logs to Sentry
+    Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }),
+  ],
+  // Enable logs to be sent to Sentry
+  enableLogs: true,
+});
