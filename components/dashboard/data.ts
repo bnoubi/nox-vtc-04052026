@@ -162,12 +162,22 @@ export interface InvoiceItem {
 export interface InvoiceDocument {
   id: string
   number: string
+  // Lien vers le BC source
+  bcId?: string
+  bcRef: string
+  // Identification client
+  clientId?: string
   client: string
+  clientPhone?: string
+  // Identification chauffeur
+  driverId?: string
+  // Montants
   amount: number
   amountHT?: number
   tva?: number
   tvaRate?: number
-  
+  tvaMode?: string
+
   // Multi-TVA & Remise & Lignes dynamiques
   items?: InvoiceItem[]
   baseHT?: number
@@ -176,7 +186,7 @@ export interface InvoiceDocument {
   tva20Amount?: number
   tva55Amount?: number
   tvaOtherAmount?: number
-  
+
   discountValue?: number
   discountType?: "percent" | "amount"
   originalHT?: number
@@ -185,11 +195,11 @@ export interface InvoiceDocument {
   echeance: string
   status: InvoiceStatus
   type: "facture"
-  bcRef: string
   trajet?: {
     depart: string
     arrivee: string
     distance?: number
+    duree?: string
     date?: string
     time?: string
     passengers?: number

@@ -17,7 +17,7 @@ import {
   FilePlus2,
 } from "lucide-react"
 import { useNox } from "./nox-context"
-import { type BCDocument, type InvoiceDocument, type Client, type Driver } from "./data"
+import { type BCDocument, type InvoiceDocument, type Client } from "./data"
 import { CreateBCFlow } from "./create-bc"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -181,10 +181,9 @@ function FromBCScreen({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const { bcs, invoices, addInvoice, vehicles, clients, enterprise, drivers } = useNox()
+  const { bcs, invoices, addInvoice } = useNox()
   const [search, setSearch] = useState("")
   const [converting, setConverting] = useState<string | null>(null)
-  const [tvaRate, setTvaRate] = useState<Record<string, number>>({})
 
   // Only show BCs that are signed and NOT yet in any invoice
   const unbilledBCs = bcs.filter(bc =>
@@ -197,103 +196,74 @@ function FromBCScreen({
       bc.number.toLowerCase().includes(search.toLowerCase()),
   )
 
-  function getTva(bcId: string) {
-    return tvaRate[bcId] ?? 10
-  }
-
   function handleConvert(bc: BCDocument) {
     setConverting(bc.id)
 
-    const vehicle = vehicles.find(v => v.id === bc.vehicleId)
-    const clientRecord = clients.find((c: Client) => c.id === bc.clientId)
-    const driverRecord = drivers.find((d: Driver) => d.id === bc.driverId)
-    const isFranchise = enterprise?.vatMode === 'franchise'
+    const invoiceDate = new Date()
+    const echeance = new Date(invoiceDate)
+    echeance.setDate(echeance.getDate() + 30)
+
+    const newInvoice: InvoiceDocument = {
+      id: "",
+      number: "",
+
+      // Identification
+      bcId:              bc.id,
+      bcRef:             bc.number,
+      date:              invoiceDate.toISOString().split("T")[0],
+      echeance:          echeance.toISOString().split("T")[0],
+      type:              "facture",
+      status:            "brouillon",
+
+      // Client
+      clientId:          bc.clientId,
+      client:            bc.client,
+      clientPhone:       bc.clientPhone,
+      passagerNom:       bc.passagerNom,
+      passagerTelephone: bc.passagerTelephone,
+
+      // Trajet — copie JSONB entier
+      trajet:            bc.trajet,
+
+      // Chauffeur
+      driverId:          bc.driverId,
+      driverName:        bc.driverName,
+      driverCarteVTC:    bc.driverCarteVTC,
+
+      // Véhicule
+      vehicleId:         bc.vehicleId,
+      vehicleName:       bc.vehicleName,
+      vehiclePlate:      bc.vehiclePlate,
+
+      // Montants — copie stricte, aucun recalcul
+      amount:            bc.amount,
+      amountHT:          bc.amountHT,
+      tva:               bc.tva,
+      tvaRate:           bc.tvaRate,
+      baseHT:            bc.baseHT,
+      supplementsHT:     bc.supplementsHT,
+      tva10Amount:       bc.tva10Amount,
+      tva20Amount:       bc.tva20Amount,
+      tva55Amount:       bc.tva55Amount,
+      tvaOtherAmount:    bc.tvaOtherAmount,
+      discountValue:     bc.discountValue,
+      discountType:      bc.discountType,
+      originalHT:        bc.originalHT,
+      originalTTC:       bc.originalTTC,
+
+      // Suppléments détaillés
+      supplementsList:   bc.supplementsList,
+
+      // Divers
+      notes:             bc.notes,
+      cgvText:           bc.cgvText,
+    }
 
     setTimeout(() => {
-      let amount: number, amountHT: number, tva: number, tvaRateUsed: number
-      if (isFranchise) {
-        // franchise TVA (art. 293B CGI) : HT = TTC du BC (montant accepté par le client), TVA = 0
-        amount = bc.amount
-        amountHT = amount
-        tva = 0
-        tvaRateUsed = 0
-      } else if ((bc.tva10Amount ?? 0) > 0 || (bc.tva20Amount ?? 0) > 0) {
-        // BC avec split multi-TVA : conserver les montants tels quels
-        amount = bc.amount
-        amountHT = bc.amountHT ?? bc.amount
-        tva = bc.tva ?? Math.round((amount - amountHT) * 100) / 100
-        tvaRateUsed = bc.tvaRate ?? 10
-      } else {
-        const mHT = bc.amountHT ?? bc.amount
-        const rate = getTva(bc.id)
-        tva = Math.round((mHT * rate) / 100 * 100) / 100
-        amount = Math.round((mHT + tva) * 100) / 100
-        amountHT = Math.round(mHT * 100) / 100
-        tvaRateUsed = rate
-      }
-
-      const nextNum = invoices.length + 1
-      const padded = String(nextNum).padStart(3, "0")
-      const today = new Date()
-      const echeance = new Date(today)
-      echeance.setDate(echeance.getDate() + 30)
-      const fmtDate = (d: Date) =>
-        `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`
-
-      const clientAddress = clientRecord?.billingAddress ? {
-        rue: clientRecord.billingAddress.rue,
-        codePostal: clientRecord.billingAddress.codePostal,
-        ville: clientRecord.billingAddress.ville,
-        pays: clientRecord.billingAddress.pays,
-      } : undefined
-
-      const newInvoice: InvoiceDocument = {
-        id: `fac-gen-${Date.now()}`,
-        number: `F-2026-${padded}`,
-        client: bc.client,
-        passagerNom: bc.passagerNom,
-        passagerTelephone: bc.passagerTelephone,
-        amount,
-        amountHT,
-        tva,
-        tvaRate: tvaRateUsed,
-        baseHT: isFranchise ? amountHT - (bc.supplementsHT ?? 0) : bc.baseHT,
-        tva10Amount: isFranchise ? 0 : bc.tva10Amount,
-        tva20Amount: isFranchise ? 0 : bc.tva20Amount,
-        tva55Amount: isFranchise ? 0 : bc.tva55Amount,
-        tvaOtherAmount: isFranchise ? 0 : bc.tvaOtherAmount,
-        supplementsHT: bc.supplementsHT,
-        supplementsList: bc.supplementsList,
-        discountValue: bc.discountValue,
-        discountType: bc.discountType,
-        originalHT: bc.originalHT,
-        originalTTC: bc.originalTTC,
-        date: fmtDate(today),
-        echeance: fmtDate(echeance),
-        status: "brouillon",
-        type: "facture",
-        bcRef: bc.number,
-        trajet: bc.trajet,
-        driverName: bc.driverName,
-        driverPhone: driverRecord?.phone ?? bc.driverPhone,
-        driverCarteVTC: bc.driverCarteVTC,
-        vehicleId: bc.vehicleId,
-        vehicleName: bc.vehicleName,
-        vehiclePlate: bc.vehiclePlate,
-        vehicleTypeEnergie: vehicle?.type_energie,
-        clientType: clientRecord?.type,
-        clientSiren: clientRecord?.siren,
-        clientTvaIntra: clientRecord?.tvaIntra ?? null,
-        clientRaisonSociale: clientRecord?.raisonSociale ?? null,
-        clientAddress,
-        notes: bc.notes,
-        cgvText: bc.cgvText,
-      }
-
       addInvoice(newInvoice)
       setConverting(null)
       onSuccess()
-    }, 600)
+    }, 400)
   }
 
   return (
@@ -342,12 +312,7 @@ function FromBCScreen({
 
       {/* BC List */}
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-20">
-        {filtered.map((bc) => {
-          const rate = getTva(bc.id)
-          const tva = (bc.amount * rate) / 100
-          const ttc = bc.amount + tva
-
-          return (
+        {filtered.map((bc) => (
             <div
               key={bc.id}
               className="p-4 rounded-2xl bg-onyx-card border border-onyx-border/50"
@@ -370,33 +335,18 @@ function FromBCScreen({
                 </div>
               )}
 
-              {/* TVA selector */}
-              <div className="flex gap-2 mb-3">
-                {[10, 20].map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setTvaRate((prev: Record<string, number>) => ({ ...prev, [bc.id]: r }))}
-                    className={cn(
-                      "flex-1 py-2 rounded-xl text-[11px] font-medium border transition-all",
-                      rate === r
-                        ? "bg-gold/15 border-gold/40 text-gold"
-                        : "bg-secondary/30 border-onyx-border/50 text-muted-foreground",
-                    )}
-                  >
-                    TVA {r}% ({r === 10 ? "Transport" : "Standard"})
-                  </button>
-                ))}
-              </div>
-
-              {/* Amount summary */}
+              {/* Amount (copie directe depuis BC) */}
               <div className="flex items-center justify-between mb-3 px-3 py-2 rounded-xl bg-background border border-onyx-border/30">
                 <div className="text-[10px] text-muted-foreground space-y-0.5">
-                  <div>HT : {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.amount)} &euro;</div>
-                  <div>TVA : {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(tva)} &euro;</div>
+                  {bc.amountHT != null && bc.amountHT > 0 && (
+                    <div>HT : {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.amountHT)} &euro;</div>
+                  )}
+                  {bc.tva != null && bc.tva > 0 && (
+                    <div>TVA : {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.tva)} &euro;</div>
+                  )}
                 </div>
                 <span className="text-lg font-bold text-gold tabular-nums">
-                  {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(ttc)} &euro;
+                  {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.amount)} &euro;
                 </span>
               </div>
 
@@ -424,8 +374,7 @@ function FromBCScreen({
                 )}
               </button>
             </div>
-          )
-        })}
+        ))}
 
         {filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
