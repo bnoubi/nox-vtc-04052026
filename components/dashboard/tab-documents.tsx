@@ -1066,8 +1066,9 @@ export function DocumentsTab() {
         duration: 2500,
       })
     }
-    const tva = (bc.amount * tvaRate) / 100
-    const ttc = bc.amount + tva
+    const htBase = bc.amountHT ?? bc.amount
+    const tva = (htBase * tvaRate) / 100
+    const ttc = htBase + tva
     const nextNum = invoices.length + 1
     const padded = String(nextNum).padStart(3, "0")
 
@@ -1082,15 +1083,36 @@ export function DocumentsTab() {
       id: `fac-gen-${Date.now()}`,
       number: `F-2026-${padded}`,
       client: bc.client,
+      clientPhone: bc.clientPhone,
       amount: Math.round(ttc * 100) / 100,
-      amountHT: bc.amount,
+      amountHT: Math.round(htBase * 100) / 100,
       tva: Math.round(tva * 100) / 100,
       tvaRate,
+      baseHT: bc.baseHT,
+      tva10Amount: bc.tva10Amount,
+      tva20Amount: bc.tva20Amount,
+      tva55Amount: bc.tva55Amount,
+      tvaOtherAmount: bc.tvaOtherAmount,
+      supplementsHT: bc.supplementsHT,
+      supplementsList: bc.supplementsList,
+      discountValue: bc.discountValue,
+      discountType: bc.discountType,
+      originalHT: bc.originalHT,
+      originalTTC: bc.originalTTC,
       date: fmtDate(today),
       echeance: fmtDate(echeance),
       status: "brouillon",
       type: "facture",
       bcRef: bc.number,
+      trajet: bc.trajet,
+      passagerNom: bc.passagerNom,
+      passagerTelephone: bc.passagerTelephone,
+      driverName: bc.driverName,
+      driverPhone: bc.driverPhone,
+      driverCarteVTC: bc.driverCarteVTC,
+      vehicleName: bc.vehicleName,
+      vehiclePlate: bc.vehiclePlate,
+      notes: bc.notes,
     }
 
     addInvoice(newInvoice)
