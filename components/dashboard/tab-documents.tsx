@@ -30,6 +30,8 @@ import { CreateBCFlow } from "./create-bc"
 import { useNox } from "./nox-context"
 import { type BCDocument, type InvoiceDocument, type BCStatus, type InvoiceStatus, type EnterpriseProfile } from "./data"
 import { generateInvoicePDF, generateBCPDF, generateBCPDFBlob } from "@/lib/pdf-generator"
+import { convertBCToInvoice } from "@/lib/convert-bc-to-invoice"
+import { createClient } from "@/lib/supabase/client"
 
 type DocType = "bc" | "facture"
 type BCFilter = "tous" | "brouillon" | "en_attente" | "confirme" | "en_cours" | "termine" | "annule" | "converti"
@@ -962,7 +964,8 @@ function GenerateInvoiceModal({
 // ── Main Documents Tab ───────────────────────────────────────────
 
 export function DocumentsTab() {
-  const { bcs, invoices, addInvoice, enterprise, plan, tokens, spendToken, deleteBC } = useNox()
+  const { bcs, invoices, enterprise, plan, tokens, spendToken, deleteBC, refreshInvoices } = useNox()
+  const supabase = createClient()
   const [activeType, setActiveType] = useState<DocType>("bc")
   const [search, setSearch] = useState("")
   const [bcStatusFilter, setBcStatusFilter] = useState<BCFilter>("tous")
@@ -1046,8 +1049,7 @@ export function DocumentsTab() {
     setShowBCFlow(true)
   }
 
-  function handleGenerateInvoice(bc: BCDocument, tvaRate: number) {
-    // Token gate for SOLO users
+  async function handleGenerateInvoice(bc: BCDocument, tvaRate: number) {
     if (!isUnlimited) {
       if (tokens <= 0) {
         setShowNoTokens(true)
@@ -1066,58 +1068,26 @@ export function DocumentsTab() {
         duration: 2500,
       })
     }
-    const htBase = bc.amountHT ?? bc.amount
-    const tva = (htBase * tvaRate) / 100
-    const ttc = htBase + tva
-    const nextNum = invoices.length + 1
-    const padded = String(nextNum).padStart(3, "0")
 
-    // Calculate J+30 echeance
-    const today = new Date()
-    const echeance = new Date(today)
-    echeance.setDate(echeance.getDate() + 30)
-    const fmtDate = (d: Date) =>
-      `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
 
-    const newInvoice: InvoiceDocument = {
-      id: `fac-gen-${Date.now()}`,
-      number: `F-2026-${padded}`,
-      client: bc.client,
-      clientPhone: bc.clientPhone,
-      amount: Math.round(ttc * 100) / 100,
-      amountHT: Math.round(htBase * 100) / 100,
-      tva: Math.round(tva * 100) / 100,
-      tvaRate,
-      baseHT: bc.baseHT,
-      tva10Amount: bc.tva10Amount,
-      tva20Amount: bc.tva20Amount,
-      tva55Amount: bc.tva55Amount,
-      tvaOtherAmount: bc.tvaOtherAmount,
-      supplementsHT: bc.supplementsHT,
-      supplementsList: bc.supplementsList,
-      discountValue: bc.discountValue,
-      discountType: bc.discountType,
-      originalHT: bc.originalHT,
-      originalTTC: bc.originalTTC,
-      date: fmtDate(today),
-      echeance: fmtDate(echeance),
-      status: "brouillon",
-      type: "facture",
-      bcRef: bc.number,
-      trajet: bc.trajet,
-      passagerNom: bc.passagerNom,
-      passagerTelephone: bc.passagerTelephone,
-      driverName: bc.driverName,
-      driverPhone: bc.driverPhone,
-      driverCarteVTC: bc.driverCarteVTC,
-      vehicleName: bc.vehicleName,
-      vehiclePlate: bc.vehiclePlate,
-      notes: bc.notes,
+    const result = await convertBCToInvoice(bc.id, user.id)
+
+    if (!result.success) {
+      toast.error("Erreur", {
+        description: result.error ?? "\u00c9chec cr\u00e9ation facture",
+      })
+      setInvoicingBC(null)
+      return
     }
 
-    addInvoice(newInvoice)
+    await refreshInvoices()
     setInvoicingBC(null)
     setActiveType("facture")
+    toast.success("Facture cr\u00e9\u00e9e", {
+      description: "Visible dans l'onglet Factures",
+    })
   }
 
   const filteredBCs = (() => {

@@ -36,7 +36,7 @@ export interface BCPrefillClient {
 }
 
 interface SupplementSelection { id: string; label: string; price: number; selected: boolean }
-interface FormErrors { client?: string; departure?: string; arrival?: string; date?: string; time?: string; vehicle?: string; cgv?: string }
+interface FormErrors { client?: string; departure?: string; arrival?: string; date?: string; time?: string; driver?: string; vehicle?: string; cgv?: string }
 
 function defaultTime(): string {
   const now = new Date()
@@ -344,7 +344,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   const [clientSearch, setClientSearch] = useState("")
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>(() => {
     if (prefillBC?.vehicleId) return prefillBC.vehicleId
-    return vehicles?.find(v => v.inService)?.id ?? vehicles?.[0]?.id ?? ""
+    return ""
   })
 
   // Passager
@@ -420,6 +420,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   const departureRef = useRef<HTMLDivElement>(null)
   const arrivalRef = useRef<HTMLDivElement>(null)
   const dateRef = useRef<HTMLDivElement>(null)
+  const driverRef = useRef<HTMLDivElement>(null)
   const vehicleRef = useRef<HTMLDivElement>(null)
   const cgvRef = useRef<HTMLDivElement>(null)
 
@@ -742,7 +743,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     setSelectedDriverId("")
     setSelectedClientId("")
     setClientSearch("")
-    setSelectedVehicleId(vehicles?.find(v => v.inService)?.id ?? vehicles?.[0]?.id ?? "")
+    setSelectedVehicleId("")
     setPassagerNom("")
     setPassagerTelephone("")
     setPassengerSearch("")
@@ -805,6 +806,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     if (!arrival.trim()) newErrors.arrival = "L'adresse d'arrivée est obligatoire"
     if (!tripDate.trim()) newErrors.date = "La date est obligatoire"
     if (!tripTime.trim()) newErrors.time = "L'heure est obligatoire"
+    if (!selectedDriverId) newErrors.driver = "Le chauffeur est obligatoire"
     if (!selectedVehicleId) newErrors.vehicle = "Le véhicule est obligatoire"
     if (!enterprise.cgvMode) newErrors.cgv = "Les CGV doivent être configurées"
     else if (cgvConfigured && !cgvInclure) newErrors.cgv = "Vous devez cocher 'Inclure les CGV dans le PDF'."
@@ -815,6 +817,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
         { ref: departureRef, key: "departure" },
         { ref: arrivalRef, key: "arrival" },
         { ref: dateRef, key: "date" },
+        { ref: driverRef, key: "driver" },
         { ref: vehicleRef, key: "vehicle" },
         { ref: cgvRef, key: "cgv" },
       ]
@@ -846,18 +849,25 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
       clientPhone,
       passagerNom: resolvedPassagerNom || undefined,
       passagerTelephone: resolvedPassagerTel || undefined,
-      amount: pricing.totalTTC,
+      amount: isMicroBC ? pricing.totalHT : pricing.totalTTC,
       amountHT: pricing.totalHT,
-      tva: pricing.tva,
+      tva: isMicroBC ? 0 : pricing.tva,
       baseHT: pricing.baseHT,
       supplementsHT: pricing.supplementsTotal,
-      tva10Amount: pricing.tva10,
-      tva20Amount: pricing.tva20,
+      tva10Amount: isMicroBC ? 0 : pricing.tva10,
+      tva20Amount: isMicroBC ? 0 : pricing.tva20,
+      tva55Amount: isMicroBC ? 0 : 0,
       discountValue,
       discountType,
       originalHT: pricing.originalHT,
       originalTTC: pricing.originalTTC,
-      supplementsList: supplements.filter(s => s.selected).map(s => s.label),
+      supplementsList: supplements
+        .filter(s => s.selected)
+        .map(s => ({
+          label: s.label,
+          montant: s.price,
+          tva_rate: 20,
+        })),
       date: new Date().toLocaleDateString("fr-FR"),
       status: "en_attente",
       type: "bc",
@@ -1127,13 +1137,14 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               <p className="text-[11px] text-gold">Registre EVTC : {enterprise?.evtcNumber ?? ""}</p>
               <p className="text-[11px] text-muted-foreground">{enterprise?.adresse ?? ""}</p>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1" ref={driverRef}>
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Chauffeur assigné <span className="text-red-500">*</span></label>
               <select value={selectedDriverId} onChange={e => setSelectedDriverId(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50" style={{ fontSize: "16px" }}>
+                className={cn("w-full px-3 py-2.5 rounded-xl bg-[#242424] border text-sm text-foreground focus:outline-none focus:border-gold/50", formErrors.driver ? "border-red-500" : "border-onyx-border/30")} style={{ fontSize: "16px" }}>
                 <option value="" disabled>Sélectionner un chauffeur…</option>
                 {(drivers ?? []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
+              {formErrors.driver && <p className="text-xs text-red-500 mt-1">{formErrors.driver}</p>}
             </div>
           </Section>
 

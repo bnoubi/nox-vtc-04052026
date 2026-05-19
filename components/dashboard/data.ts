@@ -119,7 +119,7 @@ export interface BCDocument {
   discountType?: "percent" | "amount"
   originalHT?: number
   originalTTC?: number
-  supplementsList?: string[]
+  supplementsList?: (string | { label: string; montant: number; tva_rate?: number })[]
 
   date: string
   status: BCStatus
@@ -216,10 +216,11 @@ export interface InvoiceDocument {
   vehicleTypeEnergie?: string
   clientType?: "particulier" | "professionnel"
   clientSiren?: string
+  clientEmail?: string
   clientTvaIntra?: string | null
   clientRaisonSociale?: string | null
   clientAddress?: { rue?: string; codePostal?: string; ville?: string; pays?: string }
-  supplementsList?: string[]
+  supplementsList?: (string | { label: string; montant: number; tva_rate?: number })[]
   notes?: string
   cgvText?: string
 }

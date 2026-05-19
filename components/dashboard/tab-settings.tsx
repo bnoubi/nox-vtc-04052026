@@ -489,11 +489,20 @@ const BRAND_COLORS = [
   { name: "Argent Chromé", value: "#9CA3AF" },
 ]
 
+function getVatFromStatut(statut: string): { vatMode: 'franchise' | 'normal'; isMicroEntrepreneur: boolean } {
+  if (statut === 'Micro-Entreprise') return { vatMode: 'franchise', isMicroEntrepreneur: true }
+  if (statut === 'EI' || statut === 'EIRL') return { vatMode: 'franchise', isMicroEntrepreneur: false }
+  return { vatMode: 'normal', isMicroEntrepreneur: false }
+}
+
 function EnterpriseScreen({ onBack }: { onBack: () => void }) {
   const { enterprise, updateEnterprise } = useNox()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [saved, setSaved] = useState(false)
   const [logoUploading, setLogoUploading] = useState(false)
+
+  // Statut juridique
+  const [statutJuridique, setStatutJuridique] = useState(enterprise.statutJuridique || "")
 
   // Identité visuelle
   const [logoPreview, setLogoPreview] = useState<string | null>(enterprise.logo || null)
@@ -541,6 +550,7 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
 
   function handleSave() {
     try {
+      const vatFields = statutJuridique ? getVatFromStatut(statutJuridique) : {}
       updateEnterprise({
         name: legal.denomination,
         siren: legal.siren,
@@ -554,7 +564,9 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
         logo: logoPreview || undefined,
         registreVTC: compliance.registreVTC,
         dateRegistre: compliance.dateRegistre,
-        dateAssurance: compliance.dateAssurance
+        dateAssurance: compliance.dateAssurance,
+        statutJuridique: statutJuridique || undefined,
+        ...vatFields
       })
       toast.success("Modifications enregistrées ✓", { duration: 3000 })
       setSaved(true)
@@ -571,6 +583,33 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
     <motion.div key="enterprise" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full relative">
       <SubScreenHeader title="Profil Entreprise" onBack={onBack} />
       <div className="flex-1 overflow-y-auto pb-6">
+
+        {/* ── Section 0: Statut Juridique ── */}
+        <SectionLabel>Statut juridique</SectionLabel>
+        <GlassCard className="mb-3">
+          <div className="p-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Forme juridique</p>
+            <select
+              value={statutJuridique}
+              onChange={(e) => setStatutJuridique(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors appearance-none"
+            >
+              <option value="" className="bg-onyx text-muted-foreground">Sélectionner...</option>
+              <option value="Micro-Entreprise" className="bg-onyx text-white">Micro-Entreprise</option>
+              <option value="EI" className="bg-onyx text-white">EI</option>
+              <option value="EIRL" className="bg-onyx text-white">EIRL</option>
+              <option value="EURL" className="bg-onyx text-white">EURL</option>
+              <option value="SAS" className="bg-onyx text-white">SAS</option>
+              <option value="SASU" className="bg-onyx text-white">SASU</option>
+              <option value="SARL" className="bg-onyx text-white">SARL</option>
+            </select>
+            {(statutJuridique === 'EI' || statutJuridique === 'EIRL') && (
+              <p className="text-[10px] text-amber-500 mt-1.5">
+                Si votre CA annuel dépasse 37 500€, passez en régime TVA normal dans vos réglages.
+              </p>
+            )}
+          </div>
+        </GlassCard>
 
         {/* ── Section 1: Identite Visuelle ── */}
         <SectionLabel>Identite visuelle</SectionLabel>

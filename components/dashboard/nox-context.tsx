@@ -37,6 +37,7 @@ interface NoxContextType {
   enterprise: EnterpriseProfile
   userProfile: UserProfile
   refreshUserProfile: () => Promise<void>
+  refreshInvoices: () => Promise<void>
   drivers: Driver[]
   vehicles: Vehicle[]
   clients: Client[]
@@ -139,6 +140,57 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       })
     }
   }
+
+  const refreshInvoices = useCallback(async () => {
+    if (!userId) return
+    const { data: dbInvoices } = await supabase
+      .from("invoices")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+    if (dbInvoices) {
+      setInvoices(dbInvoices.map(inv => ({
+        id: inv.id,
+        number: inv.numero || "",
+        client: inv.client_nom || "",
+        clientPhone: inv.client_telephone || undefined,
+        amount: Number(inv.montant_ttc) || 0,
+        amountHT: inv.montant_ht != null ? Number(inv.montant_ht) : undefined,
+        tva: inv.tva != null ? Number(inv.tva) : undefined,
+        items: inv.items || undefined,
+        baseHT: inv.base_ht != null ? Number(inv.base_ht) : undefined,
+        supplementsHT: inv.supplements_ht != null ? Number(inv.supplements_ht) : undefined,
+        tva10Amount: inv.tva_10_amount != null ? Number(inv.tva_10_amount) : undefined,
+        tva20Amount: inv.tva_20_amount != null ? Number(inv.tva_20_amount) : undefined,
+        tva55Amount: inv.tva_5_5_amount != null ? Number(inv.tva_5_5_amount) : undefined,
+        tvaOtherAmount: inv.tva_other_amount != null ? Number(inv.tva_other_amount) : undefined,
+        discountValue: inv.discount_value != null ? Number(inv.discount_value) : undefined,
+        discountType: inv.discount_type || undefined,
+        originalHT: inv.original_ht != null ? Number(inv.original_ht) : undefined,
+        originalTTC: inv.original_ttc != null ? Number(inv.original_ttc) : undefined,
+        date: inv.date_emission ? new Date(inv.date_emission).toLocaleDateString("fr-FR") : "",
+        echeance: inv.echeance ? new Date(inv.echeance).toLocaleDateString("fr-FR") : "",
+        status: (inv.status as InvoiceStatus) || "brouillon",
+        type: "facture" as const,
+        bcRef: inv.bc_ref || "",
+        driverName: inv.driver_nom || undefined,
+        driverPhone: inv.driver_phone || undefined,
+        driverCarteVTC: inv.driver_carte_vtc || undefined,
+        vehicleName: inv.vehicle_nom || undefined,
+        vehiclePlate: inv.vehicle_immatriculation || undefined,
+        vehicleTypeEnergie: inv.vehicle_type_energie || undefined,
+        passagerNom: inv.passager_nom || undefined,
+        passagerTelephone: inv.passager_telephone || undefined,
+        clientType: inv.client_type || undefined,
+        clientSiren: inv.client_siren || undefined,
+        clientAddress: inv.client_address || undefined,
+        supplementsList: Array.isArray(inv.supplements_list) ? inv.supplements_list : undefined,
+        trajet: inv.trajet || undefined,
+        notes: inv.notes || undefined,
+        cgvText: inv.cgv_text || undefined,
+      })))
+    }
+  }, [userId, supabase])
 
   // ─── Config fonctionnelle : valeurs par défaut système (tarification) ───
   const [tariffGrids, setTariffGrids] = useState<TariffGrid[]>([])
@@ -1440,7 +1492,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <NoxContext.Provider value={{
-      enterprise, userProfile, refreshUserProfile, drivers, vehicles, clients, bcs, invoices, tarifBase, forfaits, supplements,
+      enterprise, userProfile, refreshUserProfile, refreshInvoices, drivers, vehicles, clients, bcs, invoices, tarifBase, forfaits, supplements,
       plan, tokens, onboardingStatus, driverCount, vehicleCount,
       upgrade, addTokens, spendToken,
       updateEnterprise, addDriver, updateDriver, deleteDriver, addVehicle, updateVehicle, deleteVehicle,

@@ -6,17 +6,17 @@ const LEGAL_BC_MENTION =
   "JUSTIFICATION DE LA RESERVATION PREALABLE" +
   " - Article R3120-2 du Code des transports - Arrete du 6 aout 2025"
 
-function formatAmount(value: number): string {
-  return new Intl.NumberFormat("fr-FR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value).replace(/ /g, " ")
+function fmtMontant(n: number): string {
+  const parts = n.toFixed(2).split('.')
+  const entier = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+  return entier + ',' + parts[1] + ' €'
 }
 
 function formatPrice(value: number | undefined | null): string {
   if (value === undefined || value === null) return "—"
-  return formatAmount(value) + " €"
+  return fmtMontant(value)
 }
+
 
 async function fetchMapImage(depart: string, arrivee: string): Promise<string | null> {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
@@ -74,9 +74,6 @@ async function _buildPDFDoc(
   const gray = "#71717A"
   const lightGray = "#F4F4F5"
 
-  // Statut TVA via helper centralisé (isVatApplicable)
-  const isAssujettiTVA = isVatApplicable(enterprise)
-
   // 7g — précharger la carte Google Maps (BC uniquement)
   let mapBase64: string | null = null
   if (!isInvoice && d.trajet) {
@@ -85,10 +82,9 @@ async function _buildPDFDoc(
     if (dep || arr) mapBase64 = await fetchMapImage(dep, arr)
   }
 
-  // ── 1. HEADER ─────────────────────────────────────────────────────
+  // 1. HEADER
   const companyName = enterprise.name || enterprise.denomination || "Entreprise"
 
-  // Colonne gauche : nom 12px bold, infos 8.5px
   doc.setFontSize(12)
   doc.setFont("helvetica", "bold")
   doc.setTextColor(dark)
@@ -117,6 +113,12 @@ async function _buildPDFDoc(
     doc.setTextColor(gray)
     leftY += 4.5
   }
+  if (enterprise.phone) {
+    doc.setTextColor(gray)
+    doc.text(`Tél : ${enterprise.phone}`, 20, leftY)
+    leftY += 4.5
+    doc.setTextColor(dark)
+  }
   // [Factur-X] BT-23 BusinessProcessType (RC Pro émetteur)
   if (isInvoice && enterprise.rcProNumber) {
     const rcLine = enterprise.rcProCompany
@@ -127,14 +129,12 @@ async function _buildPDFDoc(
     leftY += 4.5
   }
 
-  // Séparateur vertical entre colonnes (x=105)
   const headerTopY = 18
   const headerBotEstimate = Math.max(leftY, 45)
   doc.setDrawColor("#dddddd")
   doc.setLineWidth(0.5)
   doc.line(105, headerTopY, 105, headerBotEstimate)
 
-  // Colonne droite : titre 12px bold, numéro/date 10px
   doc.setFontSize(12)
   doc.setFont("helvetica", "bold")
   doc.setTextColor(dark)
@@ -166,17 +166,15 @@ async function _buildPDFDoc(
     currentY += legalLines.length * 4.5 + 3
   }
 
-  // Séparateur
   doc.setDrawColor(230)
   doc.setLineWidth(0.3)
   doc.line(20, currentY, 190, currentY)
   currentY += 2
 
-  // ── 2. CLIENT & CHAUFFEUR ────────────────────────────────────────
+  // 2. CLIENT & CHAUFFEUR
   const labelY = currentY + 8
   const contentY = labelY + 5
 
-  // Label CLIENT
   doc.setFontSize(9)
   doc.setFont("helvetica", "bold")
   doc.setTextColor(dark)
@@ -201,6 +199,19 @@ async function _buildPDFDoc(
     doc.setTextColor(dark)
   }
 
+  if (isInvoice) {
+    if (d.clientEmail) {
+      doc.setTextColor(gray)
+      doc.text(d.clientEmail, 20, leftBotY); leftBotY += 4.5
+      doc.setTextColor(dark)
+    }
+    if (d.clientTvaIntra) {
+      doc.setTextColor(gray)
+      doc.text(`TVA intra : ${d.clientTvaIntra}`, 20, leftBotY); leftBotY += 4.5
+      doc.setTextColor(dark)
+    }
+  }
+
   // [Factur-X] BT-50 BuyerPostalAddress / BT-47 BuyerLegalRegistration (SIREN client)
   if (isInvoice) {
     doc.setTextColor(gray)
@@ -216,9 +227,8 @@ async function _buildPDFDoc(
     doc.setTextColor(dark)
   }
 
-  // Section CHAUFFEUR & VÉHICULE (droite)
   let rightBotY = contentY
-  if (d.driverName || d.vehicleName) {
+  if (!isInvoice && (d.driverName || d.vehicleName)) {
     doc.setFont("helvetica", "bold")
     doc.setTextColor(dark)
     doc.text("CHAUFFEUR & VÉHICULE", 110, labelY)
@@ -230,14 +240,12 @@ async function _buildPDFDoc(
         doc.text(`Tel : ${d.driverPhone}`, 110, rightBotY); rightBotY += 5
         doc.setTextColor(dark)
       }
-      // Carte VTC : masquer si vide ou "—"
       if (d.driverCarteVTC && d.driverCarteVTC.trim() && d.driverCarteVTC !== "—") {
         doc.setTextColor(gray)
         doc.text(`Carte VTC : ${d.driverCarteVTC}`, 110, rightBotY); rightBotY += 5
         doc.setTextColor(dark)
       }
     }
-    // Section véhicule : masquer entièrement si vide ou "—"
     if (d.vehicleName && d.vehicleName.trim() && d.vehicleName !== "—") {
       const plate = d.vehiclePlate ? ` (${d.vehiclePlate})` : ""
       doc.text(`Vehicule : ${d.vehicleName}${plate}`, 110, rightBotY)
@@ -247,7 +255,7 @@ async function _buildPDFDoc(
 
   currentY = Math.max(leftBotY, rightBotY) + 6
 
-  // ── 3. TRAJET ────────────────────────────────────────────────────
+  // 3. TRAJET
   if (d.trajet) {
     // 7f — adresses départ/arrivée clairement mises en valeur
     doc.setFontSize(9)
@@ -272,18 +280,6 @@ async function _buildPDFDoc(
       const bags: number = d.trajet.luggage ?? 0
       infoRows.push({ label: "Passagers / Bagages :", value: `${d.trajet.passengers} / ${bags}` })
     }
-    // [art. L1431-3 Code des transports] Émissions CO₂ (isInvoice uniquement)
-    if (isInvoice && d.vehicleTypeEnergie && d.trajet.distance) {
-      const co2Map: Record<string, number> = { electrique: 0, hybride: 50, essence: 120, diesel: 110 }
-      const gPerKm: number = co2Map[d.vehicleTypeEnergie as string] ?? 110
-      const totalG = gPerKm * (d.trajet.distance as number)
-      const totalKgStr = (totalG / 1000).toFixed(1).replace(".", ",")
-      infoRows.push({
-        label: "Émissions CO₂ estimées :",
-        value: `${totalKgStr} kg (${gPerKm} g/km × ${d.trajet.distance} km)`
-      })
-    }
-
     const contentHeight =
       15 +
       5 + departLines.length * 5 + 2 +
@@ -302,7 +298,6 @@ async function _buildPDFDoc(
 
     let tY = sectionTop + 15
 
-    // Départ (marqueur vert)
     doc.setFillColor("#22C55E")
     doc.circle(24.5, tY - 1, 1.8, "F")
     doc.setFont("helvetica", "bold")
@@ -315,7 +310,6 @@ async function _buildPDFDoc(
     doc.setTextColor(dark)
     tY += 5 + departLines.length * 5 + 2
 
-    // Arrivée (marqueur rouge)
     doc.setFillColor("#EF4444")
     doc.circle(24.5, tY - 1, 1.8, "F")
     doc.setFont("helvetica", "bold")
@@ -352,14 +346,14 @@ async function _buildPDFDoc(
         doc.rect(20, currentY, 170, 71)
         currentY += 76
       } catch {
-        // Fallback silencieux — ne jamais bloquer la génération PDF
+        // Fallback silencieux
       }
     }
   } else {
     currentY += 6
   }
 
-  // ── 4. TABLEAU DÉSIGNATION ────────────────────────────────────────
+  // 4. TABLEAU DESIGNATION
   if (currentY + 55 > 278) { doc.addPage(); currentY = 20 }
 
   doc.setFillColor(dark)
@@ -374,22 +368,20 @@ async function _buildPDFDoc(
   doc.setFont("helvetica", "normal")
   doc.setTextColor(dark)
 
-  if (d.items && d.items.length > 0) {
+  if (d.items && d.items.length > 0 && !isInvoice) {
     d.items.forEach((item: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-      const descStr = doc.splitTextToSize(item.designation || "Prestation", 120) as string[]
+      const descStr = doc.splitTextToSize(item.designation || "Prestation de transport avec chauffeur", 120) as string[]
       doc.text(descStr, 25, currentY)
       doc.text(formatPrice(item.amountHT), 185, currentY, { align: "right" })
       currentY += descStr.length * 5 + 3
     })
   } else if (isInvoice) {
-    // Désignation facture : "Transport de personnes VTC (Réf. BC-XXXX)"
     const bcRefStr = d.bcRef ? ` (Réf. ${d.bcRef})` : ""
     const descStr = doc.splitTextToSize(`Transport de personnes VTC${bcRefStr}`, 120) as string[]
     doc.text(descStr, 25, currentY)
     doc.text(formatPrice(d.baseHT || d.amountHT || d.amount), 185, currentY, { align: "right" })
     currentY += descStr.length * 5 + 3
 
-    // Passager si différent du client payeur
     if (d.passagerNom && d.passagerNom !== d.client) {
       doc.setFont("helvetica", "italic")
       doc.setTextColor(gray)
@@ -400,24 +392,45 @@ async function _buildPDFDoc(
       doc.setTextColor(dark)
     }
 
-    // Suppléments : une ligne par supplément, montant total sur la dernière
-    if (d.supplementsList && (d.supplementsList as string[]).length > 0 && d.supplementsHT && d.supplementsHT > 0) {
-      ;(d.supplementsList as string[]).forEach((supp: string, idx: number) => {
-        doc.setFont("helvetica", "italic")
-        doc.setTextColor(gray)
-        const suppStr = doc.splitTextToSize(supp, 140) as string[]
+    // Suppléments : une ligne par supplément
+    if (d.supplementsList && Array.isArray(d.supplementsList) && d.supplementsList.length > 0) {
+      d.supplementsList.forEach((supp: unknown) => {
+        let label = ''
+        let montant = 0
+        if (typeof supp === 'string') {
+          label = supp
+          montant = 0
+        } else if (typeof supp === 'object' && supp !== null) {
+          const s = supp as { label?: string; montant?: number }
+          label = s.label ?? ''
+          montant = s.montant ?? 0
+        }
+        if (!label) return
+        doc.setFont("helvetica", "normal")
+        doc.setTextColor(dark)
+        const suppStr = doc.splitTextToSize(`  + ${label}`, 140) as string[]
         doc.text(suppStr, 25, currentY)
-        if (idx === (d.supplementsList as string[]).length - 1) {
-          doc.setTextColor(dark)
-          doc.text(formatPrice(d.supplementsHT), 185, currentY, { align: "right" })
+        if (montant > 0) {
+          doc.text(fmtMontant(montant), 185, currentY, { align: "right" })
         }
         currentY += suppStr.length * 5 + 2
       })
+    }
+
+    // Remise dans le tableau
+    if ((d.discountValue ?? 0) > 0) {
       doc.setFont("helvetica", "normal")
+      doc.setTextColor(200, 50, 50)
+      let discLabel = "  Remise"
+      if (d.discountType === "percent") discLabel += ` (${d.discountValue}%)`
+      doc.text(discLabel, 25, currentY)
+      const base = d.originalHT || d.amountHT || 0
+      const absDiscount = d.discountType === "percent" ? base * (d.discountValue / 100) : d.discountValue
+      doc.text("-" + fmtMontant(absDiscount), 185, currentY, { align: "right" })
+      currentY += 7
       doc.setTextColor(dark)
     }
 
-    // Notes en italique sous la désignation
     if (d.notes) {
       doc.setFont("helvetica", "italic")
       doc.setTextColor(gray)
@@ -437,33 +450,71 @@ async function _buildPDFDoc(
     doc.text(formatPrice(d.baseHT || d.amountHT || d.amount), 185, currentY, { align: "right" })
     currentY += descStr.length * 5 + 3
 
-    if (d.supplementsHT && d.supplementsHT > 0) {
-      doc.setFont("helvetica", "italic")
-      const suppList: string = (d.supplementsList as string[] | undefined)?.join(", ") || ""
-      const suppStr = doc.splitTextToSize(`Suppléments : ${suppList}`, 120) as string[]
-      doc.text(suppStr, 25, currentY)
-      doc.text(formatPrice(d.supplementsHT), 185, currentY, { align: "right" })
-      currentY += suppStr.length * 5 + 3
+    // Suppléments : une ligne par supplément
+    if (d.supplementsList && Array.isArray(d.supplementsList) && d.supplementsList.length > 0) {
+      d.supplementsList.forEach((supp: unknown) => {
+        let label = ''
+        let montant = 0
+        if (typeof supp === 'string') {
+          label = supp
+          montant = 0
+        } else if (typeof supp === 'object' && supp !== null) {
+          const s = supp as { label?: string; montant?: number }
+          label = s.label ?? ''
+          montant = s.montant ?? 0
+        }
+        if (!label) return
+        doc.setFont("helvetica", "normal")
+        doc.setTextColor(dark)
+        const suppStr = doc.splitTextToSize(`  + ${label}`, 120) as string[]
+        doc.text(suppStr, 25, currentY)
+        if (montant > 0) {
+          doc.text(fmtMontant(montant), 185, currentY, { align: "right" })
+        }
+        currentY += suppStr.length * 5 + 2
+      })
+    }
+
+    // Remise dans le tableau
+    if ((d.discountValue ?? 0) > 0) {
       doc.setFont("helvetica", "normal")
+      doc.setTextColor(200, 50, 50)
+      let discLabel = "  Remise"
+      if (d.discountType === "percent") discLabel += ` (${d.discountValue}%)`
+      doc.text(discLabel, 25, currentY)
+      const base = d.originalHT || d.amountHT || 0
+      const absDiscount = d.discountType === "percent" ? base * (d.discountValue / 100) : d.discountValue
+      doc.text("-" + fmtMontant(absDiscount), 185, currentY, { align: "right" })
+      currentY += 7
+      doc.setTextColor(dark)
     }
   }
 
-  // Remise
-  if ((d.discountValue ?? 0) > 0) {
-    doc.setTextColor(200, 50, 50)
-    let discLabel = "Remise commerciale"
-    if (d.discountType === "percent") discLabel += ` (${d.discountValue}%)`
-    doc.text(discLabel, 25, currentY)
-    const base = d.originalHT || d.amountHT || 0
-    const absDiscount =
-      d.discountType === "percent" ? base * (d.discountValue / 100) : d.discountValue
-    doc.text("-" + formatPrice(absDiscount), 185, currentY, { align: "right" })
-    currentY += 8
+  // Encart "Prestation réalisée par" (isInvoice uniquement)
+  if (isInvoice && (d.driverName || d.vehicleName)) {
+    currentY += 4
+    doc.setFontSize(8.5)
+    doc.setFont("helvetica", "italic")
+    doc.setTextColor(gray)
+    const prestLine = [
+      d.driverName,
+      d.vehicleName && d.vehiclePlate
+        ? `${d.vehicleName} (${d.vehiclePlate})`
+        : d.vehicleName,
+    ].filter(Boolean).join(" — ")
+    if (prestLine) {
+      doc.text(`Prestation réalisée par : ${prestLine}`, 20, currentY)
+      currentY += 5
+    }
+    doc.setFont("helvetica", "normal")
     doc.setTextColor(dark)
+    doc.setFontSize(9)
   }
 
-  // ── 5. TOTAUX ────────────────────────────────────────────────────
+  // 5. TOTAUX
   if (currentY + 50 > 278) { doc.addPage(); currentY = 20 }
+
+  const isFranchise = !d.tva10Amount && !d.tva20Amount && !d.tva5_5Amount && (d.tva === 0 || !d.tva)
 
   doc.setDrawColor(200)
   doc.setLineWidth(0.3)
@@ -474,65 +525,19 @@ async function _buildPDFDoc(
   doc.setFont("helvetica", "normal")
   doc.setTextColor(dark)
 
-  if (!isAssujettiTVA) {
-    // 7e — micro-entrepreneur : montant unique HT = TTC
+  if (isFranchise) {
+    // pas de lignes détail — déjà affichées dans le tableau de désignation
+  } else {
     if (d.amountHT && d.amountHT > 0) {
       doc.text("Total HT", 140, currentY)
-      doc.text(formatPrice(d.amountHT), 185, currentY, { align: "right" })
+      doc.text(fmtMontant(d.amountHT), 185, currentY, { align: "right" })
       currentY += 7
-    }
-    // Pas de lignes TVA
-  } else if (d.amountHT && d.amountHT > 0) {
-    // 7d — assujetti TVA : lignes multi-TVA avec références légales
-    doc.text("Total HT", 140, currentY)
-    doc.text(formatPrice(d.amountHT), 185, currentY, { align: "right" })
-    currentY += 7
 
-    if (d.tva10Amount && d.tva10Amount > 0) {
-      doc.setFontSize(9)
-      doc.setFont("helvetica", "normal")
-      doc.text("TVA 10%", 140, currentY)
-      doc.text(formatPrice(d.tva10Amount), 185, currentY, { align: "right" })
-      currentY += 4.5
-      doc.setFontSize(8)
-      doc.setTextColor(gray)
-      doc.text("Transport de personnes", 142, currentY)
-      currentY += 4
-      doc.setFont("helvetica", "italic")
-      doc.setFontSize(7.5)
-      doc.text("(art. 279 b du CGI)", 142, currentY)
-      doc.setFont("helvetica", "normal")
-      doc.setTextColor(dark)
-      doc.setFontSize(9)
-      currentY += 5.5
-    }
-    if (d.tva20Amount && d.tva20Amount > 0) {
-      doc.text("TVA 20%", 140, currentY)
-      doc.text(formatPrice(d.tva20Amount), 185, currentY, { align: "right" })
-      currentY += 4.5
-      doc.setFontSize(8)
-      doc.setTextColor(gray)
-      doc.text("Suppléments et mise à disposition", 142, currentY)
-      currentY += 4
-      doc.setFont("helvetica", "italic")
-      doc.setFontSize(7.5)
-      doc.text("(art. 278 du CGI)", 142, currentY)
-      doc.setFont("helvetica", "normal")
-      doc.setTextColor(dark)
-      doc.setFontSize(9)
-      currentY += 5.5
-    }
-    if (d.tva55Amount && d.tva55Amount > 0) {
-      doc.text("TVA 5,5% (art. 279 du CGI)", 140, currentY)
-      doc.text(formatPrice(d.tva55Amount), 185, currentY, { align: "right" })
-      currentY += 7
-    }
-    // Fallback : taux unique sans multi-TVA
-    if (!d.tva10Amount && !d.tva20Amount && !d.tva55Amount && d.tva) {
-      const tvaRate: number = d.tvaRate ?? 10
-      if (tvaRate === 10) {
+      if (d.tva10Amount && d.tva10Amount > 0) {
+        doc.setFontSize(9)
+        doc.setFont("helvetica", "normal")
         doc.text("TVA 10%", 140, currentY)
-        doc.text(formatPrice(d.tva), 185, currentY, { align: "right" })
+        doc.text(fmtMontant(d.tva10Amount), 185, currentY, { align: "right" })
         currentY += 4.5
         doc.setFontSize(8)
         doc.setTextColor(gray)
@@ -540,33 +545,79 @@ async function _buildPDFDoc(
         currentY += 4
         doc.setFont("helvetica", "italic")
         doc.setFontSize(7.5)
-        doc.text("(art. 279 b du CGI)", 142, currentY)
+        doc.text("(art. 279 b du CGI)", 142, currentY)
         doc.setFont("helvetica", "normal")
         doc.setTextColor(dark)
         doc.setFontSize(9)
         currentY += 5.5
-      } else {
-        doc.text(`TVA ${tvaRate}%`, 140, currentY)
-        doc.text(formatPrice(d.tva), 185, currentY, { align: "right" })
+      }
+      if (d.tva20Amount && d.tva20Amount > 0) {
+        doc.text("TVA 20%", 140, currentY)
+        doc.text(fmtMontant(d.tva20Amount), 185, currentY, { align: "right" })
+        currentY += 4.5
+        doc.setFontSize(8)
+        doc.setTextColor(gray)
+        doc.text("Suppléments et mise à disposition", 142, currentY)
+        currentY += 4
+        doc.setFont("helvetica", "italic")
+        doc.setFontSize(7.5)
+        doc.text("(art. 278 du CGI)", 142, currentY)
+        doc.setFont("helvetica", "normal")
+        doc.setTextColor(dark)
+        doc.setFontSize(9)
+        currentY += 5.5
+      }
+      if (d.tva55Amount && d.tva55Amount > 0) {
+        doc.text("TVA 5,5% (art. 279 du CGI)", 140, currentY)
+        doc.text(fmtMontant(d.tva55Amount), 185, currentY, { align: "right" })
         currentY += 7
       }
+      // Fallback taux unique
+      if (!d.tva10Amount && !d.tva20Amount && !d.tva55Amount && d.tva) {
+        const tvaRate: number = d.tvaRate ?? 10
+        if (tvaRate === 10) {
+          doc.text("TVA 10%", 140, currentY)
+          doc.text(fmtMontant(d.tva), 185, currentY, { align: "right" })
+          currentY += 4.5
+          doc.setFontSize(8)
+          doc.setTextColor(gray)
+          doc.text("Transport de personnes", 142, currentY)
+          currentY += 4
+          doc.setFont("helvetica", "italic")
+          doc.setFontSize(7.5)
+          doc.text("(art. 279 b du CGI)", 142, currentY)
+          doc.setFont("helvetica", "normal")
+          doc.setTextColor(dark)
+          doc.setFontSize(9)
+          currentY += 5.5
+        } else {
+          doc.text(`TVA ${tvaRate}%`, 140, currentY)
+          doc.text(fmtMontant(d.tva), 185, currentY, { align: "right" })
+          currentY += 7
+        }
+      }
+    } else {
+      doc.text("Total Net", 140, currentY)
+      doc.text(fmtMontant(d.amount || 0), 185, currentY, { align: "right" })
+      currentY += 7
     }
-  } else {
-    doc.text("Total Net", 140, currentY)
-    doc.text(formatPrice(d.amount), 185, currentY, { align: "right" })
-    currentY += 7
   }
 
-  // Ligne or + TOTAL TTC
+  // Ligne or + TOTAL
   doc.setDrawColor(gold)
   doc.setLineWidth(0.5)
   doc.line(130, currentY, 190, currentY)
   currentY += 8
 
-  // Ancien prix barré (si remise)
+  // Libellé remise rouge + montant barré
   if (d.discountValue && d.originalTTC) {
-    const oldStr = formatPrice(d.originalTTC)
+    let remiseLabel = "Remise"
+    if (d.discountType === "percent") remiseLabel = `Remise (${d.discountValue}%)`
+    else if (d.discountType === "fixed") remiseLabel = `Remise (${d.discountValue} €)`
     doc.setFontSize(9)
+    doc.setTextColor(200, 50, 50)
+    doc.text(remiseLabel, 130, currentY)
+    const oldStr = fmtMontant(d.originalTTC)
     doc.setTextColor(150, 150, 150)
     doc.text(oldStr, 185, currentY, { align: "right" })
     const strW = doc.getTextWidth(oldStr)
@@ -579,22 +630,44 @@ async function _buildPDFDoc(
   doc.setFontSize(13)
   doc.setFont("helvetica", "bold")
   doc.setTextColor(gold)
-  doc.text(isVatApplicable(enterprise) ? "TOTAL TTC" : "TOTAL", 130, currentY)
-  doc.text(formatPrice(d.amount), 185, currentY, { align: "right" })
+  doc.text(isFranchise ? "TOTAL" : "TOTAL TTC", 130, currentY)
+  doc.text(fmtMontant(d.amount || 0), 185, currentY, { align: "right" })
   currentY += 6
 
-  // Mention TVA franchise via helper centralisé
-  const vatMentionText = getVatMention(enterprise)
-  if (vatMentionText) {
-    currentY += 4
-    doc.setFontSize(9)
-    doc.setFont("helvetica", "bold")
+  if (isFranchise) {
+    currentY += 2
+    doc.setFont("helvetica", "italic")
+    doc.setTextColor(gray)
+    doc.setFontSize(8.5)
+    doc.text("TVA non applicable, art. 293 B du CGI", 130, currentY)
+    doc.setFont("helvetica", "normal")
     doc.setTextColor(dark)
-    doc.text(vatMentionText, 130, currentY)
-    currentY += 6
+    doc.setFontSize(9)
+    currentY += 5
   }
 
-  // ── 5b. CONDITIONS DE RÈGLEMENT (isInvoice uniquement) ───────────────────
+  // 5b. CO2 (isInvoice uniquement — art. L1431-3 C. transp.)
+  if (isInvoice && d.trajet?.type_energie && d.trajet?.distance) {
+    const co2Map: Record<string, number> = { electrique: 0, hybride: 50, essence: 120, diesel: 110 }
+    const gPerKm: number = co2Map[d.trajet.type_energie as string] ?? 110
+    const totalG: number = Math.round(gPerKm * (d.trajet.distance as number))
+    let co2Text: string
+    if (totalG < 1000) {
+      co2Text = `${totalG} g CO₂ émis (art. L1431-3 C. transp.)`
+    } else {
+      const kg = (totalG / 1000).toFixed(1).replace(".", ",")
+      co2Text = `${kg} kg CO₂ émis (art. L1431-3 C. transp.)`
+    }
+    currentY += 4
+    doc.setFontSize(8.5)
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(gray)
+    doc.text(co2Text, 20, currentY)
+    doc.setTextColor(dark)
+    currentY += 5
+  }
+
+  // 5c. CONDITIONS DE REGLEMENT (isInvoice uniquement)
   if (isInvoice) {
     currentY += 6
     if (currentY + 30 > 278) { doc.addPage(); currentY = 20 }
@@ -616,9 +689,9 @@ async function _buildPDFDoc(
     doc.setTextColor(dark)
   }
 
-  // ── 6. CGV ────────────────────────────────────────────────────────
+  // 6. CGV (BC uniquement)
   currentY += 14
-  if (d.cgvText) {
+  if (!isInvoice && d.cgvText) {
     if (currentY > 238) { doc.addPage(); currentY = 20 }
     doc.setFontSize(8)
     doc.setFont("helvetica", "bold")
@@ -636,26 +709,26 @@ async function _buildPDFDoc(
   doc.setFont("helvetica", "italic")
   doc.text("Document généré par NoX VTC", 105, 290, { align: "center" })
 
-  // ── [Factur-X] BT field map (EN 16931 / Factur-X CII profile COMFORT) ──
-  // BT-1   InvoiceNumber          → d.number
-  // BT-2   InvoiceIssueDate       → d.date
-  // BT-9   PaymentDueDate         → d.echeance
-  // BT-10  BuyerReference         → d.bcRef
-  // BT-23  BusinessProcessType    → enterprise.rcProNumber
-  // BT-29  SellerIdentifier       → enterprise.siren
-  // BT-31  SellerVATId            → enterprise.tvaIntra
-  // BT-44  BuyerName              → d.client
-  // BT-47  BuyerLegalRegistration → d.clientSiren
-  // BT-48  BuyerVATId             → (non collecté)
-  // BT-50  BuyerAddress           → d.clientAddress
-  // BT-55  BuyerCountryCode       → d.clientAddress.pays
-  // BT-73  DeliveryDate           → d.trajet.date
-  // BT-92  DocumentLevelCharge    → d.supplementsHT
-  // BT-106 InvoiceTotalAmountHT   → d.amountHT
-  // BT-110 InvoiceTotalVATAmount  → d.tva
-  // BT-112 InvoiceTotalAmountTTC  → d.amount
-  // BT-115 AmountDueForPayment    → d.amount
-  // BT-131 InvoiceLineNetAmount   → item.amountHT
+  // [Factur-X] BT field map (EN 16931 / Factur-X CII profile COMFORT)
+  // BT-1   InvoiceNumber          -> d.number
+  // BT-2   InvoiceIssueDate       -> d.date
+  // BT-9   PaymentDueDate         -> d.echeance
+  // BT-10  BuyerReference         -> d.bcRef
+  // BT-23  BusinessProcessType    -> enterprise.rcProNumber
+  // BT-29  SellerIdentifier       -> enterprise.siren
+  // BT-31  SellerVATId            -> enterprise.tvaIntra
+  // BT-44  BuyerName              -> d.client
+  // BT-47  BuyerLegalRegistration -> d.clientSiren
+  // BT-48  BuyerVATId             -> (non collecte)
+  // BT-50  BuyerAddress           -> d.clientAddress
+  // BT-55  BuyerCountryCode       -> d.clientAddress.pays
+  // BT-73  DeliveryDate           -> d.trajet.date
+  // BT-92  DocumentLevelCharge    -> d.supplementsHT
+  // BT-106 InvoiceTotalAmountHT   -> d.amountHT
+  // BT-110 InvoiceTotalVATAmount  -> d.tva
+  // BT-112 InvoiceTotalAmountTTC  -> d.amount
+  // BT-115 AmountDueForPayment    -> d.amount
+  // BT-131 InvoiceLineNetAmount   -> item.amountHT
 
   return doc
 }

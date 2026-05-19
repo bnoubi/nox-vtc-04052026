@@ -6,6 +6,12 @@ import { Building2, ArrowRight, ShieldCheck, User, Save, CheckCircle2 } from "lu
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 
+function getVatFromStatut(statut: string): { vat_mode: 'franchise' | 'normal'; is_micro_entrepreneur: boolean } {
+  if (statut === 'Micro-Entreprise') return { vat_mode: 'franchise', is_micro_entrepreneur: true }
+  if (statut === 'EI' || statut === 'EIRL') return { vat_mode: 'franchise', is_micro_entrepreneur: false }
+  return { vat_mode: 'normal', is_micro_entrepreneur: false }
+}
+
 export function OnboardingComponent({ onComplete }: { onComplete: () => void }) {
   const [step, setStep] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -161,6 +167,7 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
       const { data: { user } } = await supabase.auth.getUser()
 
       if (user) {
+        const vatFields = statutJuridique ? getVatFromStatut(statutJuridique) : {}
         await supabase
           .from("profiles")
           .upsert({
@@ -172,7 +179,8 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
             adresse: adresse || null,
             code_postal: codePostal || null,
             ville: ville || null,
-            complement_adresse: complementAdresse || null
+            complement_adresse: complementAdresse || null,
+            ...vatFields
           }, { onConflict: 'user_id' })
 
         setStep(3)
