@@ -1108,7 +1108,9 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
         <button onClick={() => setStep("menu")} className="p-2 -ml-2 rounded-lg hover:bg-white/5"><ChevronLeft className="h-5 w-5 text-foreground" /></button>
         <div className="flex-1">
           <h1 className="text-base font-bold text-foreground">
-            {prefillBC ? "Dupliquer le Bon de Réservation" : "Nouveau Bon de Réservation"}
+            {prefillBC
+              ? (prefillBC.status === "brouillon" ? "Reprendre le brouillon" : "Dupliquer le Bon de Réservation")
+              : "Nouveau Bon de Réservation"}
           </h1>
           <p className="text-[10px] text-muted-foreground">{brNumber} • Émis le {formatDateFr(creationDate)}</p>
         </div>

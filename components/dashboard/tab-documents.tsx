@@ -21,6 +21,7 @@ import {
   Play,
   Flag,
   Trash2,
+  Pencil,
 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
@@ -95,14 +96,20 @@ function BCDetail({
   enterprise,
   onClose,
   onShare,
+  onInvoice,
+  onEdit,
 }: {
   bc: BCDocument
   enterprise: EnterpriseProfile
   onClose: () => void
   onShare: (bc: BCDocument) => void
+  onInvoice: (bc: BCDocument) => void
+  onEdit: (bc: BCDocument) => void
 }) {
-  const { updateBC } = useNox()
+  const { updateBC, invoices } = useNox()
+  const alreadyInvoiced = invoices.some((inv: InvoiceDocument) => inv.bcRef === bc.number)
   const [isLoading, setIsLoading] = useState(false)
+  const [showCancelChoice, setShowCancelChoice] = useState(false)
   const status = bcStatusConfig[bc.status] ?? bcStatusConfig.en_attente
 
   function handleTransition(newStatus: BCStatus, message: string) {
@@ -285,6 +292,15 @@ function BCDetail({
              <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest ml-1">Actions</p>
 
              {/* Bouton de transition principal selon le statut */}
+             {bc.status === "brouillon" && (
+               <button
+                 onClick={() => { onEdit(bc); onClose() }}
+                 className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl bg-gold/10 border border-gold/30 text-gold text-xs font-semibold hover:bg-gold/20 transition-all"
+               >
+                 <Pencil className="h-4 w-4" />
+                 Reprendre la saisie
+               </button>
+             )}
              {bc.status === "en_attente" && (
                <button
                  onClick={() => handleTransition("confirme", "Bon de commande confirmé")}
@@ -295,7 +311,24 @@ function BCDetail({
                  Confirmer
                </button>
              )}
-             {bc.status === "confirme" && (
+             {bc.status === "confirme" && !alreadyInvoiced && (
+               <button
+                 onClick={() => { onInvoice(bc); onClose() }}
+                 disabled={isLoading}
+                 className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl bg-gold/10 border border-gold/30 text-gold text-xs font-semibold hover:bg-gold/20 transition-all disabled:opacity-50"
+               >
+                 <Receipt className="h-4 w-4" />
+                 Facturer
+               </button>
+             )}
+             {bc.status === "confirme" && alreadyInvoiced && (
+               <div className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 text-muted-foreground text-xs font-semibold opacity-60 cursor-not-allowed">
+                 <Receipt className="h-4 w-4" />
+                 Facture déjà créée
+               </div>
+             )}
+             {/* DISABLED (workflow simplifié) — pour réactiver, retirer le "false &&" */}
+             {false && bc.status === "confirme" && (
                <button
                  onClick={() => handleTransition("en_cours", "Course démarrée")}
                  disabled={isLoading}
@@ -305,7 +338,7 @@ function BCDetail({
                  Démarrer la course
                </button>
              )}
-             {bc.status === "en_cours" && (
+             {false && bc.status === "en_cours" && (
                <button
                  onClick={() => handleTransition("termine", "Course terminée")}
                  disabled={isLoading}
@@ -317,37 +350,54 @@ function BCDetail({
              )}
 
              {/* Actions secondaires */}
-             <div className={cn(
-               "grid gap-3",
-               (bc.status === "en_attente" || bc.status === "confirme") ? "grid-cols-3" : "grid-cols-2"
-             )}>
-                <button
-                  onClick={handleCancel}
-                  disabled={isLoading || bc.status === "annule_client" || bc.status === "annule_chauffeur" || bc.status === "termine"}
-                  className="flex items-center justify-center gap-2 p-4 rounded-2xl bg-secondary/50 border border-onyx-border/50 text-xs font-semibold text-foreground hover:bg-secondary transition-all disabled:opacity-50"
-                >
-                  <X className="h-4 w-4" />
-                  Annuler
-                </button>
-                {(bc.status === "en_attente" || bc.status === "confirme") && (
-                  <button
-                    onClick={() => handleTransition("annule_chauffeur", "BC annulé par le chauffeur")}
-                    disabled={isLoading}
-                    className="flex items-center justify-center gap-2 p-4 rounded-2xl bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-semibold hover:bg-orange-500/20 transition-all disabled:opacity-50"
-                  >
-                    <XCircle className="h-4 w-4" />
-                    Chauf.
-                  </button>
-                )}
-                <button
-                  onClick={() => onShare(bc)}
-                  disabled={isLoading}
-                  className="flex items-center justify-center gap-2 p-4 rounded-2xl bg-secondary/50 border border-onyx-border/50 text-xs font-semibold text-foreground hover:bg-secondary transition-all disabled:opacity-50"
-                >
-                  <Share2 className="h-4 w-4" />
-                  Partager
-                </button>
-             </div>
+             {showCancelChoice ? (
+               <div className="space-y-2">
+                 <p className="text-[10px] text-muted-foreground text-center">Motif d&apos;annulation</p>
+                 <div className="grid grid-cols-2 gap-2">
+                   <button
+                     onClick={() => handleTransition("annule_client", "BC annulé — client")}
+                     disabled={isLoading}
+                     className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold hover:bg-red-500/20 transition-all disabled:opacity-50"
+                   >
+                     <X className="h-4 w-4" />
+                     Client
+                   </button>
+                   <button
+                     onClick={() => handleTransition("annule_chauffeur", "BC annulé — chauffeur")}
+                     disabled={isLoading}
+                     className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-semibold hover:bg-orange-500/20 transition-all disabled:opacity-50"
+                   >
+                     <XCircle className="h-4 w-4" />
+                     Chauffeur
+                   </button>
+                 </div>
+                 <button
+                   onClick={() => setShowCancelChoice(false)}
+                   className="w-full text-[10px] text-muted-foreground hover:text-foreground transition-colors py-1"
+                 >
+                   Retour
+                 </button>
+               </div>
+             ) : (
+               <div className="grid grid-cols-2 gap-3">
+                 <button
+                   onClick={() => setShowCancelChoice(true)}
+                   disabled={isLoading || bc.status === "annule_client" || bc.status === "annule_chauffeur"}
+                   className="flex items-center justify-center gap-2 p-4 rounded-2xl bg-secondary/50 border border-onyx-border/50 text-xs font-semibold text-foreground hover:bg-secondary transition-all disabled:opacity-50"
+                 >
+                   <X className="h-4 w-4" />
+                   Annuler
+                 </button>
+                 <button
+                   onClick={() => onShare(bc)}
+                   disabled={isLoading}
+                   className="flex items-center justify-center gap-2 p-4 rounded-2xl bg-secondary/50 border border-onyx-border/50 text-xs font-semibold text-foreground hover:bg-secondary transition-all disabled:opacity-50"
+                 >
+                   <Share2 className="h-4 w-4" />
+                   Partager
+                 </button>
+               </div>
+             )}
           </div>
         </div>
       </motion.div>
@@ -626,25 +676,31 @@ function BCCard({
     }
   }
 
+  // DISABLED (workflow simplifié) — pour réactiver, décommenter les deux lignes ci-dessous
+  // doc.status === "confirme" ? { icon: Play, label: "Démarrer" } :
+  // doc.status === "en_cours" ? { icon: Flag, label: "Terminer" } :
   const transitionAction =
     doc.status === "en_attente" ? { icon: Check, label: "Confirmer" } :
-    doc.status === "confirme" ? { icon: Play, label: "Démarrer" } :
-    doc.status === "en_cours" ? { icon: Flag, label: "Terminer" } :
     null
 
   return (
-    <div className={cn(
-      "relative p-4 rounded-2xl bg-onyx-card border transition-colors",
-      isSelectable && isSelected ? "border-red-500/40 bg-red-500/5" : "border-onyx-border/50 hover:border-gold/20"
-    )}>
+    <div
+      className={cn(
+        "relative p-4 rounded-2xl bg-onyx-card border transition-colors cursor-pointer",
+        isSelectable && isSelected ? "border-red-500/40 bg-red-500/5" : "border-onyx-border/50 hover:border-gold/20"
+      )}
+      onClick={() => onView(doc)}
+    >
       <div className="flex items-start justify-between mb-2.5">
         <div className="flex items-center gap-2.5">
           {isSelectable && (
-            <Checkbox
-              checked={isSelected}
-              onCheckedChange={() => onToggleSelect(doc.id)}
-              className="shrink-0 border-onyx-border/60 data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
-            />
+            <span onClick={(e) => e.stopPropagation()}>
+              <Checkbox
+                checked={isSelected}
+                onCheckedChange={() => onToggleSelect(doc.id)}
+                className="shrink-0 border-onyx-border/60 data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
+              />
+            </span>
           )}
           <div className="w-8 h-8 rounded-lg bg-gold/10 flex items-center justify-center shrink-0">
             <FileText className="h-3.5 w-3.5 text-gold" strokeWidth={1.5} />
@@ -655,7 +711,7 @@ function BCCard({
           </div>
         </div>
         <button
-          onClick={() => setMenuOpen(!menuOpen)}
+          onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
           className="p-1.5 -mt-0.5 -mr-1 rounded-lg hover:bg-secondary transition-colors"
         >
           <MoreHorizontal className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
@@ -679,7 +735,7 @@ function BCCard({
       {/* Facturer button for signed BCs */}
       {canInvoice && (
         <button
-          onClick={() => { if (!alreadyInvoiced) onInvoice(doc) }}
+          onClick={(e) => { e.stopPropagation(); if (!alreadyInvoiced) onInvoice(doc) }}
           disabled={alreadyInvoiced}
           className={cn(
             "mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-all",
@@ -697,7 +753,7 @@ function BCCard({
       {/* Quick actions menu */}
       {menuOpen && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+          <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setMenuOpen(false) }} />
           <div className="absolute top-12 right-3 z-20 bg-onyx-card border border-onyx-border rounded-xl py-1 shadow-2xl shadow-black/60 min-w-[150px]">
             {[
               ...(transitionAction ? [{ icon: transitionAction.icon, label: transitionAction.label, highlight: true }] : []),
@@ -708,7 +764,7 @@ function BCCard({
             ].map((action) => (
               <button
                 key={action.label}
-                onClick={() => handleAction(action.label)}
+                onClick={(e) => { e.stopPropagation(); handleAction(action.label) }}
                 className={cn(
                   "flex items-center gap-2.5 w-full px-3.5 py-2.5 text-xs hover:bg-secondary/50 transition-colors",
                   action.destructive ? "text-red-400" : action.highlight ? "text-gold font-semibold" : "text-foreground",
@@ -1125,7 +1181,7 @@ export function DocumentsTab() {
         {/* Type Tabs */}
         <div className="flex gap-2 mb-3">
           {[
-            { id: "bc" as DocType, label: "Bons de Commande", icon: FileText, count: filteredBCs.length },
+            { id: "bc" as DocType, label: "Réservations", icon: FileText, count: filteredBCs.length },
             { id: "facture" as DocType, label: "Factures", icon: Receipt, count: filteredInvoices.length },
           ].map((tab) => (
             <button
@@ -1173,8 +1229,6 @@ export function DocumentsTab() {
               { id: "brouillon", label: "Brouillon" },
               { id: "en_attente", label: "En attente" },
               { id: "confirme", label: "Confirmé" },
-              { id: "en_cours", label: "En cours" },
-              { id: "termine", label: "Terminé" },
               { id: "annule", label: "Annulés" },
               { id: "converti", label: "Convertis" },
             ] as { id: BCFilter; label: string }[]).map((pill) => (
@@ -1266,6 +1320,8 @@ export function DocumentsTab() {
             enterprise={enterprise}
             onClose={() => setViewingBC(null)}
             onShare={handleShareBC}
+            onInvoice={(bc: BCDocument) => { setViewingBC(null); setInvoicingBC(bc) }}
+            onEdit={(bc: BCDocument) => { setViewingBC(null); setDuplicateBC(bc); setShowBCFlow(true) }}
           />
         )}
       </AnimatePresence>
