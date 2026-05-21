@@ -100,11 +100,6 @@ interface NoxContextType {
 
 const NoxContext = createContext<NoxContextType | undefined>(undefined)
 
-// Clé de stockage isolée par user_id — garantit l'isolation stricte inter-comptes
-function getStorageKey(userId: string): string {
-  return `nox_vtc_u_${userId}_v1`
-}
-
 // Purge l'ancienne clé globale non-isolée si elle existe encore
 function purgeGlobalStorageIfNeeded() {
   if (typeof window !== "undefined") {
@@ -131,12 +126,16 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   const refreshUserProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      const { data } = await supabase.from("user_accounts").select("prenom, nom, phone").eq("id", user.id).single()
+      const { data } = await supabase
+        .from("profiles")
+        .select("prenom_representant_legal, nom_representant_legal, telephone")
+        .eq("user_id", user.id)
+        .single()
       setUserProfile({
         email: user.email || "",
-        prenom: data?.prenom || "",
-        nom: data?.nom || "",
-        phone: data?.phone || ""
+        prenom: data?.prenom_representant_legal || "",
+        nom: data?.nom_representant_legal || "",
+        phone: data?.telephone || ""
       })
     }
   }
@@ -223,22 +222,32 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       const uid = user.id
       setUserId(uid)
 
-      // Fetch from actual backend profiles
+      // Plan depuis subscriptions (source de vérité absolue)
       try {
-        const { data: profile } = await supabase
-          .from("user_accounts")
-          .select("plan, tokens, onboarding_status")
-          .eq("id", uid)
+        const { data: sub } = await supabase
+          .from("subscriptions")
+          .select("plan, onboarding_status")
+          .eq("user_id", uid)
           .single()
-
-        if (profile) {
-          if (profile.plan) setPlan(profile.plan as Plan)
-          if (profile.tokens !== undefined) setTokens(profile.tokens)
-          if (profile.onboarding_status) setOnboardingStatus(profile.onboarding_status)
+        if (sub) {
+          if (sub.plan) setPlan(sub.plan as Plan)
+          if (sub.onboarding_status) setOnboardingStatus(sub.onboarding_status)
         }
-        
-        await refreshUserProfile()
+      } catch (err) {}
 
+      // Solde de jetons depuis wallets (source de vérité absolue)
+      try {
+        const { data: wallet } = await supabase
+          .from("wallets")
+          .select("balance")
+          .eq("user_id", uid)
+          .single()
+        if (wallet) setTokens(wallet.balance ?? 0)
+      } catch (err) {}
+
+      await refreshUserProfile()
+
+      try {
         const { data: entProfile } = await supabase
           .from("profiles")
           .select("*")
@@ -540,22 +549,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
       }
 
-      // Charger les données propres à CET utilisateur depuis son espace isolé
-      const storageKey = getStorageKey(uid)
-      const savedData = localStorage.getItem(storageKey)
-
-      if (savedData) {
-        try {
-          const parsed = JSON.parse(savedData)
-          // We intentionally do not override plan and tokens with local storage
-          // if we want the DB to be the source of truth, but we keep it as fallback
-          if (!plan && parsed.plan) setPlan(parsed.plan)
-          if (tokens === 0 && parsed.tokens) setTokens(parsed.tokens)
-          // CGV désormais chargées depuis Supabase public.profiles — plus de localStorage
-        } catch (e) {
-        }
-      }
-
       setIsLoaded(true)
     }
 
@@ -572,19 +565,6 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe()
     }
   }, [supabase])
-
-  // ─── Étape 2 : Persister uniquement dans l'espace de l'utilisateur connecté ───
-  useEffect(() => {
-    if (!isLoaded || !userId) return
-    const storageKey = getStorageKey(userId)
-    localStorage.setItem(storageKey, JSON.stringify({
-      // clients, bcs, invoices & tariffs sont dans Supabase — plus en localStorage
-      plan, tokens,
-    }))
-  }, [
-    isLoaded, userId,
-    plan, tokens,
-  ])
 
   // ─── Mutations données métier ───
   const updateEnterprise = async (data: Partial<EnterpriseProfile>) => {
@@ -1438,21 +1418,34 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const upgrade = (target?: Plan) => {
-    if (target) {
-      setPlan(target)
-    } else {
-      setPlan((prev: Plan) => (prev === "SOLO" ? "DUO" : "TEAM"))
-    }
+  const upgrade = async (target?: Plan) => {
+    if (!userId) return
+    const newPlan: Plan = target ?? (plan === "SOLO" ? "DUO" : "TEAM")
+    const { error } = await supabase
+      .from("subscriptions")
+      .upsert({ user_id: userId, plan: newPlan }, { onConflict: "user_id" })
+    if (!error) setPlan(newPlan)
   }
 
-  const addTokens = (n: number) => setTokens((prev: number) => prev + n)
+  const addTokens = async (n: number) => {
+    if (!userId) return
+    const newBalance = tokens + n
+    const { error } = await supabase
+      .from("wallets")
+      .upsert({ user_id: userId, balance: newBalance }, { onConflict: "user_id" })
+    if (!error) setTokens(newBalance)
+  }
+
   const spendToken = () => {
-    if (tokens > 0) {
-      setTokens((prev: number) => prev - 1)
-      return true
+    if (tokens <= 0) return false
+    const newBalance = tokens - 1
+    setTokens(newBalance)
+    if (userId) {
+      supabase.from("wallets")
+        .upsert({ user_id: userId, balance: newBalance }, { onConflict: "user_id" })
+        .then(({ error }) => { if (error) setTokens(p => p + 1) })
     }
-    return false
+    return true
   }
 
   const driverCount = drivers.length
