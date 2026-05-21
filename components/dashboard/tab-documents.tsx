@@ -750,6 +750,30 @@ function BCCard({
         </button>
       )}
 
+      {/* CTA brouillon — Reprendre la saisie */}
+      {doc.status === "brouillon" && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDuplicate(doc) }}
+          className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold bg-gold/10 border border-gold/30 text-gold hover:bg-gold/20 active:scale-[0.98] transition-all"
+        >
+          <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
+          Reprendre la saisie
+          <ArrowRight className="h-3 w-3" strokeWidth={1.5} />
+        </button>
+      )}
+
+      {/* CTA en_attente — Confirmer */}
+      {doc.status === "en_attente" && (
+        <button
+          onClick={(e) => { e.stopPropagation(); updateBC(doc.id, { status: "confirme" }); toast.success("Bon de commande confirmé") }}
+          className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold bg-gold/10 border border-gold/30 text-gold hover:bg-gold/20 active:scale-[0.98] transition-all"
+        >
+          <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
+          Confirmer
+          <ArrowRight className="h-3 w-3" strokeWidth={1.5} />
+        </button>
+      )}
+
       {/* Quick actions menu */}
       {menuOpen && (
         <>
