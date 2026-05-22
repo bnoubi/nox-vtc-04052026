@@ -1,0 +1,29 @@
+/* Back-Office Admin — CSS isolé, n'affecte pas le portail client */
+
+[data-admin-theme="dark"] {
+  --admin-background: #0F0F0F;
+  --admin-card: #1A1A1A;
+  --admin-sidebar: #111111;
+  --admin-primary: #C5A059;
+  --admin-primary-light: #E8D5A3;
+  --admin-foreground: #F2F2F2;
+  --admin-muted-foreground: #888888;
+  --admin-border: #2E2E2E;
+  --admin-destructive: #E53E3E;
+  --admin-success: #38A169;
+  --admin-active-bg: #2A2A1A;
+}
+
+[data-admin-theme="light"] {
+  --admin-background: #FAFAFA;
+  --admin-card: #FFFFFF;
+  --admin-sidebar: #F5F5F5;
+  --admin-primary: #C5A059;
+  --admin-primary-light: #8B6F2D;
+  --admin-foreground: #1A1A1A;
+  --admin-muted-foreground: #6B7280;
+  --admin-border: #E5E7EB;
+  --admin-destructive: #DC2626;
+  --admin-success: #059669;
+  --admin-active-bg: #FEF3C7;
+}
