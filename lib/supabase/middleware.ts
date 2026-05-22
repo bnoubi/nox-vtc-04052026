@@ -30,9 +30,13 @@ export async function updateSession(request: NextRequest) {
   // IMPORTANT: Avoid writing any logic between createServerClient and
   // supabase.auth.getUser(). A simple mistake could make it very hard to debug
   // issues with cross-browser cookies.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  let user = null
+  try {
+    const { data } = await supabase.auth.getUser()
+    user = data.user
+  } catch {
+    // AuthApiError (e.g. refresh_token_not_found) — treat as unauthenticated
+  }
 
   const isAuthRoute =
     request.nextUrl.pathname.startsWith('/login') ||
