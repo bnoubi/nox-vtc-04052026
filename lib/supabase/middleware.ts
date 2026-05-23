@@ -38,22 +38,32 @@ export async function updateSession(request: NextRequest) {
     // AuthApiError (e.g. refresh_token_not_found) — treat as unauthenticated
   }
 
+  const { pathname } = request.nextUrl
+
+  // /auth/callback doit être TOUJOURS accessible — la session y est établie via exchangeCodeForSession.
+  // Toute vérification d'auth ici provoquerait une boucle OAuth si la session n'est pas encore prête.
+  const isCallbackRoute =
+    pathname.startsWith('/auth/callback') ||
+    pathname.startsWith('/auth/confirmed') ||
+    pathname.startsWith('/auth/reset-password')
+
   const isAuthRoute =
-    request.nextUrl.pathname.startsWith('/login') ||
-    request.nextUrl.pathname.startsWith('/register') ||
-    request.nextUrl.pathname.startsWith('/auth')
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/register') ||
+    pathname.startsWith('/auth')
 
-  const isApiRoute = request.nextUrl.pathname.startsWith('/api')
+  const isApiRoute = pathname.startsWith('/api')
 
-  // Toutes les routes non-auth nécessitent une session (sauf les API routes qui gèrent leur propre auth)
+  // Routes publiques : auth + callback → jamais de redirection vers /login
   if (!user && !isAuthRoute && !isApiRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  // Un utilisateur connecté ne peut pas accéder à /login ou /register
-  if (user && isAuthRoute && !request.nextUrl.pathname.startsWith('/auth/callback') && !request.nextUrl.pathname.startsWith('/auth/reset-password') && !request.nextUrl.pathname.startsWith('/auth/confirmed')) {
+  // Utilisateur connecté sur /login ou /register → rediriger vers l'app
+  // /auth/callback, /auth/confirmed, /auth/reset-password restent toujours accessibles
+  if (user && isAuthRoute && !isCallbackRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)

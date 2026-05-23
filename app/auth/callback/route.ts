@@ -6,28 +6,40 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get('code')
   const type = requestUrl.searchParams.get('type')
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.noxvtc.fr'
-  
+
+  console.log('[Auth Callback] Code reçu:', !!code)
+
   if (code) {
     const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data: { session }, error } = await supabase.auth.exchangeCodeForSession(code)
+
+    console.log('[Auth Callback] Session établie:', !!session)
+
     if (error) {
-      console.error('Error exchanging code for session:', error)
-      return NextResponse.redirect(new URL('/login?error=Invalid+Link', siteUrl))
+      console.error('[Auth Callback] Erreur échange de code:', error.message)
+      // Ne jamais rediriger vers /login ici — cela crée une boucle OAuth si un trigger DB
+      // échoue lors de la création du compte. L'app gère le renvoi vers /login côté client.
+      const redirectTo = '/'
+      console.log('[Auth Callback] Redirect vers:', redirectTo)
+      return NextResponse.redirect(new URL(redirectTo, siteUrl))
     }
 
-    // Confirmation d'inscription : on signe out (l'email est confirmé côté Supabase)
-    // puis on redirige vers la page de succès pour que l'utilisateur se connecte manuellement
+    // Confirmation d'inscription : sign-out puis page de succès
     if (type === 'signup') {
       await supabase.auth.signOut()
-      return NextResponse.redirect(new URL('/auth/confirmed', siteUrl))
+      const redirectTo = '/auth/confirmed'
+      console.log('[Auth Callback] Redirect vers:', redirectTo)
+      return NextResponse.redirect(new URL(redirectTo, siteUrl))
     }
   }
 
-  // Si le flux est de type recovery, on redirige vers l'écran de nouveau mot de passe
   if (type === 'recovery') {
-    return NextResponse.redirect(new URL('/reset-password', siteUrl))
+    const redirectTo = '/reset-password'
+    console.log('[Auth Callback] Redirect vers:', redirectTo)
+    return NextResponse.redirect(new URL(redirectTo, siteUrl))
   }
 
-  // Si c'est un email_change ou autre, on redirige à la racine après succès
-  return NextResponse.redirect(new URL('/', siteUrl))
+  const redirectTo = '/'
+  console.log('[Auth Callback] Redirect vers:', redirectTo)
+  return NextResponse.redirect(new URL(redirectTo, siteUrl))
 }
