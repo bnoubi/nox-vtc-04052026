@@ -3,6 +3,9 @@
 import { createServerClient } from '@supabase/ssr'
 import { createClient as createSbClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { Resend } from 'resend'
+
+const PLAN_RANK: Record<string, number> = { SOLO: 1, DUO: 2, TEAM: 3, ENTERPRISE: 4 }
 
 // ─── Types KPI ───────────────────────────────────────────────────────────────
 
@@ -47,9 +50,9 @@ export async function getAdminKPIs(): Promise<AdminKPIs> {
   const startPrev = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
 
   const [
-    // 1. Abonnés actifs (point-in-time — pas de variation historique)
+    // 1. Abonnés actifs — user_ids distincts avec subscription active
     subActive,
-    // 2. Abonnés en essai
+    // 2. Abonnés en essai — user_ids distincts
     subTrial,
     // 3. Abonnements expirés — mois courant / mois précédent
     subExpCurr,
@@ -71,9 +74,9 @@ export async function getAdminKPIs(): Promise<AdminKPIs> {
     inscritsPrev,
   ] = await Promise.all([
     // 1
-    db.from('subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+    db.from('subscriptions').select('user_id').eq('status', 'active'),
     // 2
-    db.from('subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'trialing'),
+    db.from('subscriptions').select('user_id').eq('status', 'trialing'),
     // 3 courant
     db.from('subscriptions').select('*', { count: 'exact', head: true })
       .eq('status', 'expired').gte('ended_at', startCurr),
@@ -111,8 +114,14 @@ export async function getAdminKPIs(): Promise<AdminKPIs> {
   ])
 
   return {
-    abonnesActifs:   { current: subActive.error   ? null : (subActive.count   ?? 0), previous: null },
-    abonnesEssai:    { current: subTrial.error    ? null : (subTrial.count    ?? 0), previous: null },
+    abonnesActifs: {
+      current: subActive.error ? null : new Set((subActive.data ?? []).map((s: { user_id: string }) => s.user_id)).size,
+      previous: null,
+    },
+    abonnesEssai: {
+      current: subTrial.error ? null : new Set((subTrial.data ?? []).map((s: { user_id: string }) => s.user_id)).size,
+      previous: null,
+    },
     abonnesExpires:  {
       current:  subExpCurr.error ? null : (subExpCurr.count ?? 0),
       previous: subExpPrev.error ? null : (subExpPrev.count ?? 0),
@@ -189,6 +198,8 @@ export interface UserRow {
   full_name: string | null
   plan: string
   tokens: number
+  wallet_balance: number | null
+  account_status: string
   onboarding_status: string
   created_at: string
   sub_status: string | null
@@ -198,8 +209,13 @@ export interface UserDetail extends UserRow {
   prenom: string | null
   nom: string | null
   phone: string | null
+  is_banned: boolean
+  last_sign_in_at: string | null
   profile: { nom_entreprise: string | null; statut_juridique: string | null; telephone: string | null } | null
-  subscription: { status: string; plan: string | null; started_at: string | null; ended_at: string | null } | null
+  subscription: {
+    status: string; plan: string | null; started_at: string | null; ended_at: string | null
+    pending_plan: string | null; pending_at: string | null
+  } | null
   tokenHistory: { id: string; type: string; amount: number; description: string | null; created_at: string }[]
 }
 
@@ -241,31 +257,71 @@ export async function getUsers(params: GetUsersParams = {}): Promise<{ users: Us
   const db = makeAdminClient()
   const { search = '', plan = 'all', page = 0, sortBy = 'created_at', sortDir = 'desc' } = params
 
-  let query = db
-    .from('user_accounts')
-    .select('id, email, full_name, plan, tokens, onboarding_status, created_at', { count: 'exact' })
+  // profiles = source de vérité pour les abonnés (inclut les users sans user_accounts)
+  const { data: profData, error: profError } = await db
+    .from('profiles')
+    .select('user_id, email, created_at')
+
+  if (profError || !profData?.length) return { users: [], total: 0 }
+
+  const allIds = (profData as { user_id: string; email: string | null; created_at: string | null }[])
+    .map(p => p.user_id).filter(Boolean)
+
+  const [accRes, subRes, walletRes] = await Promise.all([
+    db.from('user_accounts')
+      .select('id, email, full_name, plan, tokens, onboarding_status, created_at, account_status')
+      .in('id', allIds),
+    db.from('subscriptions').select('user_id, status').in('user_id', allIds),
+    db.from('wallets').select('user_id, balance').in('user_id', allIds),
+  ])
+
+  type AccRow = { id: string; email: string; full_name: string | null; plan: string; tokens: number; onboarding_status: string; created_at: string; account_status: string }
+  const accMap: Record<string, AccRow> = {}
+  const subMap: Record<string, string> = {}
+  const walletMap: Record<string, number> = {}
+  const profMap: Record<string, { email: string | null; created_at: string | null }> = {}
+
+  if (accRes.data) for (const a of accRes.data as AccRow[]) accMap[a.id] = a
+  if (subRes.data) for (const s of subRes.data as { user_id: string; status: string }[]) subMap[s.user_id] = s.status
+  if (walletRes.data) for (const w of walletRes.data as { user_id: string; balance: number }[]) walletMap[w.user_id] = w.balance
+  for (const p of profData as { user_id: string; email: string | null; created_at: string | null }[]) profMap[p.user_id] = p
+
+  let rows: UserRow[] = allIds.map(uid => {
+    const acc = accMap[uid]
+    const prof = profMap[uid]
+    return {
+      id: uid,
+      email: acc?.email ?? prof?.email ?? '—',
+      full_name: acc?.full_name ?? null,
+      plan: acc?.plan ?? 'SOLO',
+      tokens: acc?.tokens ?? 0,
+      wallet_balance: walletMap[uid] ?? null,
+      account_status: acc?.account_status ?? 'active',
+      onboarding_status: acc?.onboarding_status ?? 'not_started',
+      created_at: acc?.created_at ?? prof?.created_at ?? new Date().toISOString(),
+      sub_status: subMap[uid] ?? null,
+    }
+  })
 
   if (search.trim()) {
-    const s = search.trim().replace(/[%_\\]/g, c => `\\${c}`)
-    query = query.or(`full_name.ilike.%${s}%,email.ilike.%${s}%`)
+    const s = search.trim().toLowerCase()
+    rows = rows.filter(u =>
+      u.email.toLowerCase().includes(s) ||
+      (u.full_name?.toLowerCase().includes(s) ?? false)
+    )
   }
-  if (plan !== 'all') query = query.eq('plan', plan)
-  query = query.order(sortBy, { ascending: sortDir === 'asc' }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+  if (plan !== 'all') rows = rows.filter(u => u.plan === plan)
 
-  const { data, count, error } = await query
-  if (error || !data) return { users: [], total: 0 }
+  rows.sort((a, b) => {
+    const av = sortBy === 'tokens' ? a.tokens : sortBy === 'full_name' ? (a.full_name ?? '').toLowerCase() : a.created_at
+    const bv = sortBy === 'tokens' ? b.tokens : sortBy === 'full_name' ? (b.full_name ?? '').toLowerCase() : b.created_at
+    if (av < bv) return sortDir === 'asc' ? -1 : 1
+    if (av > bv) return sortDir === 'asc' ? 1 : -1
+    return 0
+  })
 
-  const ids = (data as UserRow[]).map(u => u.id)
-  let subMap: Record<string, string> = {}
-  if (ids.length) {
-    const { data: subs } = await db.from('subscriptions').select('user_id, status').in('user_id', ids)
-    if (subs) for (const s of subs as { user_id: string; status: string }[]) subMap[s.user_id] = s.status
-  }
-
-  return {
-    users: (data as UserRow[]).map(u => ({ ...u, sub_status: subMap[u.id] ?? null })),
-    total: count ?? 0,
-  }
+  const total = rows.length
+  return { users: rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE), total }
 }
 
 export async function getUserDetail(userId: string): Promise<UserDetail | null> {
@@ -273,18 +329,30 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
   if ('error' in auth) return null
 
   const db = makeAdminClient()
-  const [accRes, profRes, subRes, txRes] = await Promise.all([
+  const sbAdmin = createSbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  const [accRes, profRes, subRes, txRes, walletRes, authUserRes, accStatusRes] = await Promise.all([
     db.from('user_accounts').select('id, email, full_name, plan, tokens, onboarding_status, phone, prenom, nom, created_at').eq('id', userId).single(),
     db.from('profiles').select('nom_entreprise, statut_juridique, telephone').eq('user_id', userId).maybeSingle(),
-    db.from('subscriptions').select('status, plan, started_at, ended_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    db.from('subscriptions').select('status, plan, started_at, ended_at, pending_plan, pending_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     db.from('token_transactions').select('id, type, amount, description, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(10),
+    db.from('wallets').select('balance').eq('user_id', userId).maybeSingle(),
+    sbAdmin.auth.admin.getUserById(userId),
+    db.from('user_accounts').select('account_status').eq('id', userId).maybeSingle(),
   ])
 
   if (accRes.error || !accRes.data) return null
   const acc = accRes.data as UserRow & { prenom: string | null; nom: string | null; phone: string | null }
+  const authUser = authUserRes.data?.user as { banned_until?: string; last_sign_in_at?: string } | null
+  const bannedUntil = authUser?.banned_until
+  const is_banned = !!(bannedUntil && new Date(bannedUntil) > new Date())
+  const account_status = (accStatusRes.data as { account_status: string } | null)?.account_status ?? 'active'
 
   return {
     ...acc,
+    account_status,
+    wallet_balance: (walletRes.data as { balance: number } | null)?.balance ?? null,
+    is_banned,
+    last_sign_in_at: authUser?.last_sign_in_at ?? null,
     sub_status: (subRes.data as { status: string } | null)?.status ?? null,
     profile: profRes.data as UserDetail['profile'],
     subscription: subRes.data as UserDetail['subscription'],
@@ -293,34 +361,60 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
 }
 
 export async function addTokens(targetUserId: string, amount: number, motif: string): Promise<{ success: boolean; error?: string }> {
-  if (!Number.isInteger(amount) || amount < 1 || amount > 10_000) return { success: false, error: 'Montant invalide (1–10 000).' }
+  if (!Number.isInteger(amount) || amount < 1 || amount > 50) return { success: false, error: 'Montant invalide (1–50).' }
   const auth = await verifyAdmin()
   if ('error' in auth) return { success: false, error: auth.error }
 
   const db = makeAdminClient()
-  const { data: acc, error: fe } = await db.from('user_accounts').select('tokens').eq('id', targetUserId).single()
-  if (fe || !acc) return { success: false, error: 'Utilisateur introuvable.' }
+  const { data: wallet } = await db.from('wallets').select('balance').eq('user_id', targetUserId).maybeSingle()
+  if (wallet) {
+    const { error: we } = await db.from('wallets')
+      .update({ balance: (wallet as { balance: number }).balance + amount })
+      .eq('user_id', targetUserId)
+    if (we) return { success: false, error: 'Erreur lors de la mise à jour du portefeuille.' }
+  } else {
+    const { error: wi } = await db.from('wallets').insert({ user_id: targetUserId, balance: amount })
+    if (wi) return { success: false, error: 'Erreur lors de la création du portefeuille.' }
+  }
 
-  const { error: ue } = await db.from('user_accounts')
-    .update({ tokens: (acc as { tokens: number }).tokens + amount, updated_at: new Date().toISOString() })
-    .eq('id', targetUserId)
-  if (ue) return { success: false, error: 'Erreur lors de la mise à jour.' }
-
+  await db.from('token_transactions').insert({ user_id: targetUserId, type: 'admin_grant', amount, description: motif })
   await logAction(auth.adminId, 'add_tokens', targetUserId, { amount, motif })
   return { success: true }
 }
 
-export async function changePlan(targetUserId: string, newPlan: string): Promise<{ success: boolean; error?: string }> {
-  if (!['SOLO', 'TEAM', 'ENTERPRISE'].includes(newPlan)) return { success: false, error: 'Plan invalide.' }
+export async function changePlan(targetUserId: string, newPlan: string, startDate?: string, endDate?: string): Promise<{ success: boolean; error?: string }> {
+  if (!['SOLO', 'DUO', 'TEAM', 'ENTERPRISE'].includes(newPlan)) return { success: false, error: 'Plan invalide.' }
   const auth = await verifyAdmin()
   if ('error' in auth) return { success: false, error: auth.error }
 
-  const { error } = await makeAdminClient().from('user_accounts')
-    .update({ plan: newPlan, updated_at: new Date().toISOString() })
-    .eq('id', targetUserId)
-  if (error) return { success: false, error: 'Erreur lors de la mise à jour.' }
+  const db = makeAdminClient()
+  const { data: accData } = await db.from('user_accounts').select('plan').eq('id', targetUserId).single()
+  const currentPlan = (accData as { plan: string } | null)?.plan ?? 'SOLO'
+  const isDowngrade = (PLAN_RANK[newPlan] ?? 0) < (PLAN_RANK[currentPlan] ?? 0)
 
-  await logAction(auth.adminId, 'change_plan', targetUserId, { new_plan: newPlan })
+  if (isDowngrade) {
+    const { data: sub } = await db.from('subscriptions').select('id')
+      .eq('user_id', targetUserId).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    if (sub) {
+      await db.from('subscriptions')
+        .update({ pending_plan: newPlan, pending_at: endDate ?? null })
+        .eq('id', (sub as { id: string }).id)
+    }
+  } else {
+    const { error } = await db.from('user_accounts')
+      .update({ plan: newPlan, updated_at: new Date().toISOString() })
+      .eq('id', targetUserId)
+    if (error) return { success: false, error: 'Erreur lors de la mise à jour.' }
+    if (startDate && endDate) {
+      await db.from('subscriptions').insert({
+        user_id: targetUserId, plan: newPlan, status: 'active', started_at: startDate, ended_at: endDate,
+      })
+    }
+  }
+
+  await logAction(auth.adminId, 'change_plan', targetUserId, {
+    current_plan: currentPlan, new_plan: newPlan, is_downgrade: isDowngrade, start_date: startDate, end_date: endDate,
+  })
   return { success: true }
 }
 
@@ -328,13 +422,25 @@ export async function suspendAccount(targetUserId: string): Promise<{ success: b
   const auth = await verifyAdmin()
   if ('error' in auth) return { success: false, error: auth.error }
 
-  const { error } = await createSbClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  ).auth.admin.updateUserById(targetUserId, { ban_duration: '876000h' })
+  const sbAdmin = createSbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  const { error } = await sbAdmin.auth.admin.updateUserById(targetUserId, { ban_duration: '876000h' })
   if (error) return { success: false, error: 'Erreur lors de la suspension.' }
 
+  await makeAdminClient().from('user_accounts').update({ account_status: 'suspended' }).eq('id', targetUserId)
   await logAction(auth.adminId, 'suspend_account', targetUserId)
+  return { success: true }
+}
+
+export async function reactivateAccount(targetUserId: string): Promise<{ success: boolean; error?: string }> {
+  const auth = await verifyAdmin()
+  if ('error' in auth) return { success: false, error: auth.error }
+
+  const sbAdmin = createSbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  const { error } = await sbAdmin.auth.admin.updateUserById(targetUserId, { ban_duration: 'none' })
+  if (error) return { success: false, error: 'Erreur lors de la réactivation.' }
+
+  await makeAdminClient().from('user_accounts').update({ account_status: 'active' }).eq('id', targetUserId)
+  await logAction(auth.adminId, 'reactivate_account', targetUserId)
   return { success: true }
 }
 
@@ -343,6 +449,24 @@ export async function sendAdminEmail(targetUserId: string, subject: string, mess
   const auth = await verifyAdmin()
   if ('error' in auth) return { success: false, error: auth.error }
 
-  await logAction(auth.adminId, 'send_email', targetUserId, { subject, message })
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey || apiKey.startsWith('re_VOTRE')) {
+    return { success: false, error: 'Service email non configuré (RESEND_API_KEY manquant).' }
+  }
+
+  const db = makeAdminClient()
+  const { data: acc } = await db.from('user_accounts').select('email').eq('id', targetUserId).single()
+  if (!acc) return { success: false, error: 'Utilisateur introuvable.' }
+
+  const resend = new Resend(apiKey)
+  const { error: emailError } = await resend.emails.send({
+    from: 'NoX VTC <admin@noxvtc.fr>',
+    to: [(acc as { email: string }).email],
+    subject,
+    text: message,
+  })
+  if (emailError) return { success: false, error: emailError.message }
+
+  await logAction(auth.adminId, 'send_email', targetUserId, { subject })
   return { success: true }
 }

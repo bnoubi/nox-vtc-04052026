@@ -15,6 +15,7 @@ function getVatFromStatut(statut: string): { vat_mode: 'franchise' | 'normal'; i
 export function OnboardingComponent({ onComplete }: { onComplete: () => void }) {
   const [step, setStep] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // Step 1 State
   const [email, setEmail] = useState("")
@@ -162,13 +163,13 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
 
   async function handleSaveEnterprise() {
     setLoading(true)
+    setSaveError(null)
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
 
       if (user) {
-        const vatFields = statutJuridique ? getVatFromStatut(statutJuridique) : {}
-        await supabase
+        const { error } = await supabase
           .from("profiles")
           .upsert({
             user_id: user.id,
@@ -180,13 +181,14 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
             code_postal: codePostal || null,
             ville: ville || null,
             complement_adresse: complementAdresse || null,
-            ...vatFields
           }, { onConflict: 'user_id' })
 
+        if (error) throw error
         setStep(3)
       }
     } catch (e) {
       console.error("[Onboarding] Entreprise - Erreur de sauvegarde:", e)
+      setSaveError("Erreur lors de l'enregistrement. Réessayez.")
     } finally {
       setLoading(false)
     }
@@ -194,24 +196,25 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
 
   async function handleSaveReglementaire() {
     setLoading(true)
+    setSaveError(null)
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
 
       if (!user) throw new Error("Utilisateur non trouvé")
 
-      // 1. Mise à jour de public.profiles de façon ciblée
+      // 1. Upsert profiles (crée la ligne si absente, met à jour sinon)
       const { error: profileError } = await supabase
         .from("profiles")
-        .update({
+        .upsert({
+          user_id: user.id,
           registre_vtc: registreVTC || null,
-          date_registre_vtc: dateExpirationRegistre || null
-        })
-        .eq("user_id", user.id)
+          date_registre_vtc: dateExpirationRegistre || null,
+        }, { onConflict: 'user_id' })
 
       if (profileError) throw profileError
 
-      // 2. Mise à jour du statut dans user_accounts uniquement si l'étape 1 est passée
+      // 2. Marquer l'onboarding comme complété
       const { error: accountError } = await supabase
         .from("user_accounts")
         .update({ onboarding_status: "completed" })
@@ -219,11 +222,10 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
 
       if (accountError) throw accountError
 
-      // 3. Finalisation (les étapes 1 et 2 sont réussies)
       onComplete()
     } catch (e) {
-      console.error("[Onboarding] Réglementaire - Erreur fatale de complétion:", e)
-      // Bloque de manière défensive l'appel de onComplete() en laissant l'utilisateur sur la page.
+      console.error("[Onboarding] Réglementaire - Erreur:", e)
+      setSaveError("Une erreur est survenue. Vérifiez votre connexion et réessayez.")
     } finally {
       setLoading(false)
     }
@@ -514,8 +516,11 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
               </div>
             </div>
 
+            {saveError && (
+              <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>
+            )}
             <button
-              onClick={handleSaveEnterprise}
+              onClick={() => { setSaveError(null); handleSaveEnterprise() }}
               disabled={loading || loadingData || !nomEntreprise || !statutJuridique || (siret.trim() !== "" && siret.replace(/\s/g, "").length !== 9 && siret.replace(/\s/g, "").length !== 14)}
               className="w-full h-12 rounded-xl bg-gold text-primary-foreground font-semibold flex items-center justify-center gap-2 hover:bg-gold-light active:scale-[0.98] transition-all disabled:opacity-50"
             >
@@ -574,6 +579,9 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
               </div>
             </div>
 
+            {saveError && (
+              <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>
+            )}
             <button
               onClick={handleSaveReglementaire}
               disabled={loading || loadingData || !registreVTC}
