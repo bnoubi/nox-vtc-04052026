@@ -52,20 +52,30 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
     setLoadingData(true)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    
+
     if (user) {
       if (user.email) setEmail(user.email)
-      
+
       const { data, error } = await supabase
         .from("user_accounts")
         .select("prenom, nom, phone")
         .eq("id", user.id)
         .single()
-        
-      if (!error && data) {
-        setPrenom(data.prenom || "")
-        setNom(data.nom || "")
-        setPhone(data.phone || "")
+
+      // Fallback sur les metadata auth si user_accounts n'a pas encore prenom/nom
+      const meta = user.user_metadata ?? {}
+      const resolvedPrenom = ((!error && data?.prenom) || meta.prenom || "").trim()
+      const resolvedNom = ((!error && data?.nom) || meta.nom || "").trim()
+
+      setPrenom(resolvedPrenom)
+      setNom(resolvedNom)
+      if (!error && data?.phone) setPhone(data.phone)
+
+      // Prénom et nom déjà connus → passer directement à l'étape entreprise
+      if (resolvedPrenom && resolvedNom) {
+        setLoadingData(false)
+        setStep(2)
+        return
       }
     }
     setLoadingData(false)

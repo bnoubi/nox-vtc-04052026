@@ -112,6 +112,15 @@ export default function RegisterPage() {
       return
     }
 
+    // Persistance immédiate dans user_accounts (peut échouer si email non encore confirmé — les
+    // metadata auth servent de backup, et le trigger handle_new_user_account prend le relais)
+    if (data.user) {
+      void supabase.from('user_accounts').upsert(
+        { id: data.user.id, prenom, nom, full_name: `${prenom} ${nom}`.trim() },
+        { onConflict: 'id' }
+      )
+    }
+
     setSuccess(true)
   }
 
