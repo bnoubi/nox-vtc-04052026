@@ -80,10 +80,10 @@ export async function getAdminKPIs(): Promise<AdminKPIs> {
     db.from('subscriptions').select('user_id').eq('status', 'trialing'),
     // 3 courant
     db.from('subscriptions').select('*', { count: 'exact', head: true })
-      .eq('status', 'expired').gte('ended_at', startCurr),
+      .eq('status', 'expired').gte('current_period_end', startCurr),
     // 3 précédent
     db.from('subscriptions').select('*', { count: 'exact', head: true })
-      .eq('status', 'expired').gte('ended_at', startPrev).lt('ended_at', startCurr),
+      .eq('status', 'expired').gte('current_period_end', startPrev).lt('current_period_end', startCurr),
     // 4 courant
     db.from('token_transactions').select('amount')
       .eq('type', 'purchase').gte('created_at', startCurr),
@@ -382,18 +382,33 @@ export async function addTokens(targetUserId: string, amount: number, motif: str
   if ('error' in auth) return { success: false, error: auth.error }
 
   const db = makeAdminClient()
-  const { data: wallet } = await db.from('wallets').select('balance').eq('user_id', targetUserId).maybeSingle()
+  const { data: wallet } = await db.from('wallets').select('id, balance').eq('user_id', targetUserId).maybeSingle()
+
+  let walletId: string | null = null
+  let balanceAfter: number
+
   if (wallet) {
-    const { error: we } = await db.from('wallets')
-      .update({ balance: (wallet as { balance: number }).balance + amount })
-      .eq('user_id', targetUserId)
+    const w = wallet as { id: string; balance: number }
+    walletId = w.id
+    balanceAfter = w.balance + amount
+    const { error: we } = await db.from('wallets').update({ balance: balanceAfter }).eq('user_id', targetUserId)
     if (we) return { success: false, error: 'Erreur lors de la mise à jour du portefeuille.' }
   } else {
-    const { error: wi } = await db.from('wallets').insert({ user_id: targetUserId, balance: amount })
+    balanceAfter = amount
+    const { data: newWallet, error: wi } = await db.from('wallets')
+      .insert({ user_id: targetUserId, balance: amount })
+      .select('id')
+      .single()
     if (wi) return { success: false, error: 'Erreur lors de la création du portefeuille.' }
+    walletId = (newWallet as { id: string } | null)?.id ?? null
   }
 
-  await db.from('token_transactions').insert({ user_id: targetUserId, type: 'admin_grant', amount, description: motif })
+  const { data: txData, error: txError } = await db.from('token_transactions').insert({
+    user_id: targetUserId, type: 'admin_grant', amount, description: motif,
+    wallet_id: walletId, balance_after: balanceAfter,
+  }).select()
+  console.log('[addTokens] token_transactions insert:', { data: txData, error: txError })
+  if (txError) return { success: false, error: 'Erreur lors de l\'enregistrement de la transaction.' }
   await logAction(auth.adminId, 'add_tokens', targetUserId, { amount, motif })
   return { success: true }
 }
@@ -536,8 +551,8 @@ export interface SubscriptionRow {
   plan: string
   sub_status: string
   account_status: string
-  started_at: string | null
-  ended_at: string | null
+  current_period_start: string | null
+  current_period_end: string | null
 }
 
 export interface GetSubsParams {
@@ -555,16 +570,24 @@ export async function getSubscriptions(params: GetSubsParams = {}): Promise<{ su
   const db = makeAdminClient()
   const { plan = 'all', status = 'all', page = 0 } = params
 
-  type SubRaw = { id: string; user_id: string; plan: string | null; status: string; started_at: string | null; ended_at: string | null }
+  type SubRaw = { id: string; user_id: string; plan: string | null; status: string; current_period_start: string | null; current_period_end: string | null; created_at: string }
 
   let query = db.from('subscriptions')
-    .select('id, user_id, plan, status, started_at, ended_at')
+    .select('id, user_id, plan, status, current_period_start, current_period_end, created_at')
     .order('created_at', { ascending: false })
   if (plan !== 'all') query = query.eq('plan', plan)
   if (status !== 'all') query = query.eq('status', status)
 
   const { data: subs, error } = await query
-  if (error || !subs?.length) return { subs: [], total: 0 }
+  if (error) {
+    console.error('[getSubscriptions] Supabase error:', JSON.stringify(error))
+    return { subs: [], total: 0 }
+  }
+  if (!subs?.length) {
+    console.warn('[getSubscriptions] Requête OK mais aucune ligne retournée')
+    return { subs: [], total: 0 }
+  }
+  console.log(`[getSubscriptions] ${subs.length} lignes récupérées`)
 
   // Dédupliquer : une ligne par user_id (la plus récente déjà triée)
   const seen = new Set<string>()
@@ -587,27 +610,41 @@ export async function getSubscriptions(params: GetSubsParams = {}): Promise<{ su
       plan: s.plan ?? 'SOLO',
       sub_status: s.status,
       account_status: acc?.account_status ?? 'active',
-      started_at: s.started_at,
-      ended_at: s.ended_at,
+      current_period_start: s.current_period_start,
+      current_period_end: s.current_period_end,
     }
   })
 
   return { subs: rows.slice(page * SUBS_PAGE_SIZE, (page + 1) * SUBS_PAGE_SIZE), total: rows.length }
 }
 
-export async function changeSubscriptionPlan(userId: string, newPlan: string): Promise<{ success: boolean; error?: string }> {
+export async function changeSubscriptionPlan(
+  userId: string,
+  newPlan: string,
+  startDate?: string,
+  endDate?: string,
+): Promise<{ success: boolean; error?: string }> {
   if (!['SOLO', 'DUO', 'TEAM', 'ENTERPRISE'].includes(newPlan)) return { success: false, error: 'Plan invalide.' }
   const auth = await verifyAdmin()
   if ('error' in auth) return { success: false, error: auth.error }
 
   const db = makeAdminClient()
+
+  const subUpdate: Record<string, string> = { plan: newPlan }
+  if (startDate) subUpdate.current_period_start = startDate
+  if (endDate) subUpdate.current_period_end = endDate
+
   const [subRes, accRes] = await Promise.all([
-    db.from('subscriptions').update({ plan: newPlan }).eq('user_id', userId).in('status', ['active', 'trialing']),
+    db.from('subscriptions').update(subUpdate).eq('user_id', userId).in('status', ['active', 'trialing']),
     db.from('user_accounts').update({ plan: newPlan, updated_at: new Date().toISOString() }).eq('id', userId),
   ])
+
+  console.log('[changeSubscriptionPlan] sub error:', JSON.stringify(subRes.error))
+  console.log('[changeSubscriptionPlan] acc error:', JSON.stringify(accRes.error))
+
   if (subRes.error) return { success: false, error: 'Erreur mise à jour abonnement.' }
   if (accRes.error) return { success: false, error: 'Erreur mise à jour compte.' }
 
-  await logAction(auth.adminId, 'change_plan', userId, { new_plan: newPlan, source: 'subscriptions' })
+  await logAction(auth.adminId, 'change_plan', userId, { new_plan: newPlan, source: 'subscriptions', start_date: startDate, end_date: endDate })
   return { success: true }
 }

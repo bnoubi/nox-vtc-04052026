@@ -15,7 +15,17 @@ import {
 } from '@/app/admin/actions'
 import { StatusBadge } from '../../users/_components/status-badge'
 
-const PLAN_OPTIONS = ['SOLO', 'DUO', 'TEAM', 'ENTERPRISE']
+const PLAN_OPTIONS = ['SOLO', 'DUO', 'TEAM']
+const DURATION_OPTIONS = [
+  { value: '1', label: '1 mois' }, { value: '3', label: '3 mois' },
+  { value: '6', label: '6 mois' }, { value: '12', label: '12 mois' },
+]
+
+function addMonths(dateStr: string, months: number): string {
+  const d = new Date(dateStr)
+  d.setMonth(d.getMonth() + months)
+  return d.toISOString().slice(0, 10)
+}
 
 const PLAN_COLORS: Record<string, { bg: string; text: string }> = {
   SOLO:       { bg: 'rgba(107,114,128,0.15)', text: 'var(--admin-muted-foreground)' },
@@ -71,6 +81,8 @@ export function SubscriptionsTable() {
   const [showPlan, setShowPlan]         = useState(false)
   const [showToggle, setShowToggle]     = useState(false)
   const [selectedPlan, setSelectedPlan] = useState('')
+  const [planDuration, setPlanDuration] = useState('1')
+  const [planStartDate, setPlanStartDate] = useState(() => new Date().toISOString().slice(0, 10))
 
   useEffect(() => {
     if (!feedback) return
@@ -232,11 +244,11 @@ export function SubscriptionsTable() {
                   <td className="py-3 px-4"><StatusBadge status={effectiveStatus(sub)} /></td>
                   {/* Date début */}
                   <td className="py-3 px-4 whitespace-nowrap" style={{ color: 'var(--admin-muted-foreground)' }}>
-                    {sub.started_at ? new Date(sub.started_at).toLocaleDateString('fr-FR') : '—'}
+                    {sub.current_period_start ? new Date(sub.current_period_start).toLocaleDateString('fr-FR') : '—'}
                   </td>
                   {/* Date fin */}
                   <td className="py-3 px-4 whitespace-nowrap" style={{ color: 'var(--admin-muted-foreground)' }}>
-                    {sub.ended_at ? new Date(sub.ended_at).toLocaleDateString('fr-FR') : '—'}
+                    {sub.current_period_end ? new Date(sub.current_period_end).toLocaleDateString('fr-FR') : '—'}
                   </td>
                   {/* Actions */}
                   <td className="py-3 px-4">
@@ -288,43 +300,74 @@ export function SubscriptionsTable() {
       </div>
 
       {/* Modal — Changer le plan */}
-      <Dialog open={showPlan} onOpenChange={open => { setShowPlan(open); if (!open) setActiveSub(null) }}>
-        <DialogContent {...{ 'data-admin-theme': theme }} style={dialogStyle}>
-          <DialogHeader><DialogTitle>Changer le plan</DialogTitle></DialogHeader>
-          <div className="py-2 space-y-3">
-            <p className="text-sm" style={{ color: 'var(--admin-muted-foreground)' }}>
-              Abonné : <strong style={{ color: 'var(--admin-foreground)' }}>{activeSub?.full_name ?? activeSub?.email}</strong>
-            </p>
-            <div className="space-y-1.5">
-              <Label>Nouveau plan</Label>
-              <select value={selectedPlan} onChange={e => setSelectedPlan(e.target.value)}
-                className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle}>
-                {PLAN_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-              <p className="text-xs" style={{ color: 'var(--admin-muted-foreground)' }}>
-                Plan actuel : <strong>{activeSub?.plan}</strong>
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <button onClick={() => { setShowPlan(false); setActiveSub(null) }}
-              className="text-sm px-4 py-2 rounded-lg border"
-              style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-muted-foreground)' }}>
-              Annuler
-            </button>
-            <button
-              disabled={busy || !activeSub || selectedPlan === activeSub?.plan}
-              className="text-sm px-4 py-2 rounded-lg font-medium disabled:opacity-50"
-              style={{ backgroundColor: 'var(--admin-primary)', color: '#0F0F0F' }}
-              onClick={() => activeSub && runAction(
-                () => changeSubscriptionPlan(activeSub.user_id, selectedPlan),
-                `Plan changé en ${selectedPlan}.`
-              )}>
-              {busy ? 'En cours…' : 'Confirmer'}
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {(() => {
+        const isUpgradeWithDates = activeSub != null && (
+          (activeSub.plan === 'SOLO' && (selectedPlan === 'DUO' || selectedPlan === 'TEAM')) ||
+          (activeSub.plan === 'DUO' && selectedPlan === 'TEAM')
+        )
+        const planEndDate = planStartDate ? addMonths(planStartDate, parseInt(planDuration)) : ''
+        return (
+          <Dialog open={showPlan} onOpenChange={open => { setShowPlan(open); if (!open) setActiveSub(null) }}>
+            <DialogContent {...{ 'data-admin-theme': theme }} style={dialogStyle}>
+              <DialogHeader><DialogTitle>Changer le plan</DialogTitle></DialogHeader>
+              <div className="py-2 space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Nouveau plan</Label>
+                  <select value={selectedPlan} onChange={e => setSelectedPlan(e.target.value)}
+                    className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle}>
+                    {PLAN_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  <p className="text-xs" style={{ color: 'var(--admin-muted-foreground)' }}>
+                    Plan actuel : <strong>{activeSub?.plan}</strong>
+                  </p>
+                </div>
+
+                {isUpgradeWithDates && (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label>Durée</Label>
+                      <select value={planDuration} onChange={e => setPlanDuration(e.target.value)}
+                        className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle}>
+                        {DURATION_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Date de début</Label>
+                        <input type="date" value={planStartDate} onChange={e => setPlanStartDate(e.target.value)}
+                          className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Date de fin</Label>
+                        <div className="rounded-lg border px-3 py-2 text-sm" style={{ ...selectStyle, opacity: 0.6 }}>
+                          {planEndDate || '—'}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+              <DialogFooter>
+                <button onClick={() => { setShowPlan(false); setActiveSub(null) }}
+                  className="text-sm px-4 py-2 rounded-lg border"
+                  style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-muted-foreground)' }}>
+                  Annuler
+                </button>
+                <button
+                  disabled={busy || !activeSub || selectedPlan === activeSub?.plan}
+                  className="text-sm px-4 py-2 rounded-lg font-medium disabled:opacity-50"
+                  style={{ backgroundColor: 'var(--admin-primary)', color: '#0F0F0F' }}
+                  onClick={() => activeSub && runAction(
+                    () => changeSubscriptionPlan(activeSub.user_id, selectedPlan, isUpgradeWithDates ? planStartDate : undefined, isUpgradeWithDates ? planEndDate : undefined),
+                    `Plan changé en ${selectedPlan}.`
+                  )}>
+                  {busy ? 'En cours…' : 'Confirmer'}
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )
+      })()}
 
       {/* Modal — Désactiver / Réactiver */}
       <Dialog open={showToggle} onOpenChange={open => { setShowToggle(open); if (!open) setActiveSub(null) }}>
