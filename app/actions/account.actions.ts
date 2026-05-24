@@ -28,22 +28,18 @@ export async function deleteUserAccount() {
     }
   )
 
-  // 3. Documentation métier sur la suppression
-  // - Les entités métier (conducteurs, véhicules, BC, factures, clients) sont 
-  //   actuellement stockées dans le localStorage de l'appareil. Elles sont perdues 
-  //   en cas de déconnexion/vidage de cache ou suppression, mais n'encombrent pas le serveur.
-  // - Le profil entreprise (profiles) et (user_accounts) dans Supabase doivent 
-  //   avoir une contrainte de clé étrangère avec 'ON DELETE CASCADE' pour être 
-  //   nettoyés automatiquement lors de la suppression du user de 'auth.users'.
-  //   Si ce n'est pas le cas, un traitement croisé explicite sera nécessaire ici avant la suppression.
-  // => Pour ce lot, on s'appuie sur le 'CASCADE' ou on laisse purger 'auth.users' qui 
-  // empêche de toute façon la reconnexion et la récupération des données.
+  // Soft-delete : données conservées 30 jours pour obligations légales.
+  // anonymize_deleted_accounts() (pg_cron) anonymise après 30 jours.
+  const now = new Date().toISOString()
 
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(userId)
+  const { error: profileError } = await supabaseAdmin
+    .from('profiles').update({ status: 'deleted', deleted_at: now }).eq('user_id', userId)
+  if (profileError) return { error: profileError.message }
 
-  if (error) {
-    return { error: error.message }
-  }
+  await supabaseAdmin.from('user_accounts').update({ account_status: 'deleted' }).eq('id', userId)
+
+  const { error: banError } = await supabaseAdmin.auth.admin.updateUserById(userId, { ban_duration: '876000h' })
+  if (banError) return { error: banError.message }
 
   return { success: true }
 }

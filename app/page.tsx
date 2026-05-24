@@ -46,14 +46,16 @@ export default function AppPage() {
         return
       }
 
-      // Read profiles data
-      const { data: profile } = await supabase
-        .from("user_accounts")
-        .select("onboarding_status")
-        .eq("id", user.id)
-        .single()
-        
-      const status = profile?.onboarding_status || "not_started"
+      // profiles = source de vérité ; user_accounts = fallback
+      const [profResult, accResult] = await Promise.all([
+        supabase.from("profiles").select("onboarding_status").eq("user_id", user.id).maybeSingle(),
+        supabase.from("user_accounts").select("onboarding_status").eq("id", user.id).maybeSingle(),
+      ])
+
+      const status =
+        profResult.data?.onboarding_status ??
+        accResult.data?.onboarding_status ??
+        "not_started"
       setOnboardingStatus(status)
 
       if (status === "completed") {

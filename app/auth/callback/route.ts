@@ -7,8 +7,6 @@ export async function GET(request: NextRequest) {
   const type = requestUrl.searchParams.get('type')
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.noxvtc.fr'
 
-  console.log('[Auth Callback] Code reçu:', !!code)
-
   if (code) {
     const supabase = await createClient()
     const { data: { session }, error } = await supabase.auth.exchangeCodeForSession(code)

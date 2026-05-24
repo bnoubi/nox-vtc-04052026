@@ -56,23 +56,26 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
     if (user) {
       if (user.email) setEmail(user.email)
 
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("user_accounts")
         .select("prenom, nom, phone")
         .eq("id", user.id)
-        .single()
+        .maybeSingle()
 
       // Fallback sur les metadata auth si user_accounts n'a pas encore prenom/nom
+      // Google OAuth fournit given_name/family_name, pas prenom/nom
       const meta = user.user_metadata ?? {}
-      const resolvedPrenom = ((!error && data?.prenom) || meta.prenom || "").trim()
-      const resolvedNom = ((!error && data?.nom) || meta.nom || "").trim()
+      const resolvedPrenom = (data?.prenom || meta.prenom || meta.given_name || "").trim()
+      const resolvedNom = (data?.nom || meta.nom || meta.family_name || "").trim()
+      const resolvedPhone = (data?.phone ?? "").trim()
 
       setPrenom(resolvedPrenom)
       setNom(resolvedNom)
-      if (!error && data?.phone) setPhone(data.phone)
+      if (resolvedPhone) setPhone(resolvedPhone)
 
-      // Prénom et nom déjà connus → passer directement à l'étape entreprise
-      if (resolvedPrenom && resolvedNom) {
+      // Prénom + nom + téléphone tous renseignés → passer directement à l'étape entreprise
+      // Si téléphone manquant (ex: OAuth Google/Apple) → rester étape 1, prénom/nom pré-remplis
+      if (resolvedPrenom && resolvedNom && resolvedPhone) {
         setLoadingData(false)
         setStep(2)
         return
@@ -213,24 +216,23 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
 
       if (!user) throw new Error("Utilisateur non trouvé")
 
-      // 1. Upsert profiles (crée la ligne si absente, met à jour sinon)
+      // 1. Upsert profiles — source de vérité pour onboarding_status
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert({
           user_id: user.id,
           registre_vtc: registreVTC || null,
           date_registre_vtc: dateExpirationRegistre || null,
+          onboarding_status: "completed",
         }, { onConflict: 'user_id' })
 
       if (profileError) throw profileError
 
-      // 2. Marquer l'onboarding comme complété
-      const { error: accountError } = await supabase
+      // 2. Miroir dans user_accounts (best-effort — pas bloquant)
+      await supabase
         .from("user_accounts")
         .update({ onboarding_status: "completed" })
         .eq("id", user.id)
-
-      if (accountError) throw accountError
 
       onComplete()
     } catch (e) {
@@ -370,7 +372,7 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
 
             <button
               onClick={handleSaveProfile}
-              disabled={loading || loadingData || !prenom || !nom}
+              disabled={loading || loadingData || !prenom || !nom || !phone}
               className="w-full h-12 rounded-xl bg-gold text-primary-foreground font-semibold flex items-center justify-center gap-2 hover:bg-gold-light active:scale-[0.98] transition-all disabled:opacity-50"
             >
               {loading ? (

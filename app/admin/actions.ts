@@ -203,6 +203,7 @@ export interface UserRow {
   onboarding_status: string
   created_at: string
   sub_status: string | null
+  phone: string | null
 }
 
 export interface UserDetail extends UserRow {
@@ -260,31 +261,31 @@ export async function getUsers(params: GetUsersParams = {}): Promise<{ users: Us
   // profiles = source de vérité pour les abonnés (inclut les users sans user_accounts)
   const { data: profData, error: profError } = await db
     .from('profiles')
-    .select('user_id, email, created_at')
+    .select('user_id, email, created_at, telephone')
 
   if (profError || !profData?.length) return { users: [], total: 0 }
 
-  const allIds = (profData as { user_id: string; email: string | null; created_at: string | null }[])
+  const allIds = (profData as { user_id: string; email: string | null; created_at: string | null; telephone: string | null }[])
     .map(p => p.user_id).filter(Boolean)
 
   const [accRes, subRes, walletRes] = await Promise.all([
     db.from('user_accounts')
-      .select('id, email, full_name, plan, tokens, onboarding_status, created_at, account_status')
+      .select('id, email, full_name, plan, tokens, onboarding_status, created_at, account_status, phone')
       .in('id', allIds),
     db.from('subscriptions').select('user_id, status').in('user_id', allIds),
     db.from('wallets').select('user_id, balance').in('user_id', allIds),
   ])
 
-  type AccRow = { id: string; email: string; full_name: string | null; plan: string; tokens: number; onboarding_status: string; created_at: string; account_status: string }
+  type AccRow = { id: string; email: string; full_name: string | null; plan: string; tokens: number; onboarding_status: string; created_at: string; account_status: string; phone: string | null }
   const accMap: Record<string, AccRow> = {}
   const subMap: Record<string, string> = {}
   const walletMap: Record<string, number> = {}
-  const profMap: Record<string, { email: string | null; created_at: string | null }> = {}
+  const profMap: Record<string, { email: string | null; created_at: string | null; telephone: string | null }> = {}
 
   if (accRes.data) for (const a of accRes.data as AccRow[]) accMap[a.id] = a
   if (subRes.data) for (const s of subRes.data as { user_id: string; status: string }[]) subMap[s.user_id] = s.status
   if (walletRes.data) for (const w of walletRes.data as { user_id: string; balance: number }[]) walletMap[w.user_id] = w.balance
-  for (const p of profData as { user_id: string; email: string | null; created_at: string | null }[]) profMap[p.user_id] = p
+  for (const p of profData as { user_id: string; email: string | null; created_at: string | null; telephone: string | null }[]) profMap[p.user_id] = p
 
   let rows: UserRow[] = allIds.map(uid => {
     const acc = accMap[uid]
@@ -300,6 +301,7 @@ export async function getUsers(params: GetUsersParams = {}): Promise<{ users: Us
       onboarding_status: acc?.onboarding_status ?? 'not_started',
       created_at: acc?.created_at ?? prof?.created_at ?? new Date().toISOString(),
       sub_status: subMap[uid] ?? null,
+      phone: acc?.phone ?? null,
     }
   })
 
@@ -330,30 +332,43 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
 
   const db = makeAdminClient()
   const sbAdmin = createSbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-  const [accRes, profRes, subRes, txRes, walletRes, authUserRes, accStatusRes] = await Promise.all([
-    db.from('user_accounts').select('id, email, full_name, plan, tokens, onboarding_status, phone, prenom, nom, created_at').eq('id', userId).single(),
+
+  // user_accounts peut être absent (trigger manqué) → maybeSingle, pas single
+  const [accRes, profRes, subRes, txRes, walletRes, authUserRes] = await Promise.all([
+    db.from('user_accounts').select('id, email, full_name, plan, tokens, onboarding_status, phone, prenom, nom, created_at, account_status').eq('id', userId).maybeSingle(),
     db.from('profiles').select('nom_entreprise, statut_juridique, telephone').eq('user_id', userId).maybeSingle(),
     db.from('subscriptions').select('status, plan, started_at, ended_at, pending_plan, pending_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     db.from('token_transactions').select('id, type, amount, description, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(10),
     db.from('wallets').select('balance').eq('user_id', userId).maybeSingle(),
     sbAdmin.auth.admin.getUserById(userId),
-    db.from('user_accounts').select('account_status').eq('id', userId).maybeSingle(),
   ])
 
-  if (accRes.error || !accRes.data) return null
-  const acc = accRes.data as UserRow & { prenom: string | null; nom: string | null; phone: string | null }
-  const authUser = authUserRes.data?.user as { banned_until?: string; last_sign_in_at?: string } | null
+  type AccRow = { id: string; email: string; full_name: string | null; plan: string; tokens: number; onboarding_status: string; phone: string | null; prenom: string | null; nom: string | null; created_at: string; account_status: string }
+  const acc = accRes.data as AccRow | null
+  const authUser = authUserRes.data?.user as { email?: string; banned_until?: string; last_sign_in_at?: string; created_at?: string } | null
+
+  // Sans user_accounts NI auth user → vraiment introuvable
+  if (!acc && !authUser) return null
+
   const bannedUntil = authUser?.banned_until
   const is_banned = !!(bannedUntil && new Date(bannedUntil) > new Date())
-  const account_status = (accStatusRes.data as { account_status: string } | null)?.account_status ?? 'active'
 
   return {
-    ...acc,
-    account_status,
+    id: userId,
+    email: acc?.email ?? authUser?.email ?? '—',
+    full_name: acc?.full_name ?? null,
+    prenom: acc?.prenom ?? null,
+    nom: acc?.nom ?? null,
+    phone: acc?.phone ?? null,
+    plan: acc?.plan ?? 'SOLO',
+    tokens: acc?.tokens ?? 0,
     wallet_balance: (walletRes.data as { balance: number } | null)?.balance ?? null,
+    account_status: acc?.account_status ?? 'active',
+    onboarding_status: acc?.onboarding_status ?? 'not_started',
+    created_at: acc?.created_at ?? authUser?.created_at ?? new Date().toISOString(),
+    sub_status: (subRes.data as { status: string } | null)?.status ?? null,
     is_banned,
     last_sign_in_at: authUser?.last_sign_in_at ?? null,
-    sub_status: (subRes.data as { status: string } | null)?.status ?? null,
     profile: profRes.data as UserDetail['profile'],
     subscription: subRes.data as UserDetail['subscription'],
     tokenHistory: txRes.error ? [] : (txRes.data as UserDetail['tokenHistory']) ?? [],
@@ -418,6 +433,29 @@ export async function changePlan(targetUserId: string, newPlan: string, startDat
   return { success: true }
 }
 
+async function setAccountStatus(targetUserId: string, status: string): Promise<void> {
+  const db = makeAdminClient()
+  const { data: updated } = await db
+    .from('user_accounts')
+    .update({ account_status: status })
+    .eq('id', targetUserId)
+    .select('id')
+
+  if (!updated || updated.length === 0) {
+    // Pas de row user_accounts → créer avec les defaults
+    const sbAdmin = createSbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    const { data: authUser } = await sbAdmin.auth.admin.getUserById(targetUserId)
+    await db.from('user_accounts').insert({
+      id: targetUserId,
+      email: authUser?.user?.email ?? '',
+      account_status: status,
+      plan: 'SOLO',
+      tokens: 0,
+      onboarding_status: 'not_started',
+    })
+  }
+}
+
 export async function suspendAccount(targetUserId: string): Promise<{ success: boolean; error?: string }> {
   const auth = await verifyAdmin()
   if ('error' in auth) return { success: false, error: auth.error }
@@ -426,7 +464,7 @@ export async function suspendAccount(targetUserId: string): Promise<{ success: b
   const { error } = await sbAdmin.auth.admin.updateUserById(targetUserId, { ban_duration: '876000h' })
   if (error) return { success: false, error: 'Erreur lors de la suspension.' }
 
-  await makeAdminClient().from('user_accounts').update({ account_status: 'suspended' }).eq('id', targetUserId)
+  await setAccountStatus(targetUserId, 'suspended')
   await logAction(auth.adminId, 'suspend_account', targetUserId)
   return { success: true }
 }
@@ -439,8 +477,21 @@ export async function reactivateAccount(targetUserId: string): Promise<{ success
   const { error } = await sbAdmin.auth.admin.updateUserById(targetUserId, { ban_duration: 'none' })
   if (error) return { success: false, error: 'Erreur lors de la réactivation.' }
 
-  await makeAdminClient().from('user_accounts').update({ account_status: 'active' }).eq('id', targetUserId)
+  await setAccountStatus(targetUserId, 'active')
   await logAction(auth.adminId, 'reactivate_account', targetUserId)
+  return { success: true }
+}
+
+export async function deleteAccount(targetUserId: string): Promise<{ success: boolean; error?: string }> {
+  const auth = await verifyAdmin()
+  if ('error' in auth) return { success: false, error: auth.error }
+
+  const sbAdmin = createSbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  const { error } = await sbAdmin.auth.admin.updateUserById(targetUserId, { ban_duration: '876000h' })
+  if (error) return { success: false, error: 'Erreur lors de la suppression.' }
+
+  await setAccountStatus(targetUserId, 'deleted')
+  await logAction(auth.adminId, 'delete_account', targetUserId)
   return { success: true }
 }
 
@@ -455,13 +506,21 @@ export async function sendAdminEmail(targetUserId: string, subject: string, mess
   }
 
   const db = makeAdminClient()
-  const { data: acc } = await db.from('user_accounts').select('email').eq('id', targetUserId).single()
-  if (!acc) return { success: false, error: 'Utilisateur introuvable.' }
+  const sbAdminEmail = createSbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+
+  // Chercher l'email dans user_accounts, fallback sur auth.users
+  const { data: acc } = await db.from('user_accounts').select('email').eq('id', targetUserId).maybeSingle()
+  let recipientEmail = (acc as { email: string } | null)?.email ?? null
+  if (!recipientEmail) {
+    const { data: authUser } = await sbAdminEmail.auth.admin.getUserById(targetUserId)
+    recipientEmail = authUser?.user?.email ?? null
+  }
+  if (!recipientEmail) return { success: false, error: 'Email utilisateur introuvable.' }
 
   const resend = new Resend(apiKey)
   const { error: emailError } = await resend.emails.send({
     from: 'NoX VTC <admin@noxvtc.fr>',
-    to: [(acc as { email: string }).email],
+    to: [recipientEmail],
     subject,
     text: message,
   })

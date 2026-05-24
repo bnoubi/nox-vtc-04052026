@@ -183,12 +183,11 @@ export default function AdminLoginPage() {
                 siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? '1x00000000000000000000AA'}
                 onSuccess={(token) => { setCaptchaToken(token); setTurnstileError(false) }}
                 onError={() => { setCaptchaToken(null); setTurnstileError(true) }}
-                onExpire={() => { setCaptchaToken(null); setTurnstileKey(prev => prev + 1) }}
+                onExpire={() => setCaptchaToken(null)}
                 options={{
                   theme: 'dark',
                   size: 'normal',
                   appearance: 'always',
-                  refreshExpired: 'auto',
                 }}
               />
               {turnstileError && (
