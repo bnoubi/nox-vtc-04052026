@@ -3,7 +3,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { createClient as createSbClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/email/resend'
+import { templateMessage } from '@/lib/email/templates'
 
 const PLAN_RANK: Record<string, number> = { SOLO: 1, DUO: 2, TEAM: 3, ENTERPRISE: 4 }
 
@@ -500,15 +501,13 @@ export async function sendAdminEmail(targetUserId: string, subject: string, mess
   const auth = await verifyAdmin()
   if ('error' in auth) return { success: false, error: auth.error }
 
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey || apiKey.startsWith('re_VOTRE')) {
+  if (!process.env.RESEND_API_KEY) {
     return { success: false, error: 'Service email non configuré (RESEND_API_KEY manquant).' }
   }
 
   const db = makeAdminClient()
   const sbAdminEmail = createSbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
-  // Chercher l'email dans user_accounts, fallback sur auth.users
   const { data: acc } = await db.from('user_accounts').select('email').eq('id', targetUserId).maybeSingle()
   let recipientEmail = (acc as { email: string } | null)?.email ?? null
   if (!recipientEmail) {
@@ -517,14 +516,8 @@ export async function sendAdminEmail(targetUserId: string, subject: string, mess
   }
   if (!recipientEmail) return { success: false, error: 'Email utilisateur introuvable.' }
 
-  const resend = new Resend(apiKey)
-  const { error: emailError } = await resend.emails.send({
-    from: 'NoX VTC <admin@noxvtc.fr>',
-    to: [recipientEmail],
-    subject,
-    text: message,
-  })
-  if (emailError) return { success: false, error: emailError.message }
+  const result = await sendEmail(recipientEmail, subject, templateMessage(subject, message))
+  if (!result.success) return { success: false, error: result.error }
 
   await logAction(auth.adminId, 'send_email', targetUserId, { subject })
   return { success: true }
