@@ -522,3 +522,92 @@ export async function sendAdminEmail(targetUserId: string, subject: string, mess
   await logAction(auth.adminId, 'send_email', targetUserId, { subject })
   return { success: true }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Abonnements
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface SubscriptionRow {
+  id: string
+  user_id: string
+  email: string
+  full_name: string | null
+  phone: string | null
+  plan: string
+  sub_status: string
+  account_status: string
+  started_at: string | null
+  ended_at: string | null
+}
+
+export interface GetSubsParams {
+  plan?: string
+  status?: string
+  page?: number
+}
+
+const SUBS_PAGE_SIZE = 20
+
+export async function getSubscriptions(params: GetSubsParams = {}): Promise<{ subs: SubscriptionRow[]; total: number }> {
+  const auth = await verifyAdmin()
+  if ('error' in auth) return { subs: [], total: 0 }
+
+  const db = makeAdminClient()
+  const { plan = 'all', status = 'all', page = 0 } = params
+
+  type SubRaw = { id: string; user_id: string; plan: string | null; status: string; started_at: string | null; ended_at: string | null }
+
+  let query = db.from('subscriptions')
+    .select('id, user_id, plan, status, started_at, ended_at')
+    .order('created_at', { ascending: false })
+  if (plan !== 'all') query = query.eq('plan', plan)
+  if (status !== 'all') query = query.eq('status', status)
+
+  const { data: subs, error } = await query
+  if (error || !subs?.length) return { subs: [], total: 0 }
+
+  // Dédupliquer : une ligne par user_id (la plus récente déjà triée)
+  const seen = new Set<string>()
+  const unique = (subs as SubRaw[]).filter(s => { if (seen.has(s.user_id)) return false; seen.add(s.user_id); return true })
+
+  const userIds = unique.map(s => s.user_id)
+  type AccRaw = { id: string; email: string; full_name: string | null; phone: string | null; account_status: string }
+  const { data: accs } = await db.from('user_accounts').select('id, email, full_name, phone, account_status').in('id', userIds)
+  const accMap: Record<string, AccRaw> = {}
+  if (accs) for (const a of accs as AccRaw[]) accMap[a.id] = a
+
+  const rows: SubscriptionRow[] = unique.map(s => {
+    const acc = accMap[s.user_id]
+    return {
+      id: s.id,
+      user_id: s.user_id,
+      email: acc?.email ?? '—',
+      full_name: acc?.full_name ?? null,
+      phone: acc?.phone ?? null,
+      plan: s.plan ?? 'SOLO',
+      sub_status: s.status,
+      account_status: acc?.account_status ?? 'active',
+      started_at: s.started_at,
+      ended_at: s.ended_at,
+    }
+  })
+
+  return { subs: rows.slice(page * SUBS_PAGE_SIZE, (page + 1) * SUBS_PAGE_SIZE), total: rows.length }
+}
+
+export async function changeSubscriptionPlan(userId: string, newPlan: string): Promise<{ success: boolean; error?: string }> {
+  if (!['SOLO', 'DUO', 'TEAM', 'ENTERPRISE'].includes(newPlan)) return { success: false, error: 'Plan invalide.' }
+  const auth = await verifyAdmin()
+  if ('error' in auth) return { success: false, error: auth.error }
+
+  const db = makeAdminClient()
+  const [subRes, accRes] = await Promise.all([
+    db.from('subscriptions').update({ plan: newPlan }).eq('user_id', userId).in('status', ['active', 'trialing']),
+    db.from('user_accounts').update({ plan: newPlan, updated_at: new Date().toISOString() }).eq('id', userId),
+  ])
+  if (subRes.error) return { success: false, error: 'Erreur mise à jour abonnement.' }
+  if (accRes.error) return { success: false, error: 'Erreur mise à jour compte.' }
+
+  await logAction(auth.adminId, 'change_plan', userId, { new_plan: newPlan, source: 'subscriptions' })
+  return { success: true }
+}
