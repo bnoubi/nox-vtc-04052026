@@ -49,6 +49,7 @@ interface NoxContextType {
   tranches: TrancheHoraire[]
   applyWeekend: boolean
   applyHolidays: boolean
+  userId: string | null
   plan: Plan
   tokens: number
   onboardingStatus: string
@@ -1486,7 +1487,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   return (
     <NoxContext.Provider value={{
       enterprise, userProfile, refreshUserProfile, refreshInvoices, drivers, vehicles, clients, bcs, invoices, tarifBase, forfaits, supplements,
-      plan, tokens, onboardingStatus, driverCount, vehicleCount,
+      userId, plan, tokens, onboardingStatus, driverCount, vehicleCount,
       upgrade, addTokens, spendToken,
       updateEnterprise, addDriver, updateDriver, deleteDriver, addVehicle, updateVehicle, deleteVehicle,
       addClient, updateClient, deleteClient, addBC, updateBC, saveDraftBC, deleteBC, addInvoice, updateInvoice, deleteInvoice,
