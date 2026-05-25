@@ -618,6 +618,127 @@ export async function getSubscriptions(params: GetSubsParams = {}): Promise<{ su
   return { subs: rows.slice(page * SUBS_PAGE_SIZE, (page + 1) * SUBS_PAGE_SIZE), total: rows.length }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Module Jetons
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface TokenRow {
+  user_id: string
+  email: string
+  full_name: string | null
+  phone: string | null
+  plan: string
+  sub_status: string | null
+  wallet_balance: number
+  last_tx_date: string | null
+  last_tx_amount: number | null
+  expired_sub_plan: string | null
+}
+
+export interface GetTokensParams {
+  plan?: string
+  status?: string
+  balance?: string
+  page?: number
+}
+
+const TOKENS_PAGE_SIZE = 20
+
+export async function getTokensData(params: GetTokensParams = {}): Promise<{ rows: TokenRow[]; total: number }> {
+  const auth = await verifyAdmin()
+  if ('error' in auth) return { rows: [], total: 0 }
+
+  const db = makeAdminClient()
+  const { plan = 'all', status = 'all', balance = 'all', page = 0 } = params
+
+  type AccRow = { id: string; email: string; full_name: string | null; phone: string | null; plan: string }
+  const { data: accs, error: accErr } = await db
+    .from('user_accounts')
+    .select('id, email, full_name, phone, plan')
+  if (accErr || !accs?.length) return { rows: [], total: 0 }
+
+  const allIds = (accs as AccRow[]).map(a => a.id)
+
+  type SubRaw = { user_id: string; status: string; plan: string | null }
+  type TxRaw  = { user_id: string; amount: number; created_at: string }
+  type WalRaw = { user_id: string; balance: number }
+
+  const [walletRes, subRes, txRes] = await Promise.all([
+    db.from('wallets').select('user_id, balance').in('user_id', allIds),
+    db.from('subscriptions')
+      .select('user_id, status, plan')
+      .in('user_id', allIds)
+      .order('created_at', { ascending: false }),
+    db.from('token_transactions')
+      .select('user_id, amount, created_at')
+      .in('user_id', allIds)
+      .order('created_at', { ascending: false }),
+  ])
+
+  const subMap: Record<string, SubRaw> = {}
+  const expiredSubPlan: Record<string, string> = {}
+  for (const s of (subRes.data ?? []) as SubRaw[]) {
+    if (!subMap[s.user_id]) subMap[s.user_id] = s
+    if (s.status === 'expired' && (s.plan === 'DUO' || s.plan === 'TEAM') && !expiredSubPlan[s.user_id]) {
+      expiredSubPlan[s.user_id] = s.plan
+    }
+  }
+
+  const lastTxMap: Record<string, TxRaw> = {}
+  for (const tx of (txRes.data ?? []) as TxRaw[]) {
+    if (!lastTxMap[tx.user_id]) lastTxMap[tx.user_id] = tx
+  }
+
+  const walletMap: Record<string, number> = {}
+  for (const w of (walletRes.data ?? []) as WalRaw[]) walletMap[w.user_id] = w.balance
+
+  let rows: TokenRow[] = (accs as AccRow[]).map(acc => ({
+    user_id: acc.id,
+    email: acc.email,
+    full_name: acc.full_name,
+    phone: acc.phone,
+    plan: acc.plan ?? 'SOLO',
+    sub_status: subMap[acc.id]?.status ?? null,
+    wallet_balance: walletMap[acc.id] ?? 0,
+    last_tx_date: lastTxMap[acc.id]?.created_at ?? null,
+    last_tx_amount: lastTxMap[acc.id]?.amount ?? null,
+    expired_sub_plan: acc.plan === 'SOLO' ? (expiredSubPlan[acc.id] ?? null) : null,
+  }))
+
+  if (plan !== 'all') rows = rows.filter(r => r.plan === plan)
+  if (status !== 'all') rows = rows.filter(r => r.sub_status === status)
+  if (balance === 'empty') rows = rows.filter(r => r.wallet_balance === 0)
+  else if (balance === 'low') rows = rows.filter(r => r.wallet_balance > 0 && r.wallet_balance < 5)
+
+  rows.sort((a, b) => a.wallet_balance - b.wallet_balance)
+
+  const total = rows.length
+  return { rows: rows.slice(page * TOKENS_PAGE_SIZE, (page + 1) * TOKENS_PAGE_SIZE), total }
+}
+
+export type TokenHistoryTx = {
+  id: string
+  type: string
+  amount: number
+  balance_after: number | null
+  description: string | null
+  created_at: string
+}
+
+export async function getTokenHistory(userId: string): Promise<TokenHistoryTx[]> {
+  const auth = await verifyAdmin()
+  if ('error' in auth) return []
+
+  const { data } = await makeAdminClient()
+    .from('token_transactions')
+    .select('id, type, amount, balance_after, description, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(100)
+
+  return (data ?? []) as TokenHistoryTx[]
+}
+
 export async function changeSubscriptionPlan(
   userId: string,
   newPlan: string,
