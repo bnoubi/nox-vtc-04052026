@@ -55,13 +55,15 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
     try {
       const origin = window.location.origin
       const itemType = targetPlan === "DUO" ? "plan_duo" : "plan_team"
+      const validUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      const successUrl = `${origin}/payment/success?type=subscription&plan=${targetPlan}&valid_until=${validUntil}`
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           itemType,
           userId,
-          successUrl: `${origin}/?refresh=1`,
+          successUrl,
           cancelUrl:  `${origin}/`,
         }),
       })

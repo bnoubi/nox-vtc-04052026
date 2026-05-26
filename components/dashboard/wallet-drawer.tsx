@@ -15,7 +15,7 @@ const PACKS = [
 type PayState = "idle" | "loading"
 
 export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { userId } = useNox()
+  const { userId, tokens } = useNox()
   const [selected, setSelected] = useState<string>("privilege")
   const [payState, setPayState] = useState<PayState>("idle")
 
@@ -27,13 +27,16 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
     setPayState("loading")
     try {
       const origin = window.location.origin
+      const before = tokens
+      const after = tokens + pack.tokens
+      const successUrl = `${origin}/payment/success?type=token_pack&amount=${pack.tokens}&before=${before}&after=${after}`
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           itemType: `pack_${pack.id}`,
           userId,
-          successUrl: `${origin}/`,
+          successUrl,
           cancelUrl:  `${origin}/`,
         }),
       })
