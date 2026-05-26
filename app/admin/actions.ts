@@ -438,7 +438,7 @@ export async function changePlan(targetUserId: string, newPlan: string, startDat
     if (error) return { success: false, error: 'Erreur lors de la mise à jour.' }
     if (startDate && endDate) {
       await db.from('subscriptions').insert({
-        user_id: targetUserId, plan: newPlan, status: 'active', started_at: startDate, ended_at: endDate,
+        user_id: targetUserId, plan: newPlan, status: 'active', current_period_start: startDate, current_period_end: endDate,
       })
     }
   }

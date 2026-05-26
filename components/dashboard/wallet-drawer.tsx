@@ -33,8 +33,8 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
         body: JSON.stringify({
           itemType: `pack_${pack.id}`,
           userId,
-          successUrl: `${origin}/dashboard`,
-          cancelUrl:  `${origin}/dashboard`,
+          successUrl: `${origin}/`,
+          cancelUrl:  `${origin}/`,
         }),
       })
       const data = await res.json() as { url?: string; error?: string }

@@ -61,8 +61,8 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
         body: JSON.stringify({
           itemType,
           userId,
-          successUrl: `${origin}/dashboard`,
-          cancelUrl:  `${origin}/dashboard`,
+          successUrl: `${origin}/?refresh=1`,
+          cancelUrl:  `${origin}/`,
         }),
       })
       const data = await res.json() as { url?: string; error?: string }

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react"
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import {
   Driver, Vehicle, Client, EnterpriseProfile, TarifBase, TarifForfait, TarifSupplement, TrancheHoraire, TariffGrid,
@@ -227,13 +227,12 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data: sub } = await supabase
           .from("subscriptions")
-          .select("plan, onboarding_status")
+          .select("plan")
           .eq("user_id", uid)
-          .single()
-        if (sub) {
-          if (sub.plan) setPlan(sub.plan as Plan)
-          if (sub.onboarding_status) setOnboardingStatus(sub.onboarding_status)
-        }
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (sub?.plan) setPlan(sub.plan as Plan)
       } catch (err) {}
 
       // Solde de jetons depuis wallets (source de vérité absolue)
@@ -566,6 +565,39 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe()
     }
   }, [supabase])
+
+  // Polling post-paiement Stripe : ?refresh=1 dans l'URL signale un retour de checkout
+  const stripeReturnRef = useRef(
+    typeof window !== 'undefined' && window.location.search.includes('refresh=1')
+  )
+
+  useEffect(() => {
+    if (!stripeReturnRef.current || !isLoaded || !userId) return
+    stripeReturnRef.current = false
+    window.history.replaceState({}, '', '/')
+
+    let attempts = 0
+    const poll = async () => {
+      attempts++
+      const { data: sub } = await supabase
+        .from('subscriptions')
+        .select('plan')
+        .eq('user_id', userId)
+        .single()
+      if (sub?.plan && sub.plan !== 'SOLO') {
+        setPlan(sub.plan as Plan)
+        const { data: wallet } = await supabase
+          .from('wallets')
+          .select('balance')
+          .eq('user_id', userId)
+          .single()
+        if (wallet) setTokens(wallet.balance ?? 0)
+      } else if (attempts < 5) {
+        setTimeout(poll, 1500)
+      }
+    }
+    setTimeout(poll, 500)
+  }, [isLoaded, userId, supabase])
 
   // ─── Mutations données métier ───
   const updateEnterprise = async (data: Partial<EnterpriseProfile>) => {
