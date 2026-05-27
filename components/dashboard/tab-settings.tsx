@@ -20,6 +20,7 @@ import {
 
   Crown,
   Headphones,
+  MessageSquare,
   Mail,
   Phone,
   MapPin,
@@ -62,6 +63,7 @@ import type { Driver, Vehicle, Client, BCDocument, InvoiceDocument, BCStatus, In
 import { AccountSecurityScreen } from "./account-security/AccountSecurityScreen"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 import { SupportTicketModal } from "./support-ticket-modal"
+import { SupportHistory } from "./support-history"
 
 // ── Helpers : expiration la plus proche ───────────────────────
 
@@ -1998,6 +2000,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
   const isTeam = plan === "TEAM"
   const [walletOpen, setWalletOpen] = useState(false)
   const [supportOpen, setSupportOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [userInfo, setUserInfo] = useState({ name: "Chargement...", email: "" })
 
   useEffect(() => {
@@ -2135,6 +2138,14 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
             }}
             onPress={() => setSupportOpen(true)}
           />
+          <SettingRow
+            item={{
+              icon: <MessageSquare className="h-4 w-4" strokeWidth={1.5} />,
+              label: "Mes demandes",
+              description: "Consulter l'historique de vos tickets",
+            }}
+            onPress={() => setHistoryOpen(true)}
+          />
         </GlassCard>
 
         {/* Déconnexion */}
@@ -2159,6 +2170,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
       </div>
       <WalletDrawer open={walletOpen} onClose={() => setWalletOpen(false)} />
       <SupportTicketModal isOpen={supportOpen} onClose={() => setSupportOpen(false)} />
+      <SupportHistory isOpen={historyOpen} onClose={() => setHistoryOpen(false)} />
     </motion.div>
   )
 }
