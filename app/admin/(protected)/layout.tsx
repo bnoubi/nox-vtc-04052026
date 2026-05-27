@@ -1,10 +1,11 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
+import { createClient as createServerClient } from '@/lib/supabase/server'
 import { AdminThemeProvider } from '@/lib/theme/admin-theme-context'
 import { AdminShell } from './_components/admin-shell'
 import '../admin-globals.css'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
+  const supabase = await createServerClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -21,12 +22,21 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     }
   }
 
+  const adminClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+  const { count: openTicketCount } = await adminClient
+    .from('support_tickets')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'open')
+
   const email = user?.email ?? ''
   const initials = email.slice(0, 2).toUpperCase()
 
   return (
     <AdminThemeProvider initialTheme={initialTheme}>
-      <AdminShell userEmail={email} userInitials={initials}>
+      <AdminShell userEmail={email} userInitials={initials} openTicketCount={openTicketCount ?? 0}>
         {children}
       </AdminShell>
     </AdminThemeProvider>

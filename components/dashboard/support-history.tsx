@@ -1,9 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useTransition } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { X, Paperclip, Clock, CheckCircle, XCircle, AlertCircle, Loader2, MessageSquare } from "lucide-react"
+import { X, Paperclip, MessageSquare, Loader2, Send } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { toast } from "sonner"
+import { sendClientReply } from "@/app/actions/support.actions"
 
 interface Message {
   role: "user" | "admin"
@@ -43,7 +45,39 @@ function StatusBadge({ status }: { status: Ticket["status"] }) {
   )
 }
 
-function TicketDetailModal({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
+interface DetailProps {
+  ticket: Ticket
+  userName: string
+  onClose: () => void
+}
+
+function TicketDetailModal({ ticket: initialTicket, userName, onClose }: DetailProps) {
+  const [ticket, setTicket] = useState(initialTicket)
+  const [reply, setReply] = useState("")
+  const [isPending, startTransition] = useTransition()
+  const canReply = ticket.status === "open" || ticket.status === "in_progress"
+
+  function handleReply() {
+    if (!reply.trim()) return
+    const content = reply.trim()
+    startTransition(async () => {
+      try {
+        await sendClientReply(ticket.id, content, userName, ticket.subject)
+        // Optimistic update des messages
+        const newMsg: Message = { role: "user", content, created_at: new Date().toISOString() }
+        setTicket(prev => ({
+          ...prev,
+          status: "open",
+          messages: [...prev.messages, newMsg],
+        }))
+        setReply("")
+        toast.success("Votre réponse a bien été envoyée.")
+      } catch {
+        toast.error("Erreur lors de l'envoi. Réessayez.")
+      }
+    })
+  }
+
   return (
     <AnimatePresence>
       <motion.div
@@ -123,15 +157,46 @@ function TicketDetailModal({ ticket, onClose }: { ticket: Ticket; onClose: () =>
             )}
           </div>
 
-          {/* Footer */}
-          <div className="px-5 py-4 shrink-0 border-t border-onyx-border/30">
-            <button
-              onClick={onClose}
-              className="w-full py-3 rounded-2xl text-sm font-bold text-white"
-              style={{ backgroundColor: "#C5A059" }}
-            >
-              Fermer
-            </button>
+          {/* Zone réponse ou message clôture */}
+          <div className="shrink-0 border-t border-onyx-border/30">
+            {canReply ? (
+              <div className="px-5 pt-3 pb-4 space-y-2.5">
+                <textarea
+                  rows={3}
+                  value={reply}
+                  onChange={e => setReply(e.target.value)}
+                  placeholder="Votre réponse..."
+                  disabled={isPending}
+                  className="w-full rounded-2xl bg-onyx-card border border-onyx-border/50 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:border-[#C5A059]/50 transition-colors disabled:opacity-50"
+                />
+                <button
+                  onClick={handleReply}
+                  disabled={isPending || !reply.trim()}
+                  className="w-full py-3 rounded-2xl text-sm font-bold text-black flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity"
+                  style={{ backgroundColor: "#C5A059" }}
+                >
+                  {isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" strokeWidth={2} />
+                  )}
+                  {isPending ? "Envoi en cours…" : "Envoyer ma réponse"}
+                </button>
+              </div>
+            ) : (
+              <div className="px-5 py-4 space-y-3">
+                <p className="text-xs text-center text-muted-foreground/70 py-1">
+                  Ce ticket est clôturé. Ouvrez un nouveau ticket si besoin.
+                </p>
+                <button
+                  onClick={onClose}
+                  className="w-full py-3 rounded-2xl text-sm font-bold text-white"
+                  style={{ backgroundColor: "#C5A059" }}
+                >
+                  Fermer
+                </button>
+              </div>
+            )}
           </div>
         </motion.div>
       </motion.div>
@@ -148,17 +213,29 @@ export function SupportHistory({ isOpen, onClose }: SupportHistoryProps) {
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Ticket | null>(null)
+  const [userName, setUserName] = useState("")
 
   useEffect(() => {
     if (!isOpen) return
     async function load() {
       setLoading(true)
       const supabase = createClient()
-      const { data } = await supabase
-        .from("support_tickets")
-        .select("id, created_at, subject, status, messages, attachment_url")
-        .order("created_at", { ascending: false })
-      setTickets((data as Ticket[]) ?? [])
+      const [{ data: ticketData }, { data: { user } }] = await Promise.all([
+        supabase
+          .from("support_tickets")
+          .select("id, created_at, subject, status, messages, attachment_url")
+          .order("created_at", { ascending: false }),
+        supabase.auth.getUser(),
+      ])
+      setTickets((ticketData as Ticket[]) ?? [])
+      if (user) {
+        const { data: acc } = await supabase
+          .from("user_accounts")
+          .select("full_name")
+          .eq("id", user.id)
+          .maybeSingle()
+        setUserName((acc as { full_name: string | null } | null)?.full_name ?? user.email ?? "Abonné")
+      }
       setLoading(false)
     }
     load()
@@ -254,7 +331,11 @@ export function SupportHistory({ isOpen, onClose }: SupportHistoryProps) {
       </AnimatePresence>
 
       {selected && (
-        <TicketDetailModal ticket={selected} onClose={() => setSelected(null)} />
+        <TicketDetailModal
+          ticket={selected}
+          userName={userName}
+          onClose={() => setSelected(null)}
+        />
       )}
     </>
   )

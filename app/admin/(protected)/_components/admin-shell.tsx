@@ -15,9 +15,11 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  LifeBuoy,
 } from 'lucide-react'
 import { useAdminTheme } from '@/lib/theme/admin-theme-context'
 import { createClient } from '@/lib/supabase/client'
+import { Toaster } from 'sonner'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +41,7 @@ const navItems = [
   { href: '/admin/tokens', label: 'Jetons', icon: Coins },
   { href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/admin/settings', label: 'Configuration', icon: Settings },
+  { href: '/admin/support', label: 'Support', icon: LifeBuoy },
 ]
 
 const pageTitles: Record<string, string> = {
@@ -48,15 +51,17 @@ const pageTitles: Record<string, string> = {
   '/admin/tokens': 'Jetons',
   '/admin/analytics': 'Analytics',
   '/admin/settings': 'Configuration',
+  '/admin/support': 'Support',
 }
 
 interface AdminShellProps {
   children: React.ReactNode
   userEmail: string
   userInitials: string
+  openTicketCount: number
 }
 
-export function AdminShell({ children, userEmail, userInitials }: AdminShellProps) {
+export function AdminShell({ children, userEmail, userInitials, openTicketCount }: AdminShellProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, toggleTheme } = useAdminTheme()
@@ -190,6 +195,7 @@ export function AdminShell({ children, userEmail, userInitials }: AdminShellProp
         >
           {navItems.map(({ href, label, icon: Icon }) => {
             const isActive = pathname === href || pathname.startsWith(href + '/')
+            const badge = href === '/admin/support' && openTicketCount > 0 ? openTicketCount : null
             return (
               <Link
                 key={href}
@@ -213,9 +219,29 @@ export function AdminShell({ children, userEmail, userInitials }: AdminShellProp
                       }),
                 }}
               >
-                <Icon size={18} className="shrink-0" />
+                <span className="relative shrink-0">
+                  <Icon size={18} />
+                  {badge !== null && collapsed && (
+                    <span
+                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
+                      style={{ backgroundColor: '#ef4444' }}
+                    >
+                      {badge > 99 ? '99+' : badge}
+                    </span>
+                  )}
+                </span>
                 {!collapsed && (
-                  <span className="whitespace-nowrap overflow-hidden text-ellipsis">{label}</span>
+                  <>
+                    <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">{label}</span>
+                    {badge !== null && (
+                      <span
+                        className="ml-auto shrink-0 min-w-[20px] h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white px-1"
+                        style={{ backgroundColor: '#ef4444' }}
+                      >
+                        {badge > 99 ? '99+' : badge}
+                      </span>
+                    )}
+                  </>
                 )}
               </Link>
             )
@@ -282,6 +308,8 @@ export function AdminShell({ children, userEmail, userInitials }: AdminShellProp
           {collapsed ? <ChevronRight size={10} /> : <ChevronLeft size={10} />}
         </button>
       </aside>
+
+      <Toaster richColors position="top-right" />
 
       {/* Zone principale */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
