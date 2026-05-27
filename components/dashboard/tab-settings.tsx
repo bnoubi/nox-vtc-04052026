@@ -61,6 +61,7 @@ import { createClient } from "@/lib/supabase/client"
 import type { Driver, Vehicle, Client, BCDocument, InvoiceDocument, BCStatus, InvoiceStatus } from "./data"
 import { AccountSecurityScreen } from "./account-security/AccountSecurityScreen"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
+import { SupportTicketModal } from "./support-ticket-modal"
 
 // ── Helpers : expiration la plus proche ───────────────────────
 
@@ -1996,6 +1997,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
   const { logout } = useNav()
   const isTeam = plan === "TEAM"
   const [walletOpen, setWalletOpen] = useState(false)
+  const [supportOpen, setSupportOpen] = useState(false)
   const [userInfo, setUserInfo] = useState({ name: "Chargement...", email: "" })
 
   useEffect(() => {
@@ -2122,6 +2124,19 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
           ))}
         </GlassCard>
 
+        {/* Support & Aide */}
+        <SectionLabel>Support &amp; Aide</SectionLabel>
+        <GlassCard className="mb-5">
+          <SettingRow
+            item={{
+              icon: <Headphones className="h-4 w-4" strokeWidth={1.5} />,
+              label: "Contacter le support",
+              description: "Signaler un problème ou poser une question",
+            }}
+            onPress={() => setSupportOpen(true)}
+          />
+        </GlassCard>
+
         {/* Déconnexion */}
         <div className="mx-4 mb-6">
           <button 
@@ -2143,6 +2158,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
         </div>
       </div>
       <WalletDrawer open={walletOpen} onClose={() => setWalletOpen(false)} />
+      <SupportTicketModal isOpen={supportOpen} onClose={() => setSupportOpen(false)} />
     </motion.div>
   )
 }
