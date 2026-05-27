@@ -1,36 +1,76 @@
-import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
+import { SupportStats, type SupportStatsData } from './_components/support-stats'
+import { TicketsTable } from './_components/tickets-table'
 
-interface Ticket {
+interface RawTicket {
   id: string
   created_at: string
   subject: string
+  subject_category: string
   status: 'open' | 'in_progress' | 'resolved' | 'closed'
   priority: 'normal' | 'urgent'
+  user_id: string
+  resolved_at: string | null
 }
 
-const STATUS_LABELS: Record<Ticket['status'], string> = {
-  open: 'En attente',
-  in_progress: 'En cours',
-  resolved: 'Résolu',
-  closed: 'Fermé',
-}
 
-const STATUS_COLORS: Record<Ticket['status'], string> = {
-  open: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30',
-  in_progress: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
-  resolved: 'bg-green-500/20 text-green-400 border border-green-500/30',
-  closed: 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30',
-}
+function computeStats(tickets: RawTicket[]): SupportStatsData {
+  const now = new Date()
+  const threshold48h = new Date(now.getTime() - 48 * 60 * 60 * 1000)
 
-const PRIORITY_COLORS: Record<string, string> = {
-  normal: 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30',
-  urgent: 'bg-red-500/20 text-red-400 border border-red-500/30',
-}
+  const kpi = {
+    total: tickets.length,
+    open: tickets.filter(t => t.status === 'open').length,
+    in_progress: tickets.filter(t => t.status === 'in_progress').length,
+    resolved: tickets.filter(t => t.status === 'resolved').length,
+    closed: tickets.filter(t => t.status === 'closed').length,
+    urgent: tickets.filter(t => t.priority === 'urgent').length,
+    stale_open: tickets.filter(t => t.status === 'open' && new Date(t.created_at) < threshold48h).length,
+  }
 
-const PRIORITY_LABELS: Record<string, string> = {
-  normal: 'Normale',
-  urgent: 'Urgente',
+  // Temps de réponse moyen (en heures) sur tickets résolus avec resolved_at
+  const resolvedWithTime = tickets.filter(t => t.resolved_at)
+  const avgResponseHours = resolvedWithTime.length > 0
+    ? resolvedWithTime.reduce((sum, t) => {
+        return sum + (new Date(t.resolved_at!).getTime() - new Date(t.created_at).getTime()) / 3_600_000
+      }, 0) / resolvedWithTime.length
+    : null
+
+  // Répartition par catégorie
+  const catMap: Record<string, number> = {}
+  for (const t of tickets) {
+    catMap[t.subject_category] = (catMap[t.subject_category] ?? 0) + 1
+  }
+  const byCategory = Object.entries(catMap)
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count)
+
+  // Évolution par semaine (8 dernières semaines)
+  const byWeek: { week: string; count: number }[] = []
+  for (let i = 7; i >= 0; i--) {
+    const end = new Date(now)
+    end.setDate(end.getDate() - i * 7)
+    const start = new Date(end)
+    start.setDate(start.getDate() - 7)
+    const count = tickets.filter(t => {
+      const d = new Date(t.created_at)
+      return d >= start && d <= end
+    }).length
+    const label = start.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+    byWeek.push({ week: label, count })
+  }
+
+  // Top 5 abonnés par nombre de tickets (user_id enrichi plus bas)
+  const userMap: Record<string, number> = {}
+  for (const t of tickets) {
+    userMap[t.user_id] = (userMap[t.user_id] ?? 0) + 1
+  }
+  const top5Ids = Object.entries(userMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([id]) => id)
+
+  return { kpi, avgResponseHours, byCategory, byWeek, topUsers: top5Ids.map(uid => ({ user_id: uid, name: '—', email: '—', count: userMap[uid] })) }
 }
 
 export default async function SupportPage() {
@@ -39,70 +79,33 @@ export default async function SupportPage() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const { data: tickets } = await supabase
+  const { data: rawTickets } = await supabase
     .from('support_tickets')
-    .select('id, created_at, subject, status, priority')
+    .select('id, created_at, subject, subject_category, status, priority, user_id, resolved_at')
     .order('created_at', { ascending: false })
 
-  const list = (tickets ?? []) as Ticket[]
+  const tickets = (rawTickets ?? []) as RawTicket[]
+  const stats = computeStats(tickets)
+
+  // Enrichir les top abonnés avec user_accounts
+  const top5Ids = stats.topUsers.map(u => u.user_id)
+  if (top5Ids.length > 0) {
+    const { data: accounts } = await supabase
+      .from('user_accounts')
+      .select('id, email, full_name')
+      .in('id', top5Ids)
+
+    stats.topUsers = stats.topUsers.map(u => {
+      const acc = accounts?.find((a: { id: string; email: string | null; full_name: string | null }) => a.id === u.user_id)
+      return { ...u, name: acc?.full_name ?? '—', email: acc?.email ?? '—' }
+    })
+  }
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-card)' }}>
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--admin-border)' }}>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--admin-muted-foreground)' }}>Sujet</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--admin-muted-foreground)' }}>Statut</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--admin-muted-foreground)' }}>Priorité</th>
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--admin-muted-foreground)' }}>Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="text-center px-4 py-12" style={{ color: 'var(--admin-muted-foreground)' }}>
-                  Aucun ticket support.
-                </td>
-              </tr>
-            ) : (
-              list.map((ticket) => (
-                <tr
-                  key={ticket.id}
-                  style={{ borderBottom: '1px solid var(--admin-border)' }}
-                  className="hover:bg-[var(--admin-active-bg)] transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/support/${ticket.id}`}
-                      className="font-medium hover:underline"
-                      style={{ color: 'var(--admin-foreground)' }}
-                    >
-                      {ticket.subject}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_COLORS[ticket.status]}`}>
-                      {STATUS_LABELS[ticket.status]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${PRIORITY_COLORS[ticket.priority] ?? PRIORITY_COLORS.normal}`}>
-                      {PRIORITY_LABELS[ticket.priority] ?? 'Normale'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3" style={{ color: 'var(--admin-muted-foreground)' }}>
-                    {new Date(ticket.created_at).toLocaleDateString('fr-FR', {
-                      day: 'numeric', month: 'short', year: 'numeric',
-                      hour: '2-digit', minute: '2-digit',
-                    })}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <SupportStats data={stats} />
+
+      <TicketsTable tickets={tickets} />
     </div>
   )
 }
