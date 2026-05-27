@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { X, MessageSquare, Paperclip, CheckCircle2, Loader2 } from "lucide-react"
+import { X, MessageSquare, Paperclip, CheckCircle, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 
@@ -68,22 +68,28 @@ export function SupportTicketModal({ isOpen, onClose }: SupportTicketModalProps)
       const {
         data: { user },
       } = await supabase.auth.getUser()
-      if (!user) throw new Error("Non authentifié")
+      console.log("[Support] user:", user?.id ?? "null")
+      if (!user) throw new Error("Non authentifié — session absente")
 
       let attachmentUrl: string | null = null
 
       if (attachment) {
         const ext = attachment.name.split(".").pop()
         const path = `${user.id}/${Date.now()}.${ext}`
+        console.log("[Support] Upload pièce jointe:", path)
         const { error: uploadError } = await supabase.storage
           .from("support-attachments")
           .upload(path, attachment)
-        if (uploadError) throw uploadError
+        if (uploadError) {
+          console.log("[Support] Erreur upload:", uploadError)
+          throw uploadError
+        }
 
         const { data: urlData } = supabase.storage
           .from("support-attachments")
           .getPublicUrl(path)
         attachmentUrl = urlData.publicUrl
+        console.log("[Support] URL pièce jointe:", attachmentUrl)
       }
 
       const subject =
@@ -91,7 +97,7 @@ export function SupportTicketModal({ isOpen, onClose }: SupportTicketModalProps)
           ? subjectCustom.trim() || "Autre"
           : category
 
-      const { error: insertError } = await supabase.from("support_tickets").insert({
+      const payload = {
         user_id: user.id,
         subject,
         subject_category: category,
@@ -106,21 +112,33 @@ export function SupportTicketModal({ isOpen, onClose }: SupportTicketModalProps)
           },
         ],
         attachment_url: attachmentUrl,
-      })
+      }
+      console.log("[Support] Données envoyées:", { subject_category: payload.subject_category, message: message.trim(), user_id: payload.user_id })
 
-      if (insertError) throw insertError
+      const { error: insertError } = await supabase.from("support_tickets").insert(payload)
+
+      if (insertError) {
+        console.log("[Support] Erreur insert:", insertError)
+        throw insertError
+      }
 
       setSuccess(true)
-      setTimeout(() => {
-        onClose()
-        setTimeout(resetForm, 300)
-      }, 2000)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Une erreur est survenue.")
+      const msg = err instanceof Error
+        ? err.message
+        : typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : JSON.stringify(err)
+      console.log("[Support] Erreur:", err)
+      setError(msg)
     } finally {
       setSubmitting(false)
     }
   }
+
+  const handleClose = success
+    ? () => { onClose(); setTimeout(resetForm, 300) }
+    : onClose
 
   const isAutre = category === "Autre"
   const canSubmit = !submitting && category !== "" && message.trim().length > 0
@@ -138,7 +156,7 @@ export function SupportTicketModal({ isOpen, onClose }: SupportTicketModalProps)
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={!submitting ? onClose : undefined}
+            onClick={!submitting ? handleClose : undefined}
           />
 
           {/* Modal */}
@@ -166,7 +184,7 @@ export function SupportTicketModal({ isOpen, onClose }: SupportTicketModalProps)
                 </div>
               </div>
               <button
-                onClick={!submitting ? onClose : undefined}
+                onClick={!submitting ? handleClose : undefined}
                 disabled={submitting}
                 className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 transition-colors disabled:opacity-50"
               >
@@ -179,18 +197,22 @@ export function SupportTicketModal({ isOpen, onClose }: SupportTicketModalProps)
 
             {/* Success state */}
             {success ? (
-              <div className="p-8 flex flex-col items-center justify-center text-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gold/10 border border-gold/30 flex items-center justify-center">
-                  <CheckCircle2 className="h-7 w-7 text-gold" strokeWidth={1.5} />
-                </div>
-                <div className="space-y-1.5">
-                  <p className="text-sm font-semibold text-foreground">
-                    Votre message a bien été envoyé. Merci.
-                  </p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Nous analysons le problème et revenons très vite vers vous.
+              <div className="p-8 flex flex-col items-center justify-center text-center gap-5">
+                <CheckCircle className="h-14 w-14" style={{ color: "#C5A059" }} strokeWidth={1.5} />
+                <div className="space-y-2">
+                  <p className="text-base font-bold text-foreground">Message envoyé !</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Votre message a bien été envoyé. Merci.<br />
+                    Nous analyserons le problème et vous ferons un retour dans les plus brefs délais.
                   </p>
                 </div>
+                <button
+                  onClick={handleClose}
+                  className="mt-1 px-8 py-3 rounded-2xl text-sm font-bold text-white"
+                  style={{ backgroundColor: "#C5A059" }}
+                >
+                  J'ai compris
+                </button>
               </div>
             ) : (
               /* Form */
