@@ -1,13 +1,14 @@
 "use client"
 
 import React, { useState } from "react"
-import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock } from "lucide-react"
+import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock, LifeBuoy } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AddClientModal } from "./add-client-modal"
 import { DriverDrawer } from "./driver-drawer"
 import { VehicleDrawer } from "./vehicle-drawer"
 import { CreateBCFlow } from "./create-bc"
 import { CreateInvoiceFlow } from "./create-invoice"
+import { SupportTicketModal } from "./support-ticket-modal"
 import { useNox } from "./nox-context"
 import { PLAN_LIMITS } from "./data"
 import { useNav } from "./nav-context"
@@ -66,6 +67,7 @@ export function QuickActions() {
   const [showVehicleDrawer, setShowVehicleDrawer] = useState(false)
   const [showBCFlow, setShowBCFlow] = useState(false)
   const [showInvoiceFlow, setShowInvoiceFlow] = useState(false)
+  const [showSupportModal, setShowSupportModal] = useState(false)
   const [limitAlert, setLimitAlert] = useState<{ open: boolean; label: string }>({ open: false, label: "" })
   const { plan, driverCount, vehicleCount, addDriver, addVehicle } = useNox()
   const { navigateToSubscription } = useNav()
@@ -147,6 +149,11 @@ export function QuickActions() {
           onClick={() => setShowDriverDrawer(true)}
           onLockedClick={() => setLimitAlert({ open: true, label: "chauffeur" })}
         />
+        <QuickActionTile
+          icon={<LifeBuoy className="h-5 w-5" strokeWidth={1.5} />}
+          label="Support"
+          onClick={() => setShowSupportModal(true)}
+        />
       </div>
 
       <AddClientModal
@@ -178,6 +185,10 @@ export function QuickActions() {
         onClose={() => setLimitAlert({ open: false, label: "" })}
         resourceLabel={limitAlert.label}
         onManageOffer={navigateToSubscription}
+      />
+      <SupportTicketModal
+        isOpen={showSupportModal}
+        onClose={() => setShowSupportModal(false)}
       />
     </section>
   )
