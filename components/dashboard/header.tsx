@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils"
 import { WalletDrawer } from "./wallet-drawer"
 import { createClient } from "@/lib/supabase/client"
 
+const PLAN_LABEL: Record<string, string> = { SOLO: "Starter", DUO: "Pro", TEAM: "Premium" }
+
 export function DashboardHeader() {
   const { plan, tokens, userProfile } = useNox()
   const { registerWalletOpener } = useNav()
@@ -115,7 +117,7 @@ export function DashboardHeader() {
             "text-[10px] font-bold tracking-[0.15em]",
             isTeam ? "gold-gradient-text" : plan === "DUO" ? "text-gold" : "text-[#D4AF37]"
           )}>
-            {plan}
+            {PLAN_LABEL[plan] ?? plan}
           </span>
         </div>
 

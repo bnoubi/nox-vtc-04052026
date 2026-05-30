@@ -11,7 +11,7 @@ type PayState = "idle" | "loading"
 
 const PLAN_DETAILS = {
   DUO: {
-    name: "DUO",
+    name: "Pro",
     subtitle: "L'offre Binôme",
     price: "4,99",
     bulletPoints: [
@@ -22,7 +22,7 @@ const PLAN_DETAILS = {
     ],
   },
   TEAM: {
-    name: "TEAM",
+    name: "Premium",
     subtitle: "L'offre Flotte",
     price: "9,99",
     bulletPoints: [
@@ -114,7 +114,7 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
             <div className="flex items-center justify-between px-5 pb-4 shrink-0">
               <div>
                 <h2 className="text-base font-bold tracking-wide text-[#D4AF37]">
-                  ACTIVER L'OFFRE {targetPlan}
+                  ACTIVER L'OFFRE {planInfo.name}
                 </h2>
                 <p className="text-[11px] text-[#A1A1AA] mt-0.5">{planInfo.subtitle}</p>
               </div>

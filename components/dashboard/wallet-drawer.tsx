@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Coins, ShieldCheck, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { useNox } from "./nox-context"
 
@@ -18,6 +19,7 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
   const { userId, tokens } = useNox()
   const [selected, setSelected] = useState<string>("privilege")
   const [payState, setPayState] = useState<PayState>("idle")
+  const [paypalState, setPaypalState] = useState<PayState>("idle")
 
   async function handlePay() {
     if (payState !== "idle" || !userId) return
@@ -48,9 +50,33 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
     }
   }
 
+  async function handlePayPayPal() {
+    if (paypalState !== "idle" || !userId) return
+    const pack = PACKS.find((p) => p.id === selected)
+    if (!pack) return
+
+    const itemType = `pack_${pack.id}`
+    setPaypalState("loading")
+    try {
+      const res = await fetch("/api/paypal/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemType, userId }),
+      })
+      const data = await res.json() as { approvalUrl?: string; error?: string }
+      if (!res.ok || !data.approvalUrl) throw new Error(data.error ?? "Erreur inconnue")
+      window.location.href = data.approvalUrl
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erreur inconnue"
+      toast.error(`PayPal — ${msg}`)
+      setPaypalState("idle")
+    }
+  }
+
   function handleClose() {
-    if (payState === "loading") return
+    if (payState === "loading" || paypalState === "loading") return
     setPayState("idle")
+    setPaypalState("idle")
     onClose()
   }
 
@@ -106,7 +132,7 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
                     <button
                       key={pack.id}
                       onClick={() => setSelected(pack.id)}
-                      disabled={payState !== "idle"}
+                      disabled={payState !== "idle" || paypalState !== "idle"}
                       className={cn(
                         "relative w-full flex items-center gap-3.5 p-4 rounded-2xl border text-left transition-all duration-200 active:scale-[0.98]",
                         isSelected
@@ -183,11 +209,11 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
 
               {/* PayPal Button */}
               <button
-                onClick={handlePay}
-                disabled={payState !== "idle"}
+                onClick={handlePayPayPal}
+                disabled={paypalState !== "idle"}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#FFC439] hover:bg-[#F0B72A] active:scale-[0.98] transition-all mb-3 disabled:opacity-60"
               >
-                {payState === "loading" ? (
+                {paypalState === "loading" ? (
                   <Loader2 className="h-5 w-5 text-[#253B80] animate-spin" />
                 ) : (
                   <>

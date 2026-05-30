@@ -178,6 +178,7 @@ class SettingsErrorBoundary extends React.Component<{ children: React.ReactNode 
 const SOLO_LIMIT = 1
 const DUO_LIMIT = 2
 const TEAM_LIMIT = 10
+const PLAN_LABEL: Record<string, string> = { SOLO: "Starter", DUO: "Pro", TEAM: "Premium" }
 
 type SettingsScreen = "main" | "team" | "fleet" | "profile" | "accountSecurity" | "enterprise" | "banking" | "subscription" | "notifications" | "security" | "cgv" | "tarifs"
 
@@ -1092,7 +1093,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
     setShowConfetti(true)
     setTimeout(() => {
       upgrade("SOLO")
-      toast("Vous êtes de retour en SOLO", {
+      toast("Vous êtes de retour en Starter", {
         description: tokens > 0 ? `Vos ${tokens} jetons ont été réactivés.` : "Rechargez des jetons pour générer des documents.",
         duration: 3000,
       })
@@ -1102,7 +1103,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
   const planCards = [
     {
       id: "SOLO" as const,
-      name: "SOLO",
+      name: "Starter",
       subtitle: "L\u2019offre Ind\u00e9pendant",
       price: "Gratuit",
       capacity: "Max 1 Chauffeur / Max 1 V\u00e9hicule",
@@ -1110,7 +1111,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
     },
     {
       id: "DUO" as const,
-      name: "DUO",
+      name: "Pro",
       subtitle: "L\u2019offre Bin\u00f4me",
       price: "4,99\u20ac",
       priceSuffix: "/mois",
@@ -1119,7 +1120,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
     },
     {
       id: "TEAM" as const,
-      name: "TEAM",
+      name: "Premium",
       subtitle: "L\u2019offre Flotte",
       price: "9,99\u20ac",
       priceSuffix: "/mois",
@@ -1149,7 +1150,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                 "text-2xl font-bold font-heading mt-0.5",
                 isTeam ? "gold-gradient-text" : isDuo ? "text-gold" : "text-foreground"
               )}>
-                {plan}
+                {PLAN_LABEL[plan] ?? plan}
               </p>
             </div>
             <div className={cn(
@@ -1163,8 +1164,8 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
             {isTeam
               ? "Vous profitez de toutes les fonctionnalit\u00e9s premium NoX VTC."
               : isDuo
-                ? "Documents illimit\u00e9s inclus. Passez \u00e0 TEAM pour g\u00e9rer votre flotte compl\u00e8te."
-                : "Paiement \u00e0 l\u2019usage via jetons. Passez \u00e0 DUO ou TEAM pour des documents illimit\u00e9s."
+                ? "Documents illimit\u00e9s inclus. Passez en Premium pour g\u00e9rer votre flotte compl\u00e8te."
+                : "Paiement \u00e0 l\u2019usage via jetons. Passez en Pro ou Premium pour des documents illimit\u00e9s."
             }
           </p>
         </div>
@@ -1246,7 +1247,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                     onClick={() => handleChoose("SOLO")}
                     className="w-full mt-3 py-2 rounded-xl text-[11px] font-medium text-muted-foreground border border-onyx-border/30 hover:border-gold/30 hover:text-gold/70 active:scale-[0.98] transition-all"
                   >
-                    Repasser en SOLO
+                    Repasser en Starter
                   </button>
                 )}
               </div>
@@ -1310,7 +1311,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
 
               {/* Message */}
               <p className="text-[11px] text-[#A1A1AA] text-center leading-relaxed px-1 mb-4">
-                En repassant en SOLO, votre capacité sera limitée à 1 véhicule et 1 chauffeur. Pour générer des documents vous devrez acheter des jetons. Confirmer le changement ?
+                En repassant en Starter, votre capacité sera limitée à 1 véhicule et 1 chauffeur. Pour générer des documents vous devrez acheter des jetons. Confirmer le changement ?
               </p>
 
               {/* Buttons */}
@@ -1367,7 +1368,7 @@ function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => voi
           <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
         </div>
         <div className="text-center">
-          <p className="text-sm font-semibold font-heading text-foreground mb-1.5">Limite {plan} atteinte</p>
+          <p className="text-sm font-semibold font-heading text-foreground mb-1.5">Limite {PLAN_LABEL[plan] ?? plan} atteinte</p>
           <p className="text-xs text-muted-foreground leading-relaxed max-w-[240px]">
             Vous utilisez {currentLimit}/{currentLimit} {limitLabel}. Choisissez une offre pour en ajouter davantage.
           </p>
@@ -1375,12 +1376,12 @@ function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => voi
         <div className="w-full flex gap-2 max-w-[260px]">
           <button onClick={() => upgrade("DUO")} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25 active:scale-[0.97] transition-all">
             <Crown className="h-4 w-4" strokeWidth={1.5} />
-            <span className="text-[11px] font-bold">DUO</span>
+            <span className="text-[11px] font-bold">Pro</span>
             <span className="text-[10px] text-gold/70 font-medium">4,99&#8364;/mois</span>
           </button>
           <button onClick={() => upgrade("TEAM")} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold text-primary-foreground hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
             <Crown className="h-4 w-4" strokeWidth={1.5} />
-            <span className="text-[11px] font-bold">TEAM</span>
+            <span className="text-[11px] font-bold">Premium</span>
             <span className="text-[10px] text-primary-foreground/70 font-medium">9,99&#8364;/mois</span>
           </button>
         </div>
@@ -2060,7 +2061,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
             ? "bg-gradient-to-r from-gold/25 via-gold/15 to-gold/25 border-gold/50 gold-badge-glow"
             : "bg-gold/15 border-gold/30"
         )}>
-          <span className={cn("text-[10px] font-bold tracking-wider", isTeam ? "gold-gradient-text" : "text-gold")}>{plan}</span>
+          <span className={cn("text-[10px] font-bold tracking-wider", isTeam ? "gold-gradient-text" : "text-gold")}>{PLAN_LABEL[plan] ?? plan}</span>
         </div>
       </div>
 
