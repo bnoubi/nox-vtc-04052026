@@ -43,6 +43,7 @@ import {
   BarChart3,
   Plus,
   X,
+  History,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -180,7 +181,7 @@ const DUO_LIMIT = 2
 const TEAM_LIMIT = 10
 const PLAN_LABEL: Record<string, string> = { SOLO: "Starter", DUO: "Pro", TEAM: "Premium" }
 
-type SettingsScreen = "main" | "team" | "fleet" | "profile" | "accountSecurity" | "enterprise" | "banking" | "subscription" | "notifications" | "security" | "cgv" | "tarifs"
+type SettingsScreen = "main" | "team" | "fleet" | "profile" | "accountSecurity" | "enterprise" | "banking" | "subscription" | "notifications" | "security" | "cgv" | "tarifs" | "wallet_history"
 
 // ── Animation variants ────────────────────────────────────────
 
@@ -1995,6 +1996,202 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
 
 // ── Main Settings ────────���────────────────────────────────────
 
+// ── Wallet History Screen ──────────────────────────────────────
+
+type WalletTx = {
+  id: string
+  type: string
+  amount: number
+  balance_after: number | null
+  description: string | null
+  created_at: string
+  bc_id: string | null
+  bc_numero?: string | null
+}
+
+const TX_LABELS: Record<string, string> = {
+  purchase: "Achat de jetons",
+  consumption: "Bon de réservation",
+  admin_grant: "Attribution",
+  bonus: "Bonus",
+  refund: "Remboursement",
+}
+
+const WALLET_PAGE_SIZE = 10
+
+function WalletHistoryScreen({ onBack }: { onBack: () => void }) {
+  const { plan, tokens } = useNox()
+  const { navigateToBC, switchTab } = useNav()
+  const [walletOpen, setWalletOpen] = useState(false)
+  const [txs, setTxs] = useState<WalletTx[]>([])
+  const [page, setPage] = useState(0)
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setLoading(false); return }
+
+      const from = page * WALLET_PAGE_SIZE
+      const to = from + WALLET_PAGE_SIZE - 1
+
+      const { data, count } = await supabase
+        .from('token_transactions')
+        .select('id, type, amount, balance_after, description, created_at, bc_id', { count: 'exact' })
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .range(from, to)
+
+      if (cancelled) return
+
+      const rows: WalletTx[] = (data ?? []) as WalletTx[]
+      const bcIds = rows.filter(r => r.bc_id).map(r => r.bc_id as string)
+      let bcMap: Record<string, string> = {}
+      if (bcIds.length > 0) {
+        const { data: bcsData } = await supabase
+          .from('bcs')
+          .select('id, numero')
+          .in('id', bcIds)
+        for (const bc of (bcsData ?? []) as { id: string; numero: string }[]) {
+          bcMap[bc.id] = bc.numero
+        }
+      }
+
+      if (cancelled) return
+      setTxs(rows.map(r => ({ ...r, bc_numero: r.bc_id ? (bcMap[r.bc_id] ?? null) : null })))
+      setTotal(count ?? 0)
+      setLoading(false)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [page])
+
+  const totalPages = Math.ceil(total / WALLET_PAGE_SIZE)
+
+  function fmtDate(iso: string) {
+    const d = new Date(iso)
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+  }
+
+  return (
+    <motion.div key="wallet_history" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
+      <SubScreenHeader title="Mon Portefeuille" onBack={onBack} />
+      <div className="flex-1 overflow-y-auto pb-24">
+
+        {/* Solde */}
+        <div className="mx-4 mb-5 p-5 rounded-2xl bg-onyx-card/80 backdrop-blur-sm border border-onyx-border/30">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-gold/10 flex items-center justify-center">
+              <Coins className="h-5 w-5 text-gold" strokeWidth={1.5} />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Solde actuel</p>
+              {plan === "SOLO" ? (
+                <p className="text-xl font-bold font-heading text-foreground">
+                  {tokens} <span className="text-gold text-sm font-semibold">Jetons</span>
+                </p>
+              ) : (
+                <p className="text-lg font-bold font-heading text-gold">Illimité</p>
+              )}
+            </div>
+          </div>
+          {plan === "SOLO" ? (
+            <button
+              onClick={() => setWalletOpen(true)}
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#D4AF37]/20 via-[#D4AF37]/10 to-[#D4AF37]/20 border border-gold/40 flex items-center justify-center gap-2 hover:border-gold/60 active:scale-[0.98] transition-all"
+            >
+              <Coins className="h-4 w-4 text-gold" strokeWidth={1.5} />
+              <span className="text-[11px] font-bold text-gold tracking-wider uppercase">Recharger mes Jetons</span>
+            </button>
+          ) : (
+            <div className="py-2 px-3 rounded-xl bg-gold/10 border border-gold/20">
+              <p className="text-[11px] text-gold/80 text-center">
+                Vous êtes en offre {plan === "TEAM" ? "Premium" : "Pro"} — vos jetons ({tokens}) sont conservés et réutilisables si vous repassez en Starter.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Historique */}
+        <SectionLabel>Historique des transactions</SectionLabel>
+        <div className="mx-4 rounded-2xl bg-onyx-card/80 backdrop-blur-sm border border-onyx-border/40 overflow-hidden mb-4">
+          {loading ? (
+            <div className="py-8 flex items-center justify-center">
+              <div className="w-5 h-5 rounded-full border-2 border-gold/30 border-t-gold animate-spin" />
+            </div>
+          ) : txs.length === 0 ? (
+            <div className="py-10 flex flex-col items-center justify-center gap-2">
+              <History className="h-8 w-8 text-muted-foreground/30" strokeWidth={1.5} />
+              <p className="text-sm text-muted-foreground">Aucune transaction</p>
+            </div>
+          ) : (
+            txs.map((tx, i) => {
+              const isDebit = tx.type === "consumption"
+              const label = TX_LABELS[tx.type] ?? tx.type
+              return (
+                <div key={tx.id} className={cn("flex items-center gap-3 px-4 py-3.5", i > 0 && "border-t border-onyx-border/20")}>
+                  <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center shrink-0", isDebit ? "bg-red-500/10" : "bg-emerald-500/10")}>
+                    <History className={cn("h-4 w-4", isDebit ? "text-red-400" : "text-emerald-400")} strokeWidth={1.5} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-sm font-medium text-foreground truncate">{label}</p>
+                      {tx.type === "consumption" && tx.bc_numero && (
+                        <button
+                          onClick={() => { navigateToBC(tx.bc_id!); switchTab("documents") }}
+                          className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-gold/10 text-gold border border-gold/20 hover:bg-gold/20 transition-colors"
+                        >
+                          {tx.bc_numero}
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">{fmtDate(tx.created_at)}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className={cn("text-sm font-bold tabular-nums", isDebit ? "text-red-400" : "text-emerald-400")}>
+                      {isDebit ? "−" : "+"}{Math.abs(tx.amount)}
+                    </p>
+                    {tx.balance_after != null && (
+                      <p className="text-[10px] text-muted-foreground tabular-nums">→ {tx.balance_after}</p>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-3 mx-4">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="w-8 h-8 rounded-xl bg-onyx-card border border-onyx-border/40 flex items-center justify-center disabled:opacity-30 hover:border-gold/30 transition-all"
+            >
+              <ChevronLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+            </button>
+            <p className="text-xs text-muted-foreground">{page + 1} / {totalPages}</p>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="w-8 h-8 rounded-xl bg-onyx-card border border-onyx-border/40 flex items-center justify-center disabled:opacity-30 hover:border-gold/30 transition-all"
+            >
+              <ChevronRight className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+            </button>
+          </div>
+        )}
+
+      </div>
+      <WalletDrawer open={walletOpen} onClose={() => setWalletOpen(false)} />
+    </motion.div>
+  )
+}
+
 function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => void }) {
   const { plan, tokens, driverCount, vehicleCount, enterprise } = useNox()
   const { logout } = useNav()
@@ -2028,7 +2225,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
     { icon: <FileText className="h-4 w-4" strokeWidth={1.5} />, label: "Mes Conditions de Vente", description: "CGV rattachées à vos documents", screen: "cgv", alertBadge: !enterprise?.cgvMode },
     { icon: <Calculator className="h-4 w-4" strokeWidth={1.5} />, label: "Mes Grilles Tarifaires", description: "Tarifs, suppléments et forfaits", screen: "tarifs" },
     { icon: <Landmark className="h-4 w-4" strokeWidth={1.5} />, label: "Infos Bancaires", description: "Non renseigné", badge: "AES-256", screen: "banking" },
-    { icon: <Crown className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Abonnement", description: isTeam ? "Offre TEAM active" : plan === "DUO" ? "Offre DUO active" : "Offre SOLO active", screen: "subscription" },
+    { icon: <Crown className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Abonnement", description: plan === "TEAM" ? "Offre Premium active" : plan === "DUO" ? "Offre Pro active" : "Offre Starter active", screen: "subscription" },
   ]
 
   const managementSettings: SettingItem[] = [
@@ -2120,6 +2317,19 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
           ))}
         </GlassCard>
 
+        {/* Mon Portefeuille */}
+        <SectionLabel>Mon Portefeuille</SectionLabel>
+        <GlassCard className="mb-5">
+          <SettingRow
+            item={{
+              icon: <History className="h-4 w-4" strokeWidth={1.5} />,
+              label: "Historique des jetons",
+              description: plan === "SOLO" ? `${tokens} jeton(s) disponible(s)` : "Vos jetons sont conservés",
+            }}
+            onPress={() => onNavigate("wallet_history")}
+          />
+        </GlassCard>
+
         {/* Application */}
         <SectionLabel>Application</SectionLabel>
         <GlassCard className="mb-5">
@@ -2202,6 +2412,7 @@ export function SettingsTab() {
           {screen === "security" && <SecurityScreen key="security" onBack={() => setScreen("main")} />}
           {screen === "cgv" && <CGVSettings key="cgv" onBack={() => setScreen("main")} />}
           {screen === "tarifs" && <TarifsSettings key="tarifs" onBack={() => setScreen("main")} />}
+          {screen === "wallet_history" && <WalletHistoryScreen key="wallet_history" onBack={() => setScreen("main")} />}
         </AnimatePresence>
       </div>
     </SettingsErrorBoundary>
