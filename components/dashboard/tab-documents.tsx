@@ -27,6 +27,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useNav } from "./nav-context"
+import { WalletDrawer } from "./wallet-drawer"
 import { CreateBCFlow } from "./create-bc"
 import { useNox } from "./nox-context"
 import { type BCDocument, type InvoiceDocument, type BCStatus, type InvoiceStatus, type EnterpriseProfile } from "./data"
@@ -1058,7 +1059,8 @@ export function DocumentsTab() {
   const [viewingBC, setViewingBC] = useState<BCDocument | null>(null)
   const [viewingInvoice, setViewingInvoice] = useState<InvoiceDocument | null>(null)
   const [showNoTokens, setShowNoTokens] = useState(false)
-  const { openWallet, pendingBcId, clearPendingBcId } = useNav()
+  const [walletOpen, setWalletOpen] = useState(false)
+  const { pendingBcId, clearPendingBcId } = useNav()
 
   useEffect(() => {
     if (!pendingBcId) return
@@ -1142,8 +1144,8 @@ export function DocumentsTab() {
         setInvoicingBC(null)
         return
       }
-      toast("Document g\u00e9n\u00e9r\u00e9", {
-        description: "1 jeton utilis\u00e9",
+      toast("Document généré", {
+        description: "1 jeton utilisé",
         icon: <Coins className="h-4 w-4 text-[#D4AF37]" strokeWidth={1.5} />,
         duration: 2500,
       })
@@ -1156,7 +1158,7 @@ export function DocumentsTab() {
 
     if (!result.success) {
       toast.error("Erreur", {
-        description: result.error ?? "\u00c9chec cr\u00e9ation facture",
+        description: result.error ?? "Échec création facture",
       })
       setInvoicingBC(null)
       return
@@ -1165,7 +1167,7 @@ export function DocumentsTab() {
     await refreshInvoices()
     setInvoicingBC(null)
     setActiveType("facture")
-    toast.success("Facture cr\u00e9\u00e9e", {
+    toast.success("Facture créée", {
       description: "Visible dans l'onglet Factures",
     })
   }
@@ -1199,6 +1201,28 @@ export function DocumentsTab() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Bandeau solde jetons — Starter uniquement */}
+      {plan === "SOLO" && tokens <= 2 && (
+        <div className={cn(
+          "mx-4 mt-3 mb-1 flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border text-xs",
+          tokens === 0
+            ? "bg-red-950/50 border-red-500/30 text-red-300"
+            : "bg-orange-950/50 border-orange-500/30 text-orange-300"
+        )}>
+          <span className="leading-snug">
+            {tokens === 0
+              ? "🔴 Solde épuisé — Rechargez pour générer vos documents"
+              : `⚠️ Il vous reste ${tokens} jeton${tokens > 1 ? "s" : ""} — Pensez à recharger`}
+          </span>
+          <button
+            onClick={() => setWalletOpen(true)}
+            className="shrink-0 px-2.5 py-1 rounded-lg bg-[#D4AF37]/15 border border-[#D4AF37]/30 text-[#D4AF37] text-[10px] font-bold uppercase tracking-wide hover:bg-[#D4AF37]/25 transition-colors"
+          >
+            Recharger
+          </button>
+        </div>
+      )}
+
       <div className="px-4 pt-2 pb-4">
         <h1 className="text-lg font-bold text-foreground mb-3">Réservations & Factures</h1>
 
@@ -1287,7 +1311,10 @@ export function DocumentsTab() {
 
       {/* Floating add button */}
       <button
-        onClick={() => setShowBCFlow(true)}
+        onClick={() => {
+          if (plan === "SOLO" && tokens <= 0) { setShowNoTokens(true); return }
+          setShowBCFlow(true)
+        }}
         className={cn(
           "fixed right-5 z-30 w-12 h-12 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 transition-all duration-200",
           selectedBCIds.size > 0 ? "bottom-44" : "bottom-28"
@@ -1301,6 +1328,8 @@ export function DocumentsTab() {
         onClose={() => { setShowBCFlow(false); setDuplicateBC(null) }}
         prefillBC={duplicateBC}
       />
+
+      <WalletDrawer open={walletOpen} onClose={() => setWalletOpen(false)} />
 
       {/* Document List */}
       <div className="flex-1 overflow-y-auto px-4 space-y-3 pb-20">
@@ -1368,45 +1397,42 @@ export function DocumentsTab() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[80]"
+            className="fixed inset-0 z-[80] flex items-center justify-center px-6 bg-black/60"
+            onClick={() => setShowNoTokens(false)}
           >
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowNoTokens(false)} />
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ type: "spring", stiffness: 500, damping: 35 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-3rem)] max-w-xs rounded-2xl bg-[#141414]/95 backdrop-blur-xl border border-[#D4AF37]/30 shadow-2xl shadow-black/60 p-5"
+              className="w-full max-w-sm rounded-2xl bg-[#1A1A1A] border border-[#D4AF37]/30 shadow-2xl shadow-black/60 p-6 text-center"
+              onClick={(e) => e.stopPropagation()}
             >
-              <button
-                onClick={() => setShowNoTokens(false)}
-                className="absolute top-3 right-3 w-7 h-7 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 flex items-center justify-center hover:bg-[#D4AF37]/20 transition-colors"
-                aria-label="Fermer"
-              >
-                <X className="h-3.5 w-3.5 text-[#D4AF37]" strokeWidth={2.5} />
-              </button>
-
-              <div className="flex justify-center mb-3">
+              <div className="flex justify-center mb-4">
                 <div className="w-11 h-11 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/25 flex items-center justify-center">
                   <Coins className="h-5 w-5 text-[#D4AF37]" strokeWidth={1.5} />
                 </div>
               </div>
 
-              <p className="text-sm font-semibold text-[#F5F5F5] text-center leading-snug">
-                {"R\u00e9serve de jetons \u00e9puis\u00e9e."}
+              <p className="text-sm font-semibold text-[#F5F5F5] leading-snug">
+                Solde insuffisant
               </p>
-              <p className="text-xs text-[#A1A1AA] text-center mt-1.5 leading-relaxed">
-                {"Rechargez votre Wallet pour t\u00e9l\u00e9charger ce document."}
+              <p className="text-xs text-[#A1A1AA] mt-2 leading-relaxed">
+                Il vous reste 0 jeton.<br />
+                Rechargez pour continuer à générer vos documents.
               </p>
 
               <button
-                onClick={() => {
-                  setShowNoTokens(false)
-                  openWallet()
-                }}
-                className="w-full mt-4 py-2.5 rounded-xl bg-[#D4AF37] text-[#1A1A1A] text-xs font-bold tracking-wide uppercase hover:bg-[#E5C44D] active:scale-[0.97] transition-all"
+                onClick={() => { setShowNoTokens(false); setWalletOpen(true) }}
+                className="w-full mt-5 py-2.5 rounded-xl bg-[#D4AF37] text-[#1A1A1A] text-xs font-bold tracking-wide uppercase hover:bg-[#E5C44D] active:scale-[0.97] transition-all"
               >
-                Ouvrir la Boutique
+                Recharger mes jetons
+              </button>
+              <button
+                onClick={() => setShowNoTokens(false)}
+                className="w-full mt-2 py-2 text-xs text-[#A1A1AA] hover:text-[#F5F5F5] transition-colors"
+              >
+                J&apos;ai compris
               </button>
             </motion.div>
           </motion.div>

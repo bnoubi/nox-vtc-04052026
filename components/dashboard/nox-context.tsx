@@ -58,6 +58,7 @@ interface NoxContextType {
   upgrade: (target?: Plan) => void
   addTokens: (n: number) => void
   spendToken: () => boolean
+  refreshTokens: () => Promise<void>
   legalProfile: {
     mustDisplayVatExemption: boolean
     mustDisplayVatNumber: boolean
@@ -1481,6 +1482,16 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     return true
   }
 
+  const refreshTokens = useCallback(async () => {
+    if (!userId) return
+    const { data: wallet } = await supabase
+      .from("wallets")
+      .select("balance")
+      .eq("user_id", userId)
+      .single()
+    if (wallet) setTokens(wallet.balance ?? 0)
+  }, [userId, supabase])
+
   const driverCount = drivers.length
   const vehicleCount = vehicles.length
 
@@ -1520,7 +1531,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     <NoxContext.Provider value={{
       enterprise, userProfile, refreshUserProfile, refreshInvoices, drivers, vehicles, clients, bcs, invoices, tarifBase, forfaits, supplements,
       userId, plan, tokens, onboardingStatus, driverCount, vehicleCount,
-      upgrade, addTokens, spendToken,
+      upgrade, addTokens, spendToken, refreshTokens,
       updateEnterprise, addDriver, updateDriver, deleteDriver, addVehicle, updateVehicle, deleteVehicle,
       addClient, updateClient, deleteClient, addBC, updateBC, saveDraftBC, deleteBC, addInvoice, updateInvoice, deleteInvoice,
       tariffGrids, addTariffGrid, updateTariffGrid, deleteTariffGrid, updateTarifs,

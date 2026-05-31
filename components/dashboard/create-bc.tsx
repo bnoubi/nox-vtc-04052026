@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react"
 
+import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 import { motion, AnimatePresence } from "framer-motion"
 import {
@@ -319,7 +320,8 @@ interface CreateBCFlowProps {
 }
 
 export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: CreateBCFlowProps) {
-  const { drivers, clients, vehicles, tariffSettings, enterprise, addBC, bcs, saveDraftBC, updateBC, legalProfile, validateDocumentCompliance, updateEnterprise, plan } = useNox()
+  const { drivers, clients, vehicles, tariffSettings, enterprise, addBC, bcs, saveDraftBC, updateBC, legalProfile, validateDocumentCompliance, updateEnterprise, plan, tokens, userId, refreshTokens } = useNox()
+  const supabase = createClient()
   const { navigateToCGV, navigateToSubscription } = useNav()
   const [step, setStep] = useState<FlowStep>(() => prefillBC ? "form" : "menu")
   const [tab, setTab] = useState<FormTab>("formulaire")
@@ -797,7 +799,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   }
 
   // ── BUG 1 — Génération avec protection anti-doublon ──────────────────────
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (isSubmitting) return
 
     const clientName = (selectedClient
@@ -915,6 +917,17 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     addBC(newBC)
     setTab("apercu")
     toast.success("Bon de réservation généré et enregistré")
+
+    if (plan === "SOLO" && userId) {
+      const { data } = await supabase.rpc("consume_token_for_bc", {
+        p_user_id: userId,
+        p_bc_id: newBC.id,
+      })
+      if (data?.success === false) {
+        toast.error("Erreur lors de la consommation du jeton")
+      }
+      await refreshTokens()
+    }
   }
 
   const toggleSupplement = (id: string) => {
@@ -1142,6 +1155,19 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
       {/* Form Content */}
       {tab === "formulaire" && (
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-32">
+          {/* Bandeau solde de jetons — SOLO uniquement */}
+          {plan === "SOLO" && tokens <= 2 && (
+            <div className={cn(
+              "px-3 py-2 rounded-xl text-xs font-medium border",
+              tokens === 0
+                ? "bg-red-500/10 border-red-500/30 text-red-400"
+                : "bg-amber-500/10 border-amber-500/30 text-amber-400"
+            )}>
+              {tokens === 0
+                ? "🔴 Solde épuisé — Rechargez pour générer"
+                : `⚠️ Il vous reste ${tokens} jeton${tokens > 1 ? "s" : ""}. Pensez à recharger.`}
+            </div>
+          )}
           {/* SECTION: Émetteur & Entreprise */}
           <Section title="Émetteur & Entreprise" icon={User}>
             <div className="p-3 rounded-xl bg-[#242424] border border-gold/20 space-y-1 mb-3">
