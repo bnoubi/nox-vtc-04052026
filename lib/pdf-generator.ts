@@ -18,20 +18,24 @@ function formatPrice(value: number | undefined | null): string {
 }
 
 
-async function fetchMapImage(depart: string, arrivee: string): Promise<string | null> {
+async function fetchMapImage(depart: string, arrivee: string, stops?: string[]): Promise<string | null> {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
   if (!apiKey || (!depart.trim() && !arrivee.trim())) return null
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 5000)
   try {
-    const dEnc = encodeURIComponent(depart)
-    const aEnc = encodeURIComponent(arrivee)
-    const url =
+    const activeStops = (stops || []).filter(s => s.trim().length > 0)
+    let url =
       `https://maps.googleapis.com/maps/api/staticmap` +
       `?size=600x250&scale=2&format=png` +
-      `&markers=color:green%7Clabel:D%7C${dEnc}` +
-      `&markers=color:red%7Clabel:A%7C${aEnc}` +
-      `&key=${apiKey}`
+      `&markers=color:green%7Clabel:D%7C${encodeURIComponent(depart)}`
+    activeStops.forEach((stop, i) => {
+      url += `&markers=color:orange%7Clabel:${i + 1}%7C${encodeURIComponent(stop)}`
+    })
+    url += `&markers=color:red%7Clabel:A%7C${encodeURIComponent(arrivee)}`
+    const pathWaypoints = [depart, ...activeStops, arrivee].map(encodeURIComponent).join('%7C')
+    url += `&path=color:0x4285F480%7Cweight:4%7C${pathWaypoints}`
+    url += `&key=${apiKey}`
     const response = await fetch(url, { signal: controller.signal })
     clearTimeout(timeoutId)
     if (!response.ok) return null
@@ -79,7 +83,7 @@ async function _buildPDFDoc(
   if (!isInvoice && d.trajet) {
     const dep: string = d.trajet.depart || ""
     const arr: string = d.trajet.arrivee || ""
-    if (dep || arr) mapBase64 = await fetchMapImage(dep, arr)
+    if (dep || arr) mapBase64 = await fetchMapImage(dep, arr, d.trajet.stops as string[] | undefined)
   }
 
   // 1. HEADER
@@ -257,10 +261,17 @@ async function _buildPDFDoc(
 
   // 3. TRAJET
   if (d.trajet) {
-    // 7f — adresses départ/arrivée clairement mises en valeur
     doc.setFontSize(9)
     const departLines = doc.splitTextToSize(d.trajet.depart || "Non renseigné", 152) as string[]
     const arriveeLines = doc.splitTextToSize(d.trajet.arrivee || "Non renseigné", 152) as string[]
+
+    const activeStops: string[] = Array.isArray(d.trajet.stops)
+      ? (d.trajet.stops as string[]).filter((s: string) => s.trim().length > 0)
+      : []
+    const hasOptimized: boolean = d.trajet.stops_optimized === true && activeStops.length > 0
+    const stopsLinesList: string[][] = activeStops.map((s: string) =>
+      doc.splitTextToSize(s, 152) as string[]
+    )
 
     type InfoRow = { label: string; value: string }
     const infoRows: InfoRow[] = []
@@ -280,9 +291,13 @@ async function _buildPDFDoc(
       const bags: number = d.trajet.luggage ?? 0
       infoRows.push({ label: "Passagers / Bagages :", value: `${d.trajet.passengers} / ${bags}` })
     }
+
+    const stopsHeight: number = stopsLinesList.reduce((acc: number, lines: string[]) => acc + 5 + lines.length * 5 + 2, 0)
     const contentHeight =
       15 +
       5 + departLines.length * 5 + 2 +
+      stopsHeight +
+      (hasOptimized ? 6 : 0) +
       5 + arriveeLines.length * 5 + 2 +
       (infoRows.length > 0 ? infoRows.length * 5 + 4 : 0)
     const bgH = contentHeight + 6
@@ -298,8 +313,13 @@ async function _buildPDFDoc(
 
     let tY = sectionTop + 15
 
+    // DÉPART
     doc.setFillColor("#22C55E")
     doc.circle(24.5, tY - 1, 1.8, "F")
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(7)
+    doc.setTextColor("#FFFFFF")
+    doc.text("D", 24.5, tY + 0.2, { align: "center" })
     doc.setFont("helvetica", "bold")
     doc.setFontSize(9)
     doc.setTextColor(dark)
@@ -308,10 +328,53 @@ async function _buildPDFDoc(
     doc.setTextColor(gray)
     doc.text(departLines, 28, tY + 5)
     doc.setTextColor(dark)
+    let prevCircleBottomY = tY - 1 + 1.8
     tY += 5 + departLines.length * 5 + 2
 
+    // ARRÊTS INTERMÉDIAIRES
+    stopsLinesList.forEach((stopLines: string[], i: number) => {
+      doc.setDrawColor("#D4D4D8")
+      doc.setLineWidth(0.4)
+      doc.line(24.5, prevCircleBottomY, 24.5, tY - 2.8)
+      doc.setFillColor("#F97316")
+      doc.circle(24.5, tY - 1, 1.8, "F")
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(7)
+      doc.setTextColor("#FFFFFF")
+      doc.text(String(i + 1), 24.5, tY + 0.2, { align: "center" })
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(9)
+      doc.setTextColor(dark)
+      doc.text(`Arrêt ${i + 1} :`, 28, tY)
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(gray)
+      doc.text(stopLines, 28, tY + 5)
+      doc.setTextColor(dark)
+      prevCircleBottomY = tY - 1 + 1.8
+      tY += 5 + stopLines.length * 5 + 2
+    })
+
+    // Mention itinéraire optimisé
+    if (hasOptimized) {
+      doc.setFontSize(7.5)
+      doc.setFont("helvetica", "italic")
+      doc.setTextColor("#C5A059")
+      doc.text("Itineraire optimise par Google Maps", 28, tY)
+      doc.setTextColor(dark)
+      doc.setFont("helvetica", "normal")
+      tY += 6
+    }
+
+    // ARRIVÉE
+    doc.setDrawColor("#D4D4D8")
+    doc.setLineWidth(0.4)
+    doc.line(24.5, prevCircleBottomY, 24.5, tY - 2.8)
     doc.setFillColor("#EF4444")
     doc.circle(24.5, tY - 1, 1.8, "F")
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(7)
+    doc.setTextColor("#FFFFFF")
+    doc.text("A", 24.5, tY + 0.2, { align: "center" })
     doc.setFont("helvetica", "bold")
     doc.setFontSize(9)
     doc.setTextColor(dark)

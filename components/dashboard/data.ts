@@ -133,6 +133,8 @@ export interface BCDocument {
     time?: string
     passengers?: number
     luggage?: number
+    stops?: string[]
+    stops_optimized?: boolean
   }
   driverId?: string
   driverName?: string
@@ -204,6 +206,8 @@ export interface InvoiceDocument {
     time?: string
     passengers?: number
     luggage?: number
+    stops?: string[]
+    stops_optimized?: boolean
   }
   passagerNom?: string
   passagerTelephone?: string

@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Shield } from "lucide-react"
+import { X, Shield, Crown } from "lucide-react"
 
 interface LimitAlertModalProps {
   open: boolean
@@ -9,9 +9,16 @@ interface LimitAlertModalProps {
   /** "chauffeur" | "véhicule" */
   resourceLabel: string
   onManageOffer: () => void
+  customMessage?: string
+  customTitle?: string
+  onUpgradePro?: () => void
+  onUpgradePremium?: () => void
 }
 
-export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer }: LimitAlertModalProps) {
+export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer, customMessage, customTitle, onUpgradePro, onUpgradePremium }: LimitAlertModalProps) {
+  const hasDualButtons = onUpgradePro && onUpgradePremium
+  const displayMessage = customMessage?.replace(/^🔒\s*/, "") ?? `Vous avez atteint la limite d'ajout de ${resourceLabel} pour votre offre actuelle. Passez à une offre supérieure pour continuer.`
+
   return (
     <AnimatePresence>
       {open && (
@@ -41,33 +48,56 @@ export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer }:
               <X className="h-4 w-4 text-[#D4AF37]" strokeWidth={2.5} />
             </button>
 
-            {/* Shield Icon */}
-            <div className="flex justify-center mb-4 mt-1">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-b from-[#D4AF37]/25 to-[#D4AF37]/5 border border-[#D4AF37]/40 flex items-center justify-center shadow-[0_0_25px_rgba(212,175,55,0.25)]">
-                <Shield className="h-5 w-5 text-[#D4AF37]" strokeWidth={1.5} />
+            {/* Shield Icon — masqué quand customTitle contient déjà un emoji */}
+            {!customTitle && (
+              <div className="flex justify-center mb-4 mt-1">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-b from-[#D4AF37]/25 to-[#D4AF37]/5 border border-[#D4AF37]/40 flex items-center justify-center shadow-[0_0_25px_rgba(212,175,55,0.25)]">
+                  <Shield className="h-5 w-5 text-[#D4AF37]" strokeWidth={1.5} />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Title */}
-            <p className="text-sm font-bold text-[#D4AF37] text-center tracking-wider uppercase mb-2">
-              Limite Atteinte
+            <p className="text-sm font-bold text-[#D4AF37] text-center tracking-wider uppercase mb-2 pr-10">
+              {customTitle ?? "Limite Atteinte"}
             </p>
 
             {/* Message */}
             <p className="text-[12px] text-[#A1A1AA] text-center leading-relaxed px-2">
-              {`Vous avez atteint la limite d'ajout de ${resourceLabel} pour votre offre actuelle. Passez à une offre supérieure pour continuer.`}
+              {displayMessage}
             </p>
 
-            {/* CTA Button */}
-            <button
-              onClick={() => {
-                onClose()
-                onManageOffer()
-              }}
-              className="w-full mt-5 py-3 min-h-[48px] rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#B8962E] text-[#0A0A0A] text-xs font-bold tracking-[0.15em] uppercase hover:from-[#E5C44D] hover:to-[#D4AF37] active:scale-[0.98] transition-all shadow-[0_4px_20px_rgba(212,175,55,0.35)]"
-            >
-              Mon Abonnement
-            </button>
+            {/* CTA Buttons */}
+            {hasDualButtons ? (
+              <div className="flex gap-3 mt-5">
+                <button
+                  onClick={() => { onClose(); onUpgradePro() }}
+                  className="flex-1 py-2.5 min-h-[56px] rounded-xl bg-[#2A2A2A] border border-[#D4AF37] flex flex-col items-center justify-center gap-0.5 hover:bg-[#333] active:scale-[0.98] transition-all"
+                >
+                  <Crown className="h-3.5 w-3.5 text-[#D4AF37]" strokeWidth={2} />
+                  <span className="text-xs font-bold text-[#D4AF37] tracking-wider uppercase">Pro</span>
+                  <span className="text-[10px] text-[#D4AF37]/70">9,99€/mois</span>
+                </button>
+                <button
+                  onClick={() => { onClose(); onUpgradePremium() }}
+                  className="flex-1 py-2.5 min-h-[56px] rounded-xl bg-[#D4AF37] flex flex-col items-center justify-center gap-0.5 hover:bg-[#E5C44D] active:scale-[0.98] transition-all shadow-[0_4px_20px_rgba(212,175,55,0.35)]"
+                >
+                  <Crown className="h-3.5 w-3.5 text-[#1A1A1A]" strokeWidth={2} />
+                  <span className="text-xs font-bold text-[#1A1A1A] tracking-wider uppercase">Premium</span>
+                  <span className="text-[10px] text-[#1A1A1A]/70">14,99€/mois</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  onClose()
+                  onManageOffer()
+                }}
+                className="w-full mt-5 py-3 min-h-[48px] rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#B8962E] text-[#0A0A0A] text-xs font-bold tracking-[0.15em] uppercase hover:from-[#E5C44D] hover:to-[#D4AF37] active:scale-[0.98] transition-all shadow-[0_4px_20px_rgba(212,175,55,0.35)]"
+              >
+                Mon Abonnement
+              </button>
+            )}
           </motion.div>
         </motion.div>
       )}

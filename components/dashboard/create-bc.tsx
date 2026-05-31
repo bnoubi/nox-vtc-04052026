@@ -19,6 +19,8 @@ import {
 } from "./data"
 import { toast } from "sonner"
 import { QuickAddClientModal } from "./quick-add-client-modal"
+import { LimitAlertModal } from "./limit-alert-modal"
+import { SubscriptionDrawer } from "./subscription-drawer"
 
 // ============================================================================
 // TYPES & HELPERS
@@ -317,8 +319,8 @@ interface CreateBCFlowProps {
 }
 
 export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: CreateBCFlowProps) {
-  const { drivers, clients, vehicles, tariffSettings, enterprise, addBC, bcs, saveDraftBC, updateBC, legalProfile, validateDocumentCompliance, updateEnterprise } = useNox()
-  const { navigateToCGV } = useNav()
+  const { drivers, clients, vehicles, tariffSettings, enterprise, addBC, bcs, saveDraftBC, updateBC, legalProfile, validateDocumentCompliance, updateEnterprise, plan } = useNox()
+  const { navigateToCGV, navigateToSubscription } = useNav()
   const [step, setStep] = useState<FlowStep>(() => prefillBC ? "form" : "menu")
   const [tab, setTab] = useState<FormTab>("formulaire")
 
@@ -366,6 +368,11 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   // Trajet
   const [departure, setDeparture] = useState(prefillBC?.trajet?.depart ?? "")
   const [arrival, setArrival] = useState(prefillBC?.trajet?.arrivee ?? "")
+  const [stops, setStops] = useState<string[]>([])
+  const [stopsOptimized, setStopsOptimized] = useState(false)
+  const [showStopsLimitAlert, setShowStopsLimitAlert] = useState(false)
+  const [showSubDrawer, setShowSubDrawer] = useState(false)
+  const [subDrawerPlan, setSubDrawerPlan] = useState<"DUO" | "TEAM">("DUO")
   const [tripDate, setTripDate] = useState(prefillBC?.trajet?.date ?? "")
   const [tripTime, setTripTime] = useState(() => prefillBC?.trajet?.time ?? defaultTime())
   const [passengers, setPassengers] = useState(prefillBC?.trajet?.passengers ?? 1)
@@ -590,6 +597,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
           body: JSON.stringify({
             origin: { address: departure },
             destination: { address: arrival },
+            intermediates: stops.filter(s => s.trim().length > 0).map(s => ({ address: s })),
             travelMode: "DRIVE",
             routingPreference: "TRAFFIC_AWARE",
             departureTime,
@@ -620,7 +628,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     })()
 
     return () => { cancelled = true }
-  }, [departure, arrival, tripDate, tripTime])
+  }, [departure, arrival, stops, tripDate, tripTime])
 
   // ── Mode Arrivée : reset heure départ si adresses/mode changent ──────────
   useEffect(() => {
@@ -658,6 +666,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
           body: JSON.stringify({
             origin: { address: departure },
             destination: { address: arrival },
+            intermediates: stops.filter(s => s.trim().length > 0).map(s => ({ address: s })),
             travelMode: "DRIVE",
             routingPreference: "TRAFFIC_UNAWARE",
           }),
@@ -687,7 +696,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     })()
 
     return () => { cancelled = true }
-  }, [departure, arrival, tripDate, heureArriveesouhaitee, modeHoraire, tripTime])
+  }, [departure, arrival, stops, tripDate, heureArriveesouhaitee, modeHoraire, tripTime])
 
   // Mettre à jour les refs à chaque render
   modeHoraireRef.current = modeHoraire
@@ -750,6 +759,8 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     setManualClient(null)
     setDeparture("")
     setArrival("")
+    setStops([])
+    setStopsOptimized(false)
     setTripDate("")
     setTripTime("")
     setPassengers(1)
@@ -874,6 +885,8 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
       trajet: {
         depart: departure || "Non renseigné",
         arrivee: arrival || "Non renseigné",
+        stops: stops.filter(s => s.trim().length > 0),
+        stops_optimized: stopsOptimized,
         distance: distanceKm ?? undefined,
         duree: durationDisplay || undefined,
         date: tripDate,
@@ -1421,6 +1434,168 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
               </div>
               {formErrors.departure && <p className="text-xs text-red-500 mt-1">{formErrors.departure}</p>}
             </div>
+
+            {/* Arrêts intermédiaires */}
+            {stops.map((stop, index) => (
+              <div key={index} className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                    Arrêt {index + 1}
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={() => {
+                        const s = [...stops]
+                        ;[s[index - 1], s[index]] = [s[index], s[index - 1]]
+                        setStops(s)
+                      }}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                      aria-label="Monter"
+                    >
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M18 15l-6-6-6 6"/></svg>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === stops.length - 1}
+                      onClick={() => {
+                        const s = [...stops]
+                        ;[s[index], s[index + 1]] = [s[index + 1], s[index]]
+                        setStops(s)
+                      }}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                      aria-label="Descendre"
+                    >
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStops(stops.filter((_, i) => i !== index))}
+                      className="p-1 rounded text-muted-foreground hover:text-red-400"
+                      aria-label="Supprimer l'arrêt"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 focus-within:border-gold/50">
+                  <div className="h-4 w-4 rounded-full bg-orange-400 flex-shrink-0" />
+                  <PlacesAutocomplete
+                    value={stop}
+                    onChange={(val) => {
+                      const s = [...stops]
+                      s[index] = val
+                      setStops(s)
+                    }}
+                    placeholder="Rechercher une adresse..."
+                    addressMode="full"
+                    className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+                    style={{ fontSize: "16px" }}
+                  />
+                  {stop && (
+                    <button
+                      type="button"
+                      aria-label="Effacer l'arrêt"
+                      onClick={() => {
+                        const s = [...stops]
+                        s[index] = ""
+                        setStops(s)
+                      }}
+                      className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {stops.length < 5 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (plan === "SOLO") { setShowStopsLimitAlert(true); return }
+                  setStops([...stops, ""])
+                }}
+                className="flex items-center gap-1.5 text-[11px] text-orange-400 hover:text-orange-300 transition-colors py-0.5"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Ajouter un arrêt intermédiaire
+              </button>
+            )}
+
+            {/* Toggle optimisation d'ordre des arrêts */}
+            {stops.filter(s => s.trim().length > 0).length >= 2 && (
+              <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs font-medium text-foreground">
+                    Optimiser l&apos;ordre des arrêts
+                  </span>
+                </div>
+                <button
+                    type="button"
+                    onClick={async () => {
+                      if (stopsOptimized) {
+                        setStopsOptimized(false)
+                        return
+                      }
+                      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+                      if (!apiKey) return
+                      const filled = stops.filter(s => s.trim().length > 0)
+                      try {
+                        const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            "X-Goog-Api-Key": apiKey,
+                            "X-Goog-FieldMask": "routes.optimizedIntermediateWaypointIndex",
+                          },
+                          body: JSON.stringify({
+                            origin: { address: departure },
+                            destination: { address: arrival },
+                            intermediates: filled.map(s => ({ address: s })),
+                            travelMode: "DRIVE",
+                            optimizeWaypointOrder: true,
+                          }),
+                        })
+                        if (res.ok) {
+                          const data = await res.json()
+                          const order: number[] = data.routes?.[0]?.optimizedIntermediateWaypointIndex ?? []
+                          if (order.length === filled.length) {
+                            const reordered = order.map(i => filled[i])
+                            // Préserver les entrées vides aux positions d'origine
+                            const next = [...stops]
+                            let fi = 0
+                            for (let i = 0; i < next.length; i++) {
+                              if (next[i].trim().length > 0) { next[i] = reordered[fi++] }
+                            }
+                            setStops(next)
+                          }
+                        }
+                      } catch { /* silencieux */ }
+                      setStopsOptimized(true)
+                      toast.success("Ordre des arrêts optimisé par Google Maps ✓")
+                    }}
+                    className={cn(
+                      "relative w-9 h-5 rounded-full transition-colors shrink-0",
+                      stopsOptimized ? "bg-gold" : "bg-[#444]"
+                    )}
+                    aria-label="Optimiser l'ordre des arrêts"
+                  >
+                    <span className={cn(
+                      "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform",
+                      stopsOptimized ? "translate-x-4" : "translate-x-0"
+                    )} />
+                  </button>
+              </div>
+            )}
+            {stops.filter(s => s.trim().length > 0).length >= 2 && (
+              <p className="text-[10px] text-muted-foreground/60 px-1">
+                {stopsOptimized ? "Optimisé par Google ✓" : "Ordre manuel"}
+              </p>
+            )}
+
             <div ref={arrivalRef} className="space-y-1">
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Adresse d&apos;arrivée <span className="text-red-500">*</span></label>
               <div className={cn("flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border focus-within:border-gold/50", formErrors.arrival ? "border-red-500" : "border-onyx-border/30")}>
@@ -2217,6 +2392,34 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
         onClose={() => setShowQuickAddClient(false)}
         clients={clients ?? []}
         onClientCreated={handleClientCreated}
+      />
+
+      <LimitAlertModal
+        open={showStopsLimitAlert}
+        onClose={() => setShowStopsLimitAlert(false)}
+        resourceLabel="arrêts intermédiaires"
+        customTitle="🔒 Fonctionnalité Pro & Premium"
+        customMessage="🔒 Les arrêts intermédiaires sont disponibles à partir de l'offre Pro & Premium."
+        onManageOffer={() => {
+          setShowStopsLimitAlert(false)
+          navigateToSubscription()
+        }}
+        onUpgradePro={() => {
+          setShowStopsLimitAlert(false)
+          setSubDrawerPlan("DUO")
+          setShowSubDrawer(true)
+        }}
+        onUpgradePremium={() => {
+          setShowStopsLimitAlert(false)
+          setSubDrawerPlan("TEAM")
+          setShowSubDrawer(true)
+        }}
+      />
+
+      <SubscriptionDrawer
+        open={showSubDrawer}
+        targetPlan={subDrawerPlan}
+        onClose={() => setShowSubDrawer(false)}
       />
 
       <DateTimePickerSheet

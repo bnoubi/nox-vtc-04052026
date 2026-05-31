@@ -1401,6 +1401,8 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
   const isFull = driverCount >= limit
   const [showConfetti, setShowConfetti] = useState(false)
   const [showLimitAlert, setShowLimitAlert] = useState(false)
+  const [showSubDrawer, setShowSubDrawer] = useState(false)
+  const [subDrawerPlan, setSubDrawerPlan] = useState<"DUO" | "TEAM">("DUO")
   // Unified drawer: null = closed, undefined = add mode, Driver = edit mode
   const [drawerDriver, setDrawerDriver] = useState<Driver | null | undefined>(null)
   const { navigateToSubscription, pendingEntityNavigation, clearPendingEntityNavigation } = useNav()
@@ -1537,23 +1539,14 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
             )
           })}
         </AnimatePresence>
-        {plan !== "TEAM" && <LockedSlot type="driver" onUpgrade={handleUpgrade} />}
       </div>
 
-      {/* FAB - Add Driver : cadenas si limite atteinte, identique au dashboard */}
+      {/* FAB - Add Driver */}
       <button
         onClick={() => isFull ? setShowLimitAlert(true) : setDrawerDriver(undefined)}
-        className={cn(
-          "absolute bottom-6 right-4 w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-all z-30",
-          isFull
-            ? "bg-onyx-card border border-onyx-border/60 cursor-pointer"
-            : "bg-gold gold-glow hover:bg-gold-light"
-        )}
+        className="absolute bottom-6 right-4 w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-all z-30 bg-gold gold-glow hover:bg-gold-light"
       >
-        {isFull
-          ? <Lock className="h-5 w-5 text-zinc-400" strokeWidth={1.5} />
-          : <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2} />
-        }
+        <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2} />
       </button>
 
       <LimitAlertModal
@@ -1561,6 +1554,13 @@ function TeamScreen({ onBack }: { onBack: () => void }) {
         onClose={() => setShowLimitAlert(false)}
         resourceLabel="chauffeur"
         onManageOffer={navigateToSubscription}
+        onUpgradePro={() => { setShowLimitAlert(false); setSubDrawerPlan("DUO"); setShowSubDrawer(true) }}
+        onUpgradePremium={() => { setShowLimitAlert(false); setSubDrawerPlan("TEAM"); setShowSubDrawer(true) }}
+      />
+      <SubscriptionDrawer
+        open={showSubDrawer}
+        targetPlan={subDrawerPlan}
+        onClose={() => setShowSubDrawer(false)}
       />
       <DriverDrawer
         open={drawerDriver !== null}
@@ -1584,6 +1584,8 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   const isFull = vehicleCount >= limit
   const [showConfetti, setShowConfetti] = useState(false)
   const [showLimitAlert, setShowLimitAlert] = useState(false)
+  const [showSubDrawer, setShowSubDrawer] = useState(false)
+  const [subDrawerPlan, setSubDrawerPlan] = useState<"DUO" | "TEAM">("DUO")
   // Unified drawer: null = closed, undefined = add mode, Vehicle = edit mode
   const [drawerVehicle, setDrawerVehicle] = useState<Vehicle | null | undefined>(null)
   const { navigateToSubscription, pendingEntityNavigation, clearPendingEntityNavigation } = useNav()
@@ -1714,23 +1716,14 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
             )
           })}
         </AnimatePresence>
-        {plan !== "TEAM" && <LockedSlot type="vehicle" onUpgrade={handleUpgrade} />}
       </div>
 
-      {/* FAB - Add Vehicle : cadenas si limite atteinte, identique au dashboard */}
+      {/* FAB - Add Vehicle */}
       <button
         onClick={() => isFull ? setShowLimitAlert(true) : setDrawerVehicle(undefined)}
-        className={cn(
-          "absolute bottom-6 right-4 w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-all z-30",
-          isFull
-            ? "bg-onyx-card border border-onyx-border/60 cursor-pointer"
-            : "bg-gold gold-glow hover:bg-gold-light"
-        )}
+        className="absolute bottom-6 right-4 w-14 h-14 rounded-full flex items-center justify-center active:scale-95 transition-all z-30 bg-gold gold-glow hover:bg-gold-light"
       >
-        {isFull
-          ? <Lock className="h-5 w-5 text-zinc-400" strokeWidth={1.5} />
-          : <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2} />
-        }
+        <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2} />
       </button>
 
       <LimitAlertModal
@@ -1738,6 +1731,13 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
         onClose={() => setShowLimitAlert(false)}
         resourceLabel="véhicule"
         onManageOffer={navigateToSubscription}
+        onUpgradePro={() => { setShowLimitAlert(false); setSubDrawerPlan("DUO"); setShowSubDrawer(true) }}
+        onUpgradePremium={() => { setShowLimitAlert(false); setSubDrawerPlan("TEAM"); setShowSubDrawer(true) }}
+      />
+      <SubscriptionDrawer
+        open={showSubDrawer}
+        targetPlan={subDrawerPlan}
+        onClose={() => setShowSubDrawer(false)}
       />
       <VehicleDrawer
         open={drawerVehicle !== null}
