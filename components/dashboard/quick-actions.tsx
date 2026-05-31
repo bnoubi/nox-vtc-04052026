@@ -13,6 +13,7 @@ import { useNox } from "./nox-context"
 import { PLAN_LIMITS } from "./data"
 import { useNav } from "./nav-context"
 import { LimitAlertModal } from "./limit-alert-modal"
+import { SubscriptionDrawer } from "./subscription-drawer"
 
 interface QuickActionProps {
   icon: React.ReactNode
@@ -69,6 +70,8 @@ export function QuickActions() {
   const [showInvoiceFlow, setShowInvoiceFlow] = useState(false)
   const [showSupportModal, setShowSupportModal] = useState(false)
   const [limitAlert, setLimitAlert] = useState<{ open: boolean; label: string }>({ open: false, label: "" })
+  const [showSubDrawer, setShowSubDrawer] = useState(false)
+  const [subDrawerPlan, setSubDrawerPlan] = useState<"DUO" | "TEAM">("DUO")
   const { plan, driverCount, vehicleCount, addDriver, addVehicle } = useNox()
   const { navigateToSubscription } = useNav()
   const limits = PLAN_LIMITS[plan]
@@ -185,6 +188,13 @@ export function QuickActions() {
         onClose={() => setLimitAlert({ open: false, label: "" })}
         resourceLabel={limitAlert.label}
         onManageOffer={navigateToSubscription}
+        onUpgradePro={() => { setLimitAlert({ open: false, label: "" }); setSubDrawerPlan("DUO"); setShowSubDrawer(true) }}
+        onUpgradePremium={() => { setLimitAlert({ open: false, label: "" }); setSubDrawerPlan("TEAM"); setShowSubDrawer(true) }}
+      />
+      <SubscriptionDrawer
+        open={showSubDrawer}
+        targetPlan={subDrawerPlan}
+        onClose={() => setShowSubDrawer(false)}
       />
       <SupportTicketModal
         isOpen={showSupportModal}
