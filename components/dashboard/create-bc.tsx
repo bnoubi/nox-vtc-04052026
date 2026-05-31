@@ -316,7 +316,7 @@ interface CreateBCFlowProps {
 }
 
 export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: CreateBCFlowProps) {
-  const { drivers, clients, vehicles, tariffSettings, enterprise, addBC, bcs, saveDraftBC, updateBC, legalProfile, validateDocumentCompliance, updateEnterprise, plan, tokens, userId, refreshTokens } = useNox()
+  const { drivers, clients, vehicles, tariffSettings, enterprise, addBC, bcs, saveDraftBC, updateBC, deleteBC, legalProfile, validateDocumentCompliance, updateEnterprise, plan, tokens, userId, refreshTokens } = useNox()
   const supabase = createClient()
   const { navigateToCGV, navigateToSubscription } = useNav()
   const [step, setStep] = useState<FlowStep>(() => prefillBC ? "form" : "menu")
@@ -905,9 +905,8 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
       heure_arrivee_souhaitee: modeHoraire === 'arrivee' ? (heureArriveesouhaitee || null) : null,
     }
 
-    // Si un brouillon existait, on l'annule avant de créer le BC définitif
     if (draftId) {
-      updateBC(draftId, { status: "annule_client" })
+      await deleteBC(draftId)
     }
 
     const bcResult = await addBC(newBC)
@@ -1030,7 +1029,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                   Reprendre
                 </button>
                 <button
-                  onClick={() => setIgnoreDraft(true)}
+                  onClick={() => { void deleteBC(existingDraft.id); setIgnoreDraft(true) }}
                   className="flex-1 py-2 rounded-lg bg-[#2a2a2a] text-muted-foreground text-[11px] font-semibold"
                 >
                   Ignorer
