@@ -73,10 +73,6 @@ function formatDuration(seconds: number): string {
   return m === 0 ? `${h} h` : `${h} h ${m} min`
 }
 
-function generateBRNumber(): string {
-  const now = new Date()
-  return `BR-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0")}`
-}
 
 function formatDateFr(d: Date): string {
   return d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
@@ -334,7 +330,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   const [linkCopied, setLinkCopied] = useState(false)
 
   // BUG 2 — brNumber et creationDate en state pour permettre le reset
-  const [brNumber, setBRNumber] = useState(() => generateBRNumber())
+  const [brNumber, setBRNumber] = useState("")
   const [creationDate, setCreationDate] = useState(() => new Date())
 
   // Selections — pré-remplissage depuis prefillBC si fourni (FEATURE 2 duplication)
@@ -745,7 +741,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
 
   // ── BUG 2 — Reset complet du formulaire ─────────────────────────────────
   const resetForm = useCallback(() => {
-    setBRNumber(generateBRNumber())
+    setBRNumber("")
     setCreationDate(new Date())
     setTab("formulaire")
     setStep("menu")
@@ -914,17 +910,18 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
       updateBC(draftId, { status: "annule_client" })
     }
 
-    addBC(newBC)
+    const bcResult = await addBC(newBC)
+    if (bcResult) setBRNumber(bcResult.numero)
     setTab("apercu")
     toast.success("Bon de réservation généré et enregistré")
 
-    if (plan === "SOLO" && userId) {
-      const { data } = await supabase.rpc("consume_token_for_bc", {
+    if (plan === "SOLO" && userId && bcResult?.id) {
+      const { data: consumeResult, error: consumeError } = await supabase.rpc("consume_token_for_bc", {
         p_user_id: userId,
-        p_bc_id: newBC.id,
+        p_bc_id: bcResult.id,
       })
-      if (data?.success === false) {
-        toast.error("Erreur lors de la consommation du jeton")
+      if (consumeError || consumeResult?.success === false) {
+        console.error("[Tokens] Erreur décrément:", consumeError ?? consumeResult?.error)
       }
       await refreshTokens()
     }

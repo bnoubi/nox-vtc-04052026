@@ -78,7 +78,7 @@ interface NoxContextType {
   addClient: (client: Client) => Promise<string | null>
   updateClient: (id: string, data: Partial<Client>) => void
   deleteClient: (id: string) => void
-  addBC: (bc: BCDocument) => void
+  addBC: (bc: BCDocument) => Promise<{ id: string; numero: string } | null>
   updateBC: (id: string, data: Partial<BCDocument>) => void
   saveDraftBC: (data: Partial<BCDocument>) => Promise<string | null>
   deleteBC: (id: string) => Promise<void>
@@ -1021,15 +1021,11 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const addBC = async (bc: BCDocument) => {
-    if (!userId) return
-    const { count } = await supabase
-      .from("bcs")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", userId)
+  const addBC = async (bc: BCDocument): Promise<{ id: string; numero: string } | null> => {
+    if (!userId) return null
+    const { data: numeroData } = await supabase.rpc('generate_bc_numero')
+    const numero = numeroData as string
     const now = new Date()
-    const seq = String((count ?? 0) + 1).padStart(4, "0")
-    const numero = `BC-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${seq}`
     const payload = {
       user_id: userId,
       numero,
@@ -1073,12 +1069,15 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         .select()
         .single()
       if (error) {
-        return
+        return null
       }
       if (data) {
         setBcs(prev => [{ ...bc, id: data.id, number: data.numero }, ...prev])
+        return { id: data.id as string, numero: data.numero as string }
       }
+      return null
     } catch (e) {
+      return null
     }
   }
 
