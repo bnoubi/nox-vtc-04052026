@@ -33,6 +33,31 @@ export interface UserProfile {
   phone: string
 }
 
+export interface TripRequest {
+  id: string
+  token: string
+  expires_at: string
+  used_at: string | null
+  status: 'pending' | 'filled' | 'converted' | 'expired' | 'cancelled'
+  passenger_civility: string | null
+  passenger_firstname: string | null
+  passenger_lastname: string | null
+  passenger_phone: string | null
+  passenger_email: string | null
+  departure: string | null
+  arrival: string | null
+  stops: string[]
+  trip_date: string | null
+  trip_time: string | null
+  passengers_count: number
+  luggage_count: number
+  notes: string | null
+  language: string
+  bc_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 interface NoxContextType {
   enterprise: EnterpriseProfile
   userProfile: UserProfile
@@ -98,6 +123,8 @@ interface NoxContextType {
     applyWeekend: boolean
     applyHolidays: boolean
   }
+  tripRequests: TripRequest[]
+  loadTripRequests: () => Promise<void>
 }
 
 const NoxContext = createContext<NoxContextType | undefined>(undefined)
@@ -204,6 +231,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   const [plan, setPlan] = useState<Plan>("SOLO")
   const [tokens, setTokens] = useState(0)
   const [onboardingStatus, setOnboardingStatus] = useState("not_started")
+  const [tripRequests, setTripRequests] = useState<TripRequest[]>([])
 
   // ─── Étape 1 : Récupérer l'utilisateur connecté, puis charger SES données ───
   useEffect(() => {
@@ -549,6 +577,17 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (err) {
       }
+
+      // ─── Chargement TripRequests ───
+      try {
+        const { data: dbTripRequests } = await supabase
+          .from("trip_requests")
+          .select("*")
+          .eq("user_id", uid)
+          .order("created_at", { ascending: false })
+          .limit(100)
+        if (dbTripRequests) setTripRequests(dbTripRequests as TripRequest[])
+      } catch (err) {}
 
       setIsLoaded(true)
     }
@@ -1481,6 +1520,17 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     return true
   }
 
+  const loadTripRequests = useCallback(async () => {
+    if (!userId) return
+    const { data } = await supabase
+      .from("trip_requests")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(plan === "SOLO" ? 10 : 100)
+    if (data) setTripRequests(data as TripRequest[])
+  }, [userId, plan, supabase])
+
   const refreshTokens = useCallback(async () => {
     if (!userId) return
     const { data: wallet } = await supabase
@@ -1537,6 +1587,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       tranches, applyWeekend, applyHolidays,
       tariffSettings,
       legalProfile, validateDocumentCompliance,
+      tripRequests, loadTripRequests,
     }}>
       {children}
     </NoxContext.Provider>
