@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 import { motion, AnimatePresence } from "framer-motion"
 import {
-  X, ChevronLeft, ChevronRight, ChevronDown, FileText, Link2, MessageSquare, Phone, Copy, Check,
+  X, ChevronLeft, ChevronRight, ChevronDown, FileText, Link2, MessageSquare, Mail, Phone, Copy, Check,
   MapPin, Navigation, Car, Euro, Building2, User, Users, Search, Sparkles, Clock, Calendar,
   RotateCcw, Loader2, Plus,
 } from "lucide-react"
@@ -328,6 +328,10 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   // Link sharing
   const [linkRecipient, setLinkRecipient] = useState("")
   const [linkCopied, setLinkCopied] = useState(false)
+  const [showLinkModal, setShowLinkModal] = useState(false)
+  const [showLinkLimitAlert, setShowLinkLimitAlert] = useState(false)
+  const [tripRequestId, setTripRequestId] = useState<string | null>(null)
+  const [tripToken, setTripToken] = useState("")
 
   // BUG 2 — brNumber et creationDate en state pour permettre le reset
   const [brNumber, setBRNumber] = useState("")
@@ -747,6 +751,11 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     setStep("menu")
     setIsSubmitting(false)
     setLinkRecipient("")
+    setLinkCopied(false)
+    setShowLinkModal(false)
+    setShowLinkLimitAlert(false)
+    setTripRequestId(null)
+    setTripToken("")
     setSelectedDriverId("")
     setSelectedClientId("")
     setClientSearch("")
@@ -787,11 +796,62 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
 
   const handleClose = () => { setStep("menu"); onClose() }
 
+  const isPhone = (val: string) => /^[+0-9\s]{6,}$/.test(val)
+
+  const cleanPhone = (tel: string) => {
+    let cleaned = tel.replace(/\s/g, "").replace(/^\+/, "")
+    if (cleaned.startsWith("0")) cleaned = "33" + cleaned.slice(1)
+    return cleaned
+  }
+
   const copyLink = () => {
-    navigator.clipboard.writeText(`https://nox.vtc/book/${brNumber.toLowerCase()}`)
+    if (!tripToken) return
+    navigator.clipboard.writeText(`https://app.noxvtc.fr/request/${tripToken}`)
     setLinkCopied(true)
     setTimeout(() => setLinkCopied(false), 2000)
     toast.success("Lien copié")
+  }
+
+  const handleSendWhatsApp = () => {
+    if (linkRecipient && linkRecipient.includes("@")) {
+      toast.warning("Vous avez saisi un email. Utilisez le bouton 'Par Email' ou copiez le lien.")
+      return
+    }
+    const url = `https://app.noxvtc.fr/request/${tripToken}`
+    const message = encodeURIComponent(`Bonjour, voici le lien pour compléter votre demande de trajet : ${url}`)
+    if (linkRecipient && isPhone(linkRecipient)) {
+      window.open(`https://wa.me/${cleanPhone(linkRecipient)}?text=${message}`, "_blank")
+    } else {
+      navigator.clipboard.writeText(`https://wa.me/?text=${message}`)
+      toast.success("Lien WhatsApp copié !")
+    }
+  }
+
+  const handleSendSMS = () => {
+    if (linkRecipient && linkRecipient.includes("@")) {
+      toast.warning("Vous avez saisi un email. Utilisez le bouton 'Par Email' ou copiez le lien.")
+      return
+    }
+    const url = `https://app.noxvtc.fr/request/${tripToken}`
+    const message = encodeURIComponent(`Voici le lien pour votre demande de trajet : ${url}`)
+    if (linkRecipient && isPhone(linkRecipient)) {
+      window.open(`sms:${cleanPhone(linkRecipient)}?body=${message}`)
+    } else {
+      navigator.clipboard.writeText(url)
+      toast.success("Lien copié !")
+    }
+  }
+
+  const handleSendEmail = () => {
+    const url = `https://app.noxvtc.fr/request/${tripToken}`
+    const subject = encodeURIComponent("Demande de trajet — Complétez vos informations")
+    const validity = plan === "SOLO" ? "24h" : plan === "DUO" ? "48h" : "72h"
+    const body = encodeURIComponent(`Bonjour,\n\nVoici le lien pour compléter votre demande de trajet :\n${url}\n\nCe lien est valable ${validity}.\n\nCordialement`)
+    if (linkRecipient && linkRecipient.includes("@")) {
+      window.open(`mailto:${linkRecipient}?subject=${subject}&body=${body}`)
+    } else {
+      window.open(`mailto:?subject=${subject}&body=${body}`)
+    }
   }
 
   // ── BUG 1 — Génération avec protection anti-doublon ──────────────────────
@@ -979,6 +1039,51 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
     } catch { return null }
   }, [modeHoraire, tripDate, tripTime, durationSec, heureArriveesouhaitee])
 
+  useEffect(() => {
+    if (step !== "link") return
+    const generateToken = async () => {
+      if (plan === "SOLO") {
+        const { data: existing } = await supabase
+          .from("trip_requests")
+          .select("id, expires_at")
+          .eq("user_id", userId)
+          .eq("status", "pending")
+          .gt("expires_at", new Date().toISOString())
+          .maybeSingle()
+
+        if (existing) {
+          setShowLinkLimitAlert(true)
+          setStep("menu")
+          return
+        }
+      }
+
+      const expiresAt = new Date()
+      if (plan === "SOLO") expiresAt.setHours(expiresAt.getHours() + 24)
+      else if (plan === "DUO") expiresAt.setHours(expiresAt.getHours() + 48)
+      else expiresAt.setHours(expiresAt.getHours() + 72)
+
+      const { data: token } = await supabase.rpc("generate_trip_token")
+      if (!token) return
+
+      const { data: tripRequest } = await supabase
+        .from("trip_requests")
+        .insert({
+          user_id: userId,
+          token: token,
+          expires_at: expiresAt.toISOString(),
+          status: "pending",
+        })
+        .select("id, token")
+        .single()
+
+      if (!tripRequest) return
+      setTripRequestId(tripRequest.id)
+      setTripToken(tripRequest.token)
+    }
+    void generateToken()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step])
 
   if (!open) return null
 
@@ -1051,15 +1156,70 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 <p className="text-[11px] text-muted-foreground">Vous finalisez les détails maintenant</p>
               </div>
             </button>
-            <button onClick={() => setStep("link")} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#242424] border border-onyx-border/30 hover:border-gold/30 transition-all active:scale-[0.98]">
+            <button onClick={() => {
+              if (localStorage.getItem("hide_link_validity_modal") === "true") {
+                setStep("link")
+              } else {
+                setShowLinkModal(true)
+              }
+            }} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#242424] border border-onyx-border/30 hover:border-gold/30 transition-all active:scale-[0.98]">
               <div className="w-11 h-11 rounded-xl bg-gold/10 flex items-center justify-center"><Link2 className="h-5 w-5 text-gold" /></div>
               <div className="flex-1 text-left">
                 <p className="font-semibold text-sm text-foreground">Bon de réservation partagé</p>
-                <p className="text-[11px] text-muted-foreground">Le client complète ses informations</p>
+                <p className="text-[11px] text-muted-foreground">Le client complète ses informations de trajet via un lien sécurisé</p>
               </div>
             </button>
           </div>
         </motion.div>
+        <LimitAlertModal
+          open={showLinkLimitAlert}
+          onClose={() => setShowLinkLimitAlert(false)}
+          resourceLabel="lien de demande de trajet"
+          customTitle="🔒 Lien actif existant"
+          customMessage="🔒 Vous avez déjà un lien de demande de trajet actif. Passez en Pro pour en générer plusieurs simultanément."
+          onManageOffer={() => { setShowLinkLimitAlert(false); navigateToSubscription() }}
+          onUpgradePro={() => { setShowLinkLimitAlert(false); setSubDrawerPlan("DUO"); setShowSubDrawer(true) }}
+          onUpgradePremium={() => { setShowLinkLimitAlert(false); setSubDrawerPlan("TEAM"); setShowSubDrawer(true) }}
+        />
+        {showLinkModal && (
+          <div className="fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center px-5"
+            onClick={() => setShowLinkModal(false)}>
+            <div className="w-full max-w-sm bg-[#1a1a1a] rounded-2xl p-5 space-y-4"
+              onClick={e => e.stopPropagation()}>
+              <div className="text-center">
+                <p className="text-2xl mb-2">⏱️</p>
+                <h3 className="text-base font-bold text-foreground">Durée de validité du lien</h3>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm text-muted-foreground">Votre lien sera valable :</p>
+                <ul className="space-y-1 text-sm text-foreground">
+                  <li>• <span className="text-muted-foreground">Starter :</span> 24 heures</li>
+                  <li>• <span className="text-muted-foreground">Pro :</span> 48 heures</li>
+                  <li>• <span className="text-muted-foreground">Premium :</span> 72 heures</li>
+                </ul>
+                <p className="text-[11px] text-muted-foreground pt-1">
+                  Passé ce délai, le lien expirera automatiquement et ne pourra plus être utilisé.
+                </p>
+              </div>
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <Checkbox
+                  id="hide-validity-modal"
+                  onCheckedChange={(checked) => {
+                    if (checked) localStorage.setItem("hide_link_validity_modal", "true")
+                    else localStorage.removeItem("hide_link_validity_modal")
+                  }}
+                />
+                <span className="text-[11px] text-muted-foreground">Ne plus afficher ce message</span>
+              </label>
+              <button
+                onClick={() => { setShowLinkModal(false); setStep("link") }}
+                className="w-full py-3 rounded-xl bg-gold text-black font-semibold text-sm"
+              >
+                J&apos;ai compris — Générer le lien
+              </button>
+            </div>
+          </div>
+        )}
       </motion.div>
     )
   }
@@ -1087,7 +1247,11 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
           <div className="space-y-2">
             <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Lien de réservation</label>
             <div className="flex items-center gap-2 p-3 rounded-xl bg-[#1a1a1a] border border-onyx-border/30">
-              <div className="flex-1 text-sm text-gold font-mono truncate">nox.vtc/book/{brNumber.toLowerCase()}</div>
+              <div className="flex-1 text-sm font-mono truncate">
+                {tripToken
+                  ? <span className="text-gold">{`https://app.noxvtc.fr/request/${tripToken}`}</span>
+                  : <span className="text-muted-foreground/50 italic text-xs">Génération en cours…</span>}
+              </div>
               <button onClick={copyLink} className="p-2 rounded-lg bg-gold/10 hover:bg-gold/20 transition-colors">
                 {linkCopied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4 text-gold" />}
               </button>
@@ -1098,12 +1262,27 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
           </div>
         </div>
         <div className="px-4 py-4 border-t border-onyx-border/30 bg-[#0d0d0d] space-y-3">
-          <div className="flex gap-3">
-            <button className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-gold text-gold font-semibold text-sm hover:bg-gold/5 transition-colors">
+          <div className="flex gap-2">
+            <button
+              onClick={handleSendSMS}
+              disabled={!tripToken}
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl border border-gold text-gold font-semibold text-xs hover:bg-gold/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
               <Phone className="h-4 w-4" /> Par SMS
             </button>
-            <button className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-gold text-black font-semibold text-sm hover:bg-gold/90 transition-colors">
-              <MessageSquare className="h-4 w-4" /> Par WhatsApp
+            <button
+              onClick={handleSendEmail}
+              disabled={!tripToken}
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl border border-gold text-gold font-semibold text-xs hover:bg-gold/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Mail className="h-4 w-4" /> Par Email
+            </button>
+            <button
+              onClick={handleSendWhatsApp}
+              disabled={!tripToken}
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl bg-gold text-black font-semibold text-xs hover:bg-gold/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <MessageSquare className="h-4 w-4" /> WhatsApp
             </button>
           </div>
         </div>
