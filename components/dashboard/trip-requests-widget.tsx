@@ -1,12 +1,13 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { Link2, Plus } from "lucide-react"
+import { Link2, Plus, Copy, Check, X, MessageSquare, Mail, Phone } from "lucide-react"
 import { useNox, type TripRequest } from "./nox-context"
 import { type BCDocument } from "./data"
 import { CreateBCFlow } from "./create-bc"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 function isExpired(expires_at: string): boolean {
   return new Date(expires_at) < new Date()
@@ -39,18 +40,177 @@ const STATUS_CONFIG: Record<string, { label: string; dot: string; text: string }
   cancelled: { label: "Annulée",     dot: "bg-red-400",     text: "text-red-400" },
 }
 
-function TripRequestItem({ req, onConvert }: { req: TripRequest; onConvert: (req: TripRequest) => void }) {
+// ─── Resend drawer ───────────────────────────────────────────────────────────
+
+function isPhone(val: string) { return /^[+0-9\s\-().]{6,}$/.test(val.trim()) }
+
+function cleanPhone(tel: string) {
+  let cleaned = tel.replace(/[\s\-().]/g, "").replace(/^\+/, "")
+  if (cleaned.startsWith("0")) cleaned = "33" + cleaned.slice(1)
+  return cleaned
+}
+
+function ResendLinkDrawer({ req, onClose }: { req: TripRequest; onClose: () => void }) {
+  const [recipient, setRecipient] = useState(req.passenger_phone ?? req.passenger_email ?? "")
+  const [copied, setCopied] = useState(false)
+
+  const url = `https://app.noxvtc.fr/request/${req.token}`
+  const message = `Bonjour, voici le lien pour compléter votre demande de trajet : ${url}`
+  const passengerName = [req.passenger_civility, req.passenger_firstname, req.passenger_lastname]
+    .filter(Boolean).join(" ")
+
+  function handleCopy() {
+    navigator.clipboard.writeText(url)
+    setCopied(true)
+    toast.success("Lien copié !")
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  function handleSendSMS() {
+    if (!recipient) { toast.warning("Entrez un numéro de téléphone"); return }
+    if (!isPhone(recipient)) { toast.warning("Entrez un numéro de téléphone valide"); return }
+    window.open(`sms:${cleanPhone(recipient)}?body=${encodeURIComponent(message)}`)
+  }
+
+  function handleSendWhatsApp() {
+    if (!recipient) { toast.warning("Entrez un numéro de téléphone"); return }
+    if (!isPhone(recipient)) { toast.warning("Ce champ contient un email — entrez un numéro de téléphone pour WhatsApp"); return }
+    window.open(`https://wa.me/${cleanPhone(recipient)}?text=${encodeURIComponent(message)}`)
+  }
+
+  function handleSendEmail() {
+    if (!recipient) { toast.warning("Entrez une adresse email"); return }
+    if (isPhone(recipient)) { toast.warning("Ce champ contient un téléphone — entrez une adresse email"); return }
+    window.open(
+      `mailto:${recipient}?subject=${encodeURIComponent("Votre demande de trajet")}&body=${encodeURIComponent(message)}`
+    )
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-[#1a1a1a] rounded-t-3xl border-t border-onyx-border/30 p-5 space-y-4"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Handle */}
+        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto -mt-1 mb-1" />
+
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-base font-bold text-foreground">Renvoyer le lien</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {passengerName || "En attente du client"}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl bg-onyx-card border border-onyx-border/20 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Expiry */}
+        <div className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+          <p className="text-[11px] text-amber-400">
+            ⏳ Expire le {formatExpiry(req.expires_at)}
+          </p>
+        </div>
+
+        {/* URL */}
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">
+            Lien de réservation
+          </p>
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30">
+            <p className="flex-1 text-xs text-gold/80 truncate font-mono">{url}</p>
+            <button
+              onClick={handleCopy}
+              className="shrink-0 text-muted-foreground hover:text-gold transition-colors"
+            >
+              {copied
+                ? <Check className="h-4 w-4 text-emerald-400" />
+                : <Copy className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Recipient */}
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">
+            Destinataire
+          </p>
+          <input
+            type="text"
+            value={recipient}
+            onChange={e => setRecipient(e.target.value)}
+            placeholder="Email ou téléphone du destinataire"
+            className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
+            style={{ fontSize: "16px" }}
+          />
+        </div>
+
+        {/* Send buttons */}
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={handleSendSMS}
+            className="flex flex-col items-center gap-1.5 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 hover:border-gold/30 transition-colors active:scale-95"
+          >
+            <Phone className="h-4 w-4 text-muted-foreground" />
+            <span className="text-[10px] text-muted-foreground font-semibold">Par SMS</span>
+          </button>
+          <button
+            onClick={handleSendEmail}
+            className="flex flex-col items-center gap-1.5 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 hover:border-gold/30 transition-colors active:scale-95"
+          >
+            <Mail className="h-4 w-4 text-muted-foreground" />
+            <span className="text-[10px] text-muted-foreground font-semibold">Par Email</span>
+          </button>
+          <button
+            onClick={handleSendWhatsApp}
+            className="flex flex-col items-center gap-1.5 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 hover:border-gold/30 transition-colors active:scale-95"
+          >
+            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+            <span className="text-[10px] text-muted-foreground font-semibold">WhatsApp</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Item ─────────────────────────────────────────────────────────────────────
+
+function TripRequestItem({
+  req,
+  onConvert,
+  onResend,
+}: {
+  req: TripRequest
+  onConvert: (req: TripRequest) => void
+  onResend: (req: TripRequest) => void
+}) {
   const status = effectiveStatus(req)
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.expired
   const isFilled = status === "filled"
+  const isPending = status === "pending"
 
   return (
-    <div className={cn(
-      "p-3 rounded-2xl bg-onyx-card border transition-all",
-      isFilled
-        ? "border-gold/50 shadow-[0_0_10px_rgba(212,175,55,0.15)]"
-        : "border-onyx-border/40"
-    )}>
+    <div
+      className={cn(
+        "p-3 rounded-2xl bg-onyx-card border transition-all",
+        isFilled
+          ? "border-gold/50 shadow-[0_0_10px_rgba(212,175,55,0.15)]"
+          : isPending
+            ? "border-amber-400/30 cursor-pointer hover:border-amber-400/60 active:scale-[0.99]"
+            : "border-onyx-border/40"
+      )}
+      onClick={isPending ? () => onResend(req) : undefined}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className={cn("w-2 h-2 rounded-full shrink-0 mt-0.5", cfg.dot)} />
@@ -78,11 +238,11 @@ function TripRequestItem({ req, onConvert }: { req: TripRequest; onConvert: (req
             ) : (
               <>
                 <p className="text-sm font-medium text-muted-foreground">
-                  {status === "pending" ? "En attente du client…" :
+                  {isPending ? "En attente du client…" :
                    status === "converted" ? "Demande convertie en BC" :
                    status === "expired" ? "Lien expiré" : "Demande annulée"}
                 </p>
-                {status === "pending" && (
+                {isPending && (
                   <p className="text-[10px] text-muted-foreground/60 mt-0.5">
                     Expire le {formatExpiry(req.expires_at)}
                   </p>
@@ -96,17 +256,22 @@ function TripRequestItem({ req, onConvert }: { req: TripRequest; onConvert: (req
           <span className={cn("text-[10px] font-semibold", cfg.text)}>{cfg.label}</span>
           {isFilled && (
             <button
-              onClick={() => onConvert(req)}
+              onClick={e => { e.stopPropagation(); onConvert(req) }}
               className="px-2 py-1 rounded-lg bg-gold text-black text-[10px] font-bold hover:bg-gold/90 transition-colors active:scale-95"
             >
               Convertir en BC
             </button>
+          )}
+          {isPending && (
+            <span className="text-[10px] text-amber-400/70 font-medium">Renvoyer ›</span>
           )}
         </div>
       </div>
     </div>
   )
 }
+
+// ─── Widget ───────────────────────────────────────────────────────────────────
 
 export function TripRequestsWidget() {
   const { tripRequests, loadTripRequests, clients, addClient, bcs, plan, tokens } = useNox()
@@ -116,6 +281,7 @@ export function TripRequestsWidget() {
   const [showNewClientModal, setShowNewClientModal] = useState(false)
   const [convertingRequest, setConvertingRequest] = useState<TripRequest | null>(null)
   const [pendingPrefillBC, setPendingPrefillBC] = useState<BCDocument | null>(null)
+  const [resendRequest, setResendRequest] = useState<TripRequest | null>(null)
   const bcIdsBeforeRef = useRef<Set<string>>(new Set())
   const convertingRequestRef = useRef<TripRequest | null>(null)
 
@@ -133,8 +299,6 @@ export function TripRequestsWidget() {
     })()
   }
 
-  // Run check whenever bcs changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const prevBcsRef = useRef(bcs)
   if (prevBcsRef.current !== bcs) {
     prevBcsRef.current = bcs
@@ -142,7 +306,7 @@ export function TripRequestsWidget() {
   }
 
   function handleConvertRequest(req: TripRequest) {
-    if (plan === "SOLO" && tokens <= 0) return // silently block (no token modal in widget)
+    if (plan === "SOLO" && tokens <= 0) return
     const passengerName = [req.passenger_firstname, req.passenger_lastname].filter(Boolean).join(" ")
     const buildPrefill = (clientId?: string): BCDocument => ({
       id: "", number: "", client: passengerName || "Client", clientId,
@@ -218,25 +382,39 @@ export function TripRequestsWidget() {
       ) : (
         <div className="space-y-2">
           {sorted.map(req => (
-            <TripRequestItem key={req.id} req={req} onConvert={handleConvertRequest} />
+            <TripRequestItem
+              key={req.id}
+              req={req}
+              onConvert={handleConvertRequest}
+              onResend={setResendRequest}
+            />
           ))}
         </div>
       )}
 
+      {/* Resend drawer */}
+      {resendRequest && (
+        <ResendLinkDrawer req={resendRequest} onClose={() => setResendRequest(null)} />
+      )}
+
       {/* Link creation flow */}
-      <CreateBCFlow open={showBC} onClose={() => setShowBC(false)} />
+      {showBC && (
+        <CreateBCFlow open={showBC} onClose={() => setShowBC(false)} />
+      )}
 
       {/* Conversion flow */}
-      <CreateBCFlow
-        open={showConvertFlow}
-        onClose={() => {
-          setShowConvertFlow(false)
-          setPendingPrefillBC(null)
-          convertingRequestRef.current = null
-          setConvertingRequest(null)
-        }}
-        prefillBC={pendingPrefillBC}
-      />
+      {showConvertFlow && (
+        <CreateBCFlow
+          open={showConvertFlow}
+          onClose={() => {
+            setShowConvertFlow(false)
+            setPendingPrefillBC(null)
+            convertingRequestRef.current = null
+            setConvertingRequest(null)
+          }}
+          prefillBC={pendingPrefillBC}
+        />
+      )}
 
       {/* New Client Modal */}
       {showNewClientModal && convertingRequest && (

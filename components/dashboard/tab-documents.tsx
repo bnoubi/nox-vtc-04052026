@@ -1282,57 +1282,6 @@ export function DocumentsTab() {
         </div>
       )}
 
-      {/* Demandes à convertir */}
-      {tripRequests.filter(r => r.status === "filled").length > 0 && (
-        <div className="mx-4 mt-3 mb-1 rounded-2xl border border-gold/40 bg-onyx-card overflow-hidden">
-          <div className="flex items-center gap-2 px-4 pt-3 pb-2">
-            <h2 className="text-sm font-semibold text-foreground">Demandes à convertir</h2>
-            <span className="w-5 h-5 flex items-center justify-center rounded-full bg-gold/20 text-gold text-[10px] font-bold animate-pulse">
-              {tripRequests.filter(r => r.status === "filled").length}
-            </span>
-          </div>
-          <div className="px-3 pb-3 space-y-2">
-            {tripRequests.filter(r => r.status === "filled").map(req => {
-              const passengerName = [req.passenger_civility, req.passenger_firstname, req.passenger_lastname].filter(Boolean).join(" ")
-              return (
-                <div key={req.id} className="p-3 rounded-xl bg-[#111] border border-gold/20">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{passengerName || "Passager"}</p>
-                      {(req.departure || req.arrival) && (
-                        <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                          {req.departure ?? "—"} → {req.arrival ?? "—"}
-                        </p>
-                      )}
-                      <div className="flex gap-3 mt-1">
-                        {req.trip_date && (
-                          <span className="text-[10px] text-muted-foreground/70">
-                            {new Date(req.trip_date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
-                            {req.trip_time ? ` · ${req.trip_time.replace(":", "h")}` : ""}
-                          </span>
-                        )}
-                        {req.passengers_count > 1 && (
-                          <span className="text-[10px] text-muted-foreground/70">{req.passengers_count} passagers</span>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-muted-foreground/50 mt-0.5">
-                        Reçu le {new Date(req.created_at).toLocaleDateString("fr-FR")}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleConvertRequest(req)}
-                      className="shrink-0 px-3 py-2 rounded-xl bg-gold text-black text-xs font-bold hover:bg-gold/90 transition-colors active:scale-95"
-                    >
-                      Convertir en BC
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
       <div className="px-4 pt-2 pb-4">
         <h1 className="text-lg font-bold text-foreground mb-3">Réservations & Factures</h1>
 
@@ -1363,6 +1312,57 @@ export function DocumentsTab() {
             </button>
           ))}
         </div>
+
+        {/* Demandes à convertir */}
+        {tripRequests.filter(r => r.status === "filled").length > 0 && (
+          <div className="mt-3 mb-1 rounded-2xl border border-gold/40 bg-onyx-card overflow-hidden">
+            <div className="flex items-center gap-2 px-4 pt-3 pb-2">
+              <h2 className="text-sm font-semibold text-foreground">Demandes à convertir</h2>
+              <span className="w-5 h-5 flex items-center justify-center rounded-full bg-gold/20 text-gold text-[10px] font-bold animate-pulse">
+                {tripRequests.filter(r => r.status === "filled").length}
+              </span>
+            </div>
+            <div className="px-3 pb-3 space-y-2">
+              {tripRequests.filter(r => r.status === "filled").map(req => {
+                const passengerName = [req.passenger_civility, req.passenger_firstname, req.passenger_lastname].filter(Boolean).join(" ")
+                return (
+                  <div key={req.id} className="p-3 rounded-xl bg-[#111] border border-gold/20">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{passengerName || "Passager"}</p>
+                        {(req.departure || req.arrival) && (
+                          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                            {req.departure ?? "—"} → {req.arrival ?? "—"}
+                          </p>
+                        )}
+                        <div className="flex gap-3 mt-1">
+                          {req.trip_date && (
+                            <span className="text-[10px] text-muted-foreground/70">
+                              {new Date(req.trip_date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
+                              {req.trip_time ? ` · ${req.trip_time.replace(":", "h")}` : ""}
+                            </span>
+                          )}
+                          {req.passengers_count > 1 && (
+                            <span className="text-[10px] text-muted-foreground/70">{req.passengers_count} passagers</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                          Reçu le {new Date(req.created_at).toLocaleDateString("fr-FR")}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleConvertRequest(req)}
+                        className="shrink-0 px-3 py-2 rounded-xl bg-gold text-black text-xs font-bold hover:bg-gold/90 transition-colors active:scale-95"
+                      >
+                        Convertir en BC
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Search Bar */}
         <div className="relative">
@@ -1433,17 +1433,19 @@ export function DocumentsTab() {
         <Plus className="h-5 w-5 text-primary-foreground" strokeWidth={2} />
       </button>
 
-      <CreateBCFlow
-        open={showBCFlow}
-        onClose={() => {
-          setShowBCFlow(false)
-          setDuplicateBC(null)
-          setPendingPrefillBC(null)
-          convertingRequestRef.current = null
-          setConvertingRequest(null)
-        }}
-        prefillBC={pendingPrefillBC ?? duplicateBC}
-      />
+      {showBCFlow && (
+        <CreateBCFlow
+          open={showBCFlow}
+          onClose={() => {
+            setShowBCFlow(false)
+            setDuplicateBC(null)
+            setPendingPrefillBC(null)
+            convertingRequestRef.current = null
+            setConvertingRequest(null)
+          }}
+          prefillBC={pendingPrefillBC ?? duplicateBC}
+        />
+      )}
 
       <WalletDrawer open={walletOpen} onClose={() => setWalletOpen(false)} />
 

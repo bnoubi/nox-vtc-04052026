@@ -1,0 +1,381 @@
+"use client"
+
+import { useState } from "react"
+import { createClient } from "@supabase/supabase-js"
+import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+const i18n = {
+  fr: {
+    sub: "Remplissez ce formulaire pour confirmer votre course",
+    sectionIdentity: "Vos informations",
+    sectionRoute: "Trajet",
+    sectionSchedule: "Date & Passagers",
+    sectionNotes: "Notes",
+    civility: "Civilité", mr: "M.", mme: "Mme",
+    firstname: "Prénom *", lastname: "Nom *",
+    phone: "Téléphone *", email: "Email",
+    departure: "Adresse de départ *", arrival: "Adresse d'arrivée *",
+    date: "Date *", time: "Heure",
+    passengers: "Passagers", luggage: "Bagages",
+    notes: "Notes", notesPlaceholder: "Numéro de vol, instructions… (facultatif)",
+    submit: "Envoyer ma demande", submitting: "Envoi en cours…",
+    success: "Demande envoyée !",
+    successSub: "Votre chauffeur a reçu votre demande et vous contactera pour confirmation.",
+    whatsapp: "Contacter sur WhatsApp",
+    required: "Merci de remplir tous les champs obligatoires (*) et au moins un contact (téléphone ou email).",
+    error: "Une erreur est survenue. Veuillez réessayer.",
+    disclaimer: "Ce formulaire constitue une demande de trajet préliminaire et ne vaut pas bon de réservation. Un bon de réservation officiel vous sera transmis après confirmation par votre chauffeur VTC.",
+    poweredBy: "Propulsé par NoX VTC",
+  },
+  en: {
+    sub: "Fill in this form to confirm your ride",
+    sectionIdentity: "Your information",
+    sectionRoute: "Route",
+    sectionSchedule: "Date & Passengers",
+    sectionNotes: "Notes",
+    civility: "Title", mr: "Mr", mme: "Ms",
+    firstname: "First name *", lastname: "Last name *",
+    phone: "Phone *", email: "Email",
+    departure: "Departure address *", arrival: "Arrival address *",
+    date: "Date *", time: "Time",
+    passengers: "Passengers", luggage: "Luggage",
+    notes: "Notes", notesPlaceholder: "Flight number, instructions… (optional)",
+    submit: "Send my request", submitting: "Sending…",
+    success: "Request sent!",
+    successSub: "Your driver has received your request and will contact you to confirm.",
+    whatsapp: "Contact on WhatsApp",
+    required: "Please fill in all required fields (*) and provide at least a phone number or email.",
+    error: "An error occurred. Please try again.",
+    disclaimer: "This form is a preliminary trip request and does not constitute a booking confirmation. An official booking confirmation will be sent to you after validation by your driver.",
+    poweredBy: "Powered by NoX VTC",
+  },
+  es: {
+    sub: "Complete este formulario para confirmar su traslado",
+    sectionIdentity: "Sus datos",
+    sectionRoute: "Viaje",
+    sectionSchedule: "Fecha y pasajeros",
+    sectionNotes: "Notas",
+    civility: "Tratamiento", mr: "Sr.", mme: "Sra.",
+    firstname: "Nombre *", lastname: "Apellido *",
+    phone: "Teléfono *", email: "Email",
+    departure: "Dirección de salida *", arrival: "Dirección de llegada *",
+    date: "Fecha *", time: "Hora",
+    passengers: "Pasajeros", luggage: "Equipaje",
+    notes: "Notas", notesPlaceholder: "Número de vuelo, instrucciones… (opcional)",
+    submit: "Enviar mi solicitud", submitting: "Enviando…",
+    success: "¡Solicitud enviada!",
+    successSub: "Su conductor ha recibido su solicitud y le contactará para confirmar.",
+    whatsapp: "Contactar por WhatsApp",
+    required: "Por favor, complete los campos obligatorios (*) y proporcione al menos un teléfono o email.",
+    error: "Se ha producido un error. Por favor, inténtelo de nuevo.",
+    disclaimer: "Este formulario es una solicitud preliminar de viaje y no constituye una confirmación de reserva. Una confirmación oficial le será enviada tras la validación por su conductor.",
+    poweredBy: "Powered by NoX VTC",
+  },
+} as const
+type Lang = keyof typeof i18n
+
+interface Props {
+  token: string
+  operatorName: string
+  operatorPhone: string
+  operatorLogo: string
+  operatorSiren?: string
+  initialDeparture: string
+  initialArrival: string
+  initialDate: string
+  initialTime: string
+  initialPassengers: number
+  initialLuggage: number
+  initialNotes: string
+}
+
+function Counter({ value, onChange, min = 0, max = 8 }: { value: number; onChange: (v: number) => void; min?: number; max?: number }) {
+  return (
+    <div className="flex items-center gap-3">
+      <button type="button" onClick={() => onChange(Math.max(min, value - 1))}
+        className="w-8 h-8 rounded-full bg-[#C5A059] text-white flex items-center justify-center text-lg font-bold hover:bg-[#B8955A] transition-colors active:scale-95">
+        −
+      </button>
+      <span className="text-[#1A1A1A] font-semibold w-4 text-center">{value}</span>
+      <button type="button" onClick={() => onChange(Math.min(max, value + 1))}
+        className="w-8 h-8 rounded-full bg-[#C5A059] text-white flex items-center justify-center text-lg font-bold hover:bg-[#B8955A] transition-colors active:scale-95">
+        +
+      </button>
+    </div>
+  )
+}
+
+const INPUT = "w-full bg-[#F9F6F0] rounded-xl px-3 py-2.5 text-[#1A1A1A] text-sm placeholder:text-[#BBAA88] outline-none border border-[#E8D5A3] focus:border-[#C5A059] focus:ring-1 focus:ring-[#C5A059]/20"
+const CARD = "bg-white rounded-2xl border border-[#E8D5A3]/40 p-4 space-y-3 shadow-sm"
+const LABEL = "text-xs text-[#1A1A1A] font-medium block mb-1"
+const SECTION_TITLE = "text-[10px] font-bold uppercase tracking-wider text-[#C5A059] mb-1"
+
+export function TripRequestForm({
+  token, operatorName, operatorPhone, operatorLogo, operatorSiren,
+  initialDeparture, initialArrival, initialDate, initialTime,
+  initialPassengers, initialLuggage, initialNotes,
+}: Props) {
+  const [lang, setLang] = useState<Lang>("fr")
+  const t = i18n[lang]
+
+  const [civility, setCivility] = useState<"M." | "Mme">("M.")
+  const [firstname, setFirstname] = useState("")
+  const [lastname, setLastname] = useState("")
+  const [phone, setPhone] = useState("")
+  const [email, setEmail] = useState("")
+  const [departure, setDeparture] = useState(initialDeparture)
+  const [arrival, setArrival] = useState(initialArrival)
+  const [date, setDate] = useState(initialDate)
+  const [time, setTime] = useState(initialTime)
+  const [passengers, setPassengers] = useState(initialPassengers)
+  const [luggage, setLuggage] = useState(initialLuggage)
+  const [notes, setNotes] = useState(initialNotes)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [error, setError] = useState("")
+
+  const mapUrl =
+    departure && arrival
+      ? `https://maps.googleapis.com/maps/api/staticmap?size=600x200&scale=2` +
+        `&markers=color:0x4285F4|label:D|${encodeURIComponent(departure)}` +
+        `&markers=color:0xEA4335|label:A|${encodeURIComponent(arrival)}` +
+        `&path=color:0x4285F480|weight:3|${encodeURIComponent(departure)}|${encodeURIComponent(arrival)}` +
+        `&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`
+      : null
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!firstname || !lastname || (!phone && !email) || !departure || !arrival || !date) {
+      setError(t.required)
+      return
+    }
+    setError("")
+    setSubmitting(true)
+    try {
+      const { error: dbError } = await supabase
+        .from("trip_requests")
+        .update({
+          passenger_civility: civility,
+          passenger_firstname: firstname,
+          passenger_lastname: lastname,
+          passenger_phone: phone || null,
+          passenger_email: email || null,
+          departure,
+          arrival,
+          trip_date: date,
+          trip_time: time || null,
+          passengers_count: passengers,
+          luggage_count: luggage,
+          notes: notes || null,
+          status: "filled",
+        })
+        .eq("token", token)
+        .eq("status", "pending")
+
+      if (dbError) throw dbError
+
+      if (email) {
+        await fetch("/api/trip-request/confirm-passenger", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, firstname, departure, arrival, date, time, lang }),
+        })
+      }
+      setSubmitted(true)
+    } catch {
+      setError(t.error)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (submitted) {
+    const waPhone = operatorPhone.replace(/\D/g, "")
+    const waMsg = encodeURIComponent(
+      `Bonjour, j'ai rempli votre formulaire de demande de trajet (${departure} → ${arrival}).`
+    )
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mb-6">
+          <span className="text-4xl">✅</span>
+        </div>
+        <h1 className="text-2xl font-bold text-[#1A1A1A] mb-3">{t.success}</h1>
+        <p className="text-sm text-[#666] max-w-xs">{t.successSub}</p>
+        {waPhone && (
+          <a href={`https://wa.me/${waPhone}?text=${waMsg}`} target="_blank" rel="noopener noreferrer"
+            className="mt-8 flex items-center gap-2 px-6 py-3 rounded-2xl bg-[#25D366] text-white font-semibold text-sm">
+            <span>💬</span> {t.whatsapp}
+          </a>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-[#F9F6F0] pb-12">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-[#E8D5A3]/60 px-4 py-3 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          {operatorLogo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={operatorLogo} alt={operatorName} className="h-9 w-9 rounded-full object-cover border border-[#E8D5A3]" />
+          ) : (
+            <div className="h-9 w-9 rounded-full bg-[#C5A059]/10 border border-[#E8D5A3] flex items-center justify-center shrink-0">
+              <span className="text-[#C5A059] text-xs font-bold">{operatorName[0]}</span>
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-[#1A1A1A] truncate max-w-[150px]">{operatorName}</p>
+            {operatorSiren && <p className="text-[10px] text-[#999]">SIREN : {operatorSiren}</p>}
+            {operatorPhone && <p className="text-[10px] text-[#999]">Tél : {operatorPhone}</p>}
+          </div>
+        </div>
+        <div className="flex gap-1">
+          {(["fr", "en", "es"] as Lang[]).map(l => (
+            <button key={l} type="button" onClick={() => setLang(l)}
+              className={`text-base px-1.5 py-0.5 rounded-lg transition-colors ${lang === l ? "bg-[#C5A059]/15 ring-1 ring-[#C5A059]/40" : "opacity-35 hover:opacity-70"}`}>
+              {l === "fr" ? "🇫🇷" : l === "en" ? "🇬🇧" : "🇪🇸"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-4 pt-5 space-y-4 max-w-lg mx-auto">
+        <p className="text-xs text-[#999]">{t.sub}</p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Identity */}
+          <div className={CARD}>
+            <p className={SECTION_TITLE}>{t.sectionIdentity}</p>
+            <div className="flex gap-2">
+              {(["M.", "Mme"] as const).map(c => (
+                <button key={c} type="button" onClick={() => setCivility(c)}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${civility === c ? "bg-[#C5A059] text-white" : "bg-[#F9F6F0] text-[#666] border border-[#E8D5A3] hover:border-[#C5A059]"}`}>
+                  {c === "M." ? t.mr : t.mme}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={LABEL}>{t.firstname}</label>
+                <input value={firstname} onChange={e => setFirstname(e.target.value)}
+                  className={INPUT} placeholder="Jean" />
+              </div>
+              <div>
+                <label className={LABEL}>{t.lastname}</label>
+                <input value={lastname} onChange={e => setLastname(e.target.value)}
+                  className={INPUT} placeholder="Dupont" />
+              </div>
+            </div>
+            <div>
+              <label className={LABEL}>{t.phone}</label>
+              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+                className={INPUT} placeholder="+33 6 12 34 56 78" />
+            </div>
+            <div>
+              <label className={LABEL}>{t.email}</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                className={INPUT} placeholder="jean@exemple.fr" />
+            </div>
+          </div>
+
+          {/* Route */}
+          <div className={CARD}>
+            <p className={SECTION_TITLE}>{t.sectionRoute}</p>
+            <div>
+              <label className={LABEL}>{t.departure}</label>
+              <div className="relative">
+                <PlacesAutocomplete
+                  value={departure} onChange={setDeparture}
+                  placeholder="Paris, Gare du Nord"
+                  className={`${INPUT} ${departure ? "pr-8" : ""}`} addressMode="full"
+                />
+                {departure && (
+                  <button type="button" onClick={() => setDeparture("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#BBAA88] hover:text-[#888] text-xs z-10 leading-none">
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+            <div>
+              <label className={LABEL}>{t.arrival}</label>
+              <div className="relative">
+                <PlacesAutocomplete
+                  value={arrival} onChange={setArrival}
+                  placeholder="Aéroport CDG, Terminal 2E"
+                  className={`${INPUT} ${arrival ? "pr-8" : ""}`} addressMode="full"
+                />
+                {arrival && (
+                  <button type="button" onClick={() => setArrival("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#BBAA88] hover:text-[#888] text-xs z-10 leading-none">
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+            {mapUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={mapUrl} alt="aperçu trajet" className="w-full rounded-xl object-cover border border-[#E8D5A3]/40" style={{ height: 130 }} />
+            )}
+          </div>
+
+          {/* Schedule & counts */}
+          <div className={CARD}>
+            <p className={SECTION_TITLE}>{t.sectionSchedule}</p>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className={LABEL}>{t.date}</label>
+                <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                  className={INPUT} />
+              </div>
+              <div>
+                <label className={LABEL}>{t.time}</label>
+                <input type="time" value={time} onChange={e => setTime(e.target.value)}
+                  className={INPUT} />
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-1">
+              <span className="text-sm text-[#1A1A1A] font-medium">{t.passengers}</span>
+              <Counter value={passengers} onChange={setPassengers} min={1} />
+            </div>
+            <div className="flex items-center justify-between py-1">
+              <span className="text-sm text-[#1A1A1A] font-medium">{t.luggage}</span>
+              <Counter value={luggage} onChange={setLuggage} />
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className={CARD}>
+            <p className={SECTION_TITLE}>{t.sectionNotes}</p>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+              placeholder={t.notesPlaceholder}
+              className="w-full bg-[#F9F6F0] rounded-xl px-3 py-2.5 text-[#1A1A1A] text-sm placeholder:text-[#BBAA88] outline-none border border-[#E8D5A3] focus:border-[#C5A059] focus:ring-1 focus:ring-[#C5A059]/20 resize-none" />
+          </div>
+
+          {error && <p className="text-sm text-red-500 text-center px-2">{error}</p>}
+
+          <button type="submit" disabled={submitting}
+            className="w-full py-4 rounded-2xl bg-[#C5A059] text-white font-bold text-sm hover:bg-[#B8955A] transition-colors active:scale-[0.98] disabled:opacity-60">
+            {submitting ? t.submitting : t.submit}
+          </button>
+        </form>
+
+        {/* Legal disclaimer */}
+        <p className="text-[10px] text-[#999] text-center italic leading-relaxed px-2 pt-2">
+          {t.disclaimer}
+        </p>
+
+        {/* Powered by */}
+        <p className="text-[10px] text-center pb-4" style={{ color: "#C5A059", opacity: 0.6 }}>
+          {t.poweredBy}
+        </p>
+      </div>
+    </div>
+  )
+}

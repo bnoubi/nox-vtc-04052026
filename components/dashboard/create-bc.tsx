@@ -322,6 +322,15 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   const [step, setStep] = useState<FlowStep>(() => prefillBC ? "form" : "menu")
   const [tab, setTab] = useState<FormTab>("formulaire")
 
+  useEffect(() => {
+    if (open && prefillBC) {
+      setStep("form")
+    }
+    if (!open) {
+      setStep(prefillBC ? "form" : "menu")
+    }
+  }, [open, prefillBC])
+
   // BUG 1 — état de soumission pour éviter les doublons
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -2138,6 +2147,17 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 <p className="text-[9px] text-muted-foreground leading-relaxed">Détail : {pricing.fullDetail}</p>
               </div>
             </div>
+          </Section>
+
+          {/* SECTION: Notes & Instructions */}
+          <Section title="Notes & Instructions" icon={MessageSquare}>
+            <textarea
+              value={instructions}
+              onChange={e => setInstructions(e.target.value)}
+              placeholder="Instructions particulières, informations complémentaires..."
+              rows={3}
+              className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50 resize-none"
+            />
           </Section>
 
           {/* SECTION: Conditions Générales de Vente applicables */}
