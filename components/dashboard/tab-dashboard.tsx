@@ -6,10 +6,13 @@ import { QuickActions } from "./quick-actions"
 import { UpcomingTrips } from "./upcoming-trips"
 import { StatsWidget } from "./stats-widget"
 import { NextTripWidget } from "./next-trip-widget"
+import { TokenCard } from "./token-card"
 import { useNav } from "./nav-context"
+import { useNox } from "./nox-context"
 
 export function DashboardTab() {
   const { navigateToEntity } = useNav()
+  const { plan } = useNox()
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -20,6 +23,7 @@ export function DashboardTab() {
         <NextTripWidget />
         <UpcomingTrips />
         <StatsWidget />
+        {plan === "SOLO" && <TokenCard />}
       </div>
     </div>
   )

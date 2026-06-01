@@ -3,7 +3,7 @@
 import { createContext, useContext, useCallback, useRef, useState } from "react"
 import type { TabId } from "./bottom-nav"
 
-type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security" | "cgv"
+type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security" | "cgv" | "wallet_history"
 
 export interface EntityNavigation {
   entityType: "driver" | "vehicle"
@@ -25,6 +25,7 @@ interface NavContextValue {
   pendingBcId: string | null
   navigateToBC: (id: string) => void
   clearPendingBcId: () => void
+  navigateToWalletHistory: () => void
 }
 
 const NavContext = createContext<NavContextValue | null>(null)
@@ -101,6 +102,13 @@ export function NavProvider({
     setPendingBcId(id)
   }, [])
 
+  const navigateToWalletHistory = useCallback(() => {
+    onTabChange("settings")
+    setTimeout(() => {
+      settingsNavigatorRef.current?.("wallet_history")
+    }, 150)
+  }, [onTabChange])
+
   const clearPendingBcId = useCallback(() => {
     setPendingBcId(null)
   }, [])
@@ -120,6 +128,7 @@ export function NavProvider({
       pendingBcId,
       navigateToBC,
       clearPendingBcId,
+      navigateToWalletHistory,
     }}>
       {children}
     </NavContext.Provider>
