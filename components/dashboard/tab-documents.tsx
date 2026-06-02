@@ -22,6 +22,7 @@ import {
   Flag,
   Trash2,
   Pencil,
+  Loader2,
 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
@@ -1062,6 +1063,7 @@ export function DocumentsTab() {
   const [walletOpen, setWalletOpen] = useState(false)
   const [convertingRequest, setConvertingRequest] = useState<TripRequest | null>(null)
   const [showNewClientModal, setShowNewClientModal] = useState(false)
+  const [addingClient, setAddingClient] = useState(false)
   const [pendingPrefillBC, setPendingPrefillBC] = useState<BCDocument | null>(null)
   const bcIdsBeforeRef = useRef<Set<string>>(new Set())
   const convertingRequestRef = useRef<TripRequest | null>(null)
@@ -1641,7 +1643,7 @@ export function DocumentsTab() {
       {/* New Client Detected Modal */}
       {showNewClientModal && convertingRequest && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-5 bg-black/60"
-          onClick={() => setShowNewClientModal(false)}>
+          onClick={() => { setShowNewClientModal(false); setAddingClient(false) }}>
           <div className="w-full max-w-sm bg-[#1a1a1a] rounded-2xl border border-onyx-border/40 p-5 space-y-4"
             onClick={e => e.stopPropagation()}>
             <p className="text-base font-bold text-foreground">👤 Nouveau client détecté</p>
@@ -1652,27 +1654,49 @@ export function DocumentsTab() {
             <p className="text-xs text-muted-foreground/70">Voulez-vous l&apos;ajouter à votre carnet clients ?</p>
             <div className="flex gap-3">
               <button
+                disabled={addingClient}
                 onClick={async () => {
-                  setShowNewClientModal(false)
-                  const req = convertingRequest
-                  const newClientId = await addClient({
-                    id: "", type: "particulier",
-                    civilite: (req.passenger_civility as "M." | "Mme") || "M.",
-                    prenom: req.passenger_firstname ?? "", nom: req.passenger_lastname ?? "",
-                    phone: req.passenger_phone ?? "", email: req.passenger_email ?? "",
-                    billingAddress: { rue: "", codePostal: "", ville: "" },
-                    trips: 0, lastTrip: "", notes: "",
-                  })
-                  setPendingPrefillBC(prev => prev ? { ...prev, clientId: newClientId ?? undefined } : prev)
-                  setShowBCFlow(true)
+                  setAddingClient(true)
+                  try {
+                    const req = convertingRequest
+                    const newClientId = await addClient({
+                      id: "", type: "particulier",
+                      civilite: (req.passenger_civility as "M." | "Mme") || "M.",
+                      prenom: req.passenger_firstname ?? "", nom: req.passenger_lastname ?? "",
+                      phone: req.passenger_phone ?? "", email: req.passenger_email ?? "",
+                      billingAddress: { rue: "", codePostal: "", ville: "" },
+                      trips: 0, lastTrip: "", notes: "",
+                    })
+                    setPendingPrefillBC(prev => prev ? { ...prev, clientId: newClientId ?? undefined } : prev)
+                    toast.success("✅ Client ajouté au carnet")
+                    await new Promise(r => setTimeout(r, 1000))
+                    setShowNewClientModal(false)
+                    setAddingClient(false)
+                    setShowBCFlow(true)
+                  } catch {
+                    toast.error("Erreur lors de l'ajout du client")
+                    setAddingClient(false)
+                  }
                 }}
-                className="flex-1 py-3 rounded-xl bg-gold text-black text-sm font-semibold hover:bg-gold/90 transition-colors"
+                className={cn(
+                  "flex-1 py-3 rounded-xl bg-gold text-black text-sm font-semibold transition-colors flex items-center justify-center gap-2",
+                  addingClient ? "opacity-60 cursor-not-allowed" : "hover:bg-gold/90"
+                )}
               >
-                Ajouter au carnet
+                {addingClient ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Ajout en cours...
+                  </>
+                ) : "Ajouter au carnet"}
               </button>
               <button
-                onClick={() => { setShowNewClientModal(false); setShowBCFlow(true) }}
-                className="flex-1 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 text-muted-foreground text-sm font-semibold"
+                disabled={addingClient}
+                onClick={() => { setShowNewClientModal(false); setAddingClient(false); setShowBCFlow(true) }}
+                className={cn(
+                  "flex-1 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 text-muted-foreground text-sm font-semibold transition-colors",
+                  addingClient ? "opacity-50 cursor-not-allowed" : "hover:bg-[#2a2a2a]"
+                )}
               >
                 Ignorer
               </button>
