@@ -216,16 +216,17 @@ function DateTimePickerSheet({ open, initialDate, initialTime, onClose, onConfir
   }, [])
 
   const hourItems = useMemo(() => Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")), [])
-  const minItems = ["00", "15", "30", "45"]
+  const minItems = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"))
 
   const initDay = useMemo(() => { const i = dayItems.findIndex(d => d.value === initialDate); return i >= 0 ? i : 0 }, [initialDate, dayItems])
   const initHour = useMemo(() => { if (!initialTime) return 8; return Math.max(0, Math.min(23, parseInt(initialTime.split(":")[0] || "8", 10))) }, [initialTime])
   const initMin = useMemo(() => {
     if (!initialTime) return 0
     const m = parseInt(initialTime.split(":")[1] || "0", 10)
-    const idx = [0, 15, 30, 45].indexOf(Math.round(m / 15) * 15)
+    const rounded = Math.round(m / 5) * 5 % 60
+    const idx = minItems.indexOf(String(rounded).padStart(2, "0"))
     return Math.max(0, idx)
-  }, [initialTime])
+  }, [initialTime, minItems])
 
   const [dayIdx, setDayIdx] = useState(initDay)
   const [hourIdx, setHourIdx] = useState(initHour)

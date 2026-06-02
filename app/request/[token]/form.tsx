@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { createClient } from "@supabase/supabase-js"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 
@@ -135,9 +135,52 @@ export function TripRequestForm({
   const [passengers, setPassengers] = useState(initialPassengers)
   const [luggage, setLuggage] = useState(initialLuggage)
   const [notes, setNotes] = useState(initialNotes)
+  const [estimatedDistance, setEstimatedDistance] = useState<number | null>(null)
+  const [estimatedDuration, setEstimatedDuration] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState("")
+
+  useEffect(() => {
+    if (!departure || !arrival) {
+      setEstimatedDistance(null)
+      setEstimatedDuration(null)
+      return
+    }
+    const calculate = async () => {
+      try {
+        const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
+            "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
+          },
+          body: JSON.stringify({
+            origin: { address: departure },
+            destination: { address: arrival },
+            travelMode: "DRIVE",
+            routingPreference: "TRAFFIC_UNAWARE",
+          }),
+        })
+        const data = await res.json()
+        if (data.routes?.[0]) {
+          const meters = data.routes[0].distanceMeters as number
+          const seconds = parseInt(data.routes[0].duration as string)
+          const km = Math.round(meters / 100) / 10
+          const mins = Math.round(seconds / 60)
+          const hours = Math.floor(mins / 60)
+          const remainMins = mins % 60
+          const duration = hours > 0 ? `${hours}h ${remainMins}min` : `${mins} min`
+          setEstimatedDistance(km)
+          setEstimatedDuration(duration)
+        }
+      } catch {
+        // silently fail
+      }
+    }
+    void calculate()
+  }, [departure, arrival])
 
   const mapUrl =
     departure && arrival
@@ -172,6 +215,8 @@ export function TripRequestForm({
           passengers_count: passengers,
           luggage_count: luggage,
           notes: notes || null,
+          estimated_distance: estimatedDistance ?? null,
+          estimated_duration: estimatedDuration ?? null,
           status: "filled",
         })
         .eq("token", token)
@@ -323,6 +368,13 @@ export function TripRequestForm({
               // eslint-disable-next-line @next/next/no-img-element
               <img src={mapUrl} alt="aperçu trajet" className="w-full rounded-xl object-cover border border-[#E8D5A3]/40" style={{ height: 130 }} />
             )}
+            {estimatedDistance !== null && (
+              <div style={{ background: "#FFF8EC", borderLeft: "3px solid #C5A059", paddingLeft: 12, paddingRight: 12, paddingTop: 10, paddingBottom: 10, borderRadius: 8 }}>
+                <p style={{ color: "#1A1A1A", fontSize: 13, fontWeight: 600, marginBottom: 2 }}>📍 Distance estimée : {estimatedDistance} km</p>
+                {estimatedDuration && <p style={{ color: "#1A1A1A", fontSize: 13, fontWeight: 600, marginBottom: 4 }}>⏱ Durée estimée : {estimatedDuration}</p>}
+                <p style={{ color: "#999", fontSize: 11, fontStyle: "italic" }}>Ces estimations sont indicatives et peuvent varier selon le trafic.</p>
+              </div>
+            )}
           </div>
 
           {/* Schedule & counts */}
@@ -336,8 +388,15 @@ export function TripRequestForm({
               </div>
               <div>
                 <label className={LABEL}>{t.time}</label>
-                <input type="time" value={time} onChange={e => setTime(e.target.value)}
-                  className={INPUT} />
+                <select value={time} onChange={e => setTime(e.target.value)}
+                  className={INPUT}>
+                  <option value="">-- Heure --</option>
+                  {Array.from({ length: 24 * 12 }, (_, i) => {
+                    const h = Math.floor(i / 12)
+                    const m = (i % 12) * 5
+                    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+                  }).map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
               </div>
             </div>
             <div className="flex items-center justify-between py-1">

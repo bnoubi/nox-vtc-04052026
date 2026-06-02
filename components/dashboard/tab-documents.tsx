@@ -1159,15 +1159,26 @@ export function DocumentsTab() {
   function handleConvertRequest(req: TripRequest) {
     if (plan === "SOLO" && tokens <= 0) { setShowNoTokens(true); return }
     const passengerName = [req.passenger_firstname, req.passenger_lastname].filter(Boolean).join(" ")
+    const roundToNearest5 = (time: string): string => {
+      if (!time) return time
+      const clean = time.substring(0, 5)
+      const [hours, minutes] = clean.split(":").map(Number)
+      const rounded = Math.round(minutes / 5) * 5
+      const finalMinutes = rounded === 60 ? 0 : rounded
+      const finalHours = rounded === 60 ? (hours + 1) % 24 : hours
+      return `${String(finalHours).padStart(2, "0")}:${String(finalMinutes).padStart(2, "0")}`
+    }
     const buildPrefill = (clientId?: string): BCDocument => ({
       id: "", number: "", client: passengerName || "Client", clientId,
       amount: 0, date: new Date().toLocaleDateString("fr-FR"),
       status: "brouillon", type: "bc",
       trajet: {
         depart: req.departure ?? "", arrivee: req.arrival ?? "",
-        date: req.trip_date ?? "", time: req.trip_time ?? "",
+        date: req.trip_date ?? "", time: req.trip_time ? roundToNearest5(req.trip_time) : "",
         passengers: req.passengers_count, luggage: req.luggage_count,
         stops: req.stops ?? [],
+        distance: (req as TripRequest & { estimated_distance?: number }).estimated_distance ?? undefined,
+        duree: (req as TripRequest & { estimated_duration?: string }).estimated_duration ?? undefined,
       },
       notes: req.notes ?? undefined,
       passagerNom: passengerName || undefined,
