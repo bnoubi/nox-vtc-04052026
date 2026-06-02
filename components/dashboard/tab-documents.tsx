@@ -30,6 +30,7 @@ import { toast } from "sonner"
 import { useNav } from "./nav-context"
 import { WalletDrawer } from "./wallet-drawer"
 import { CreateBCFlow } from "./create-bc"
+import { RecurringScreen } from "./recurring-screen"
 import { useNox, type TripRequest } from "./nox-context"
 import { type BCDocument, type InvoiceDocument, type BCStatus, type InvoiceStatus, type EnterpriseProfile } from "./data"
 import { generateInvoicePDF, generateBCPDF, generateBCPDFBlob } from "@/lib/pdf-generator"
@@ -1055,6 +1056,7 @@ export function DocumentsTab() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showBCFlow, setShowBCFlow] = useState(false)
+  const [showRecurring, setShowRecurring] = useState(false)
   const [duplicateBC, setDuplicateBC] = useState<BCDocument | null>(null)
   const [invoicingBC, setInvoicingBC] = useState<BCDocument | null>(null)
   const [viewingBC, setViewingBC] = useState<BCDocument | null>(null)
@@ -1457,7 +1459,17 @@ export function DocumentsTab() {
             setConvertingRequest(null)
           }}
           prefillBC={pendingPrefillBC ?? duplicateBC}
+          onNavigateToRecurring={() => {
+            setShowBCFlow(false)
+            setShowRecurring(true)
+          }}
         />
+      )}
+
+      {showRecurring && (
+        <div className="absolute inset-0 z-50 bg-background overflow-y-auto">
+          <RecurringScreen onBack={() => setShowRecurring(false)} />
+        </div>
       )}
 
       <WalletDrawer open={walletOpen} onClose={() => setWalletOpen(false)} />

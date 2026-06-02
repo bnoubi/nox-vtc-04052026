@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   X, ChevronLeft, ChevronRight, ChevronDown, FileText, Link2, MessageSquare, Mail, Phone, Copy, Check,
   MapPin, Navigation, Car, Euro, Building2, User, Users, Search, Sparkles, Clock, Calendar,
-  RotateCcw, Loader2, Plus,
+  RotateCcw, Loader2, Plus, RefreshCw, Lock,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -314,9 +314,10 @@ interface CreateBCFlowProps {
   onClose: () => void
   prefillClient?: BCPrefillClient | null
   prefillBC?: BCDocument | null
+  onNavigateToRecurring?: () => void
 }
 
-export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: CreateBCFlowProps) {
+export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNavigateToRecurring }: CreateBCFlowProps) {
   const { drivers, clients, vehicles, tariffSettings, enterprise, addBC, bcs, saveDraftBC, updateBC, deleteBC, legalProfile, validateDocumentCompliance, updateEnterprise, plan, tokens, userId, refreshTokens } = useNox()
   const supabase = createClient()
   const { navigateToCGV, navigateToSubscription } = useNav()
@@ -340,6 +341,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
   const [linkCopied, setLinkCopied] = useState(false)
   const [showLinkModal, setShowLinkModal] = useState(false)
   const [showLinkLimitAlert, setShowLinkLimitAlert] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [tripRequestId, setTripRequestId] = useState<string | null>(null)
   const [tripToken, setTripToken] = useState("")
 
@@ -1179,8 +1181,49 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC }: Create
                 <p className="text-[11px] text-muted-foreground">Le client complète ses informations de trajet via un lien sécurisé</p>
               </div>
             </button>
+            {plan === "SOLO" ? (
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#242424] border border-onyx-border/30 hover:border-gold/30 transition-all active:scale-[0.98] opacity-70"
+              >
+                <div className="w-11 h-11 rounded-xl bg-gold/10 flex items-center justify-center relative">
+                  <RefreshCw className="h-5 w-5 text-gold" />
+                  <Lock className="h-3 w-3 text-gold absolute -top-1 -right-1" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="font-semibold text-sm text-foreground">Trajet récurrent</p>
+                  <p className="text-[11px] text-muted-foreground">Courses régulières planifiées — Pro & Premium</p>
+                </div>
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  onClose()
+                  onNavigateToRecurring?.()
+                }}
+                className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#242424] border border-onyx-border/30 hover:border-gold/30 transition-all active:scale-[0.98]"
+              >
+                <div className="w-11 h-11 rounded-xl bg-gold/10 flex items-center justify-center">
+                  <RefreshCw className="h-5 w-5 text-gold" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="font-semibold text-sm text-foreground">Trajet récurrent</p>
+                  <p className="text-[11px] text-muted-foreground">Courses régulières planifiées automatiquement</p>
+                </div>
+              </button>
+            )}
           </div>
         </motion.div>
+        <LimitAlertModal
+          open={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          resourceLabel="trajet récurrent"
+          customTitle="🔄 Trajets récurrents"
+          customMessage="Les trajets récurrents sont disponibles en offre Pro et Premium."
+          onManageOffer={() => { setShowUpgradeModal(false); navigateToSubscription() }}
+          onUpgradePro={() => { setShowUpgradeModal(false); setSubDrawerPlan("DUO"); setShowSubDrawer(true) }}
+          onUpgradePremium={() => { setShowUpgradeModal(false); setSubDrawerPlan("TEAM"); setShowSubDrawer(true) }}
+        />
         <LimitAlertModal
           open={showLinkLimitAlert}
           onClose={() => setShowLinkLimitAlert(false)}
