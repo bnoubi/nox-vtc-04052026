@@ -18,21 +18,63 @@ import { type Client } from "./data"
 
 interface RecurringContract {
   id: string
+  numero: string | null
   label: string | null
   passenger_name: string | null
   departure: string
   arrival: string
-  days_of_week: number[]
-  time: string
+  outbound_days: number[]
+  outbound_time: string
   status: "active" | "paused" | "ended"
   created_at: string
 }
 
+interface DaySchedule {
+  day: number
+  enabled: boolean
+  outboundTime: string
+  returnEnabled: boolean
+  returnTime: string
+}
+
 type BillingMode = "per_trip" | "monthly_invoice" | "monthly_summary"
+type RecurrenceType = "fixed" | "variable" | "custom"
+
+interface TripPreview {
+  date: string
+  display: string
+  time: string
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const DAY_LABELS = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"]
+const DAY_NAMES = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+
+const TIME_SLOTS = Array.from({ length: 288 }, (_, i) => {
+  const h = Math.floor(i / 12)
+  const m = (i % 12) * 5
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+})
+
+const COUNTRY_LABELS: Record<string, string> = {
+  FR: "🇫🇷 France",
+  BE: "🇧🇪 Belgique",
+  CH: "🇨🇭 Suisse",
+  LU: "🇱🇺 Luxembourg",
+}
+
+const BILLING_LABELS: Record<BillingMode, string> = {
+  per_trip: "Un BC par trajet",
+  monthly_invoice: "Facture groupée mensuelle",
+  monthly_summary: "Bon mensuel récapitulatif",
+}
+
+const RECURRENCE_LABELS: Record<RecurrenceType, string> = {
+  fixed: "Horaire fixe",
+  variable: "Horaires variables",
+  custom: "Aller/Retour dissociés",
+}
 
 function formatRecurrence(days: number[], time: string): string {
   if (!days || days.length === 0) return time
@@ -47,6 +89,16 @@ const statusConfig = {
 }
 
 const today = new Date().toISOString().split("T")[0]
+
+const DEFAULT_DAY_SCHEDULES: DaySchedule[] = [
+  { day: 1, enabled: true,  outboundTime: "08:00", returnEnabled: false, returnTime: "17:00" },
+  { day: 2, enabled: true,  outboundTime: "08:00", returnEnabled: false, returnTime: "17:00" },
+  { day: 3, enabled: true,  outboundTime: "08:00", returnEnabled: false, returnTime: "17:00" },
+  { day: 4, enabled: true,  outboundTime: "08:00", returnEnabled: false, returnTime: "17:00" },
+  { day: 5, enabled: true,  outboundTime: "08:00", returnEnabled: false, returnTime: "17:00" },
+  { day: 6, enabled: false, outboundTime: "08:00", returnEnabled: false, returnTime: "17:00" },
+  { day: 7, enabled: false, outboundTime: "08:00", returnEnabled: false, returnTime: "17:00" },
+]
 
 // ── Section ──────────────────────────────────────────────────────────────────
 
@@ -64,6 +116,68 @@ function Section({ title, icon: Icon, children }: {
   )
 }
 
+// ── RecapRow ──────────────────────────────────────────────────────────────────
+
+function RecapRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-2 border-b border-onyx-border/20 last:border-0">
+      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex-shrink-0 pt-0.5">{label}</span>
+      <span className="text-sm text-foreground text-right">{value}</span>
+    </div>
+  )
+}
+
+// ── DaysSelector ─────────────────────────────────────────────────────────────
+
+function DaysSelector({ selected, onChange }: {
+  selected: number[]
+  onChange: (d: number[]) => void
+}) {
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      {DAY_NAMES.map((name, i) => {
+        const day = i + 1
+        const active = selected.includes(day)
+        return (
+          <button key={day} type="button"
+            onClick={() => onChange(active ? selected.filter(d => d !== day) : [...selected, day])}
+            className={cn(
+              "w-10 h-10 rounded-full text-xs font-semibold transition-colors",
+              active
+                ? "bg-gold text-black"
+                : "bg-[#242424] border border-onyx-border/30 text-muted-foreground hover:border-gold/30 hover:text-foreground"
+            )}
+          >
+            {name}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── TimeSelect ────────────────────────────────────────────────────────────────
+
+function TimeSelect({ value, onChange, className }: {
+  value: string
+  onChange: (v: string) => void
+  className?: string
+}) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className={cn(
+        "px-2 py-1 rounded-lg bg-[#1a1a1a] border border-onyx-border/30 text-xs text-foreground focus:outline-none focus:border-gold/50",
+        className
+      )}
+      style={{ fontSize: "14px" }}
+    >
+      {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+    </select>
+  )
+}
+
 // ── CreateRecurringContract ───────────────────────────────────────────────────
 
 function CreateRecurringContract({ onBack, onSuccess }: {
@@ -71,12 +185,16 @@ function CreateRecurringContract({ onBack, onSuccess }: {
   onSuccess: () => void
 }) {
   const { clients, drivers, vehicles } = useNox()
+  const supabase = createClient()
 
-  // Section 1
+  // Navigation
+  const [step, setStep] = useState<1 | 2 | 3>(1)
+
+  // Step 1 — infos générales
   const [label, setLabel] = useState("")
   const [notes, setNotes] = useState("")
 
-  // Section 2 — client/passager
+  // Step 1 — client/passager
   const [selectedClientId, setSelectedClientId] = useState("")
   const [clientSearch, setClientSearch] = useState("")
   const [clientFocused, setClientFocused] = useState(false)
@@ -88,27 +206,55 @@ function CreateRecurringContract({ onBack, onSuccess }: {
   const [showAllClients, setShowAllClients] = useState(false)
   const [modalClientSearch, setModalClientSearch] = useState("")
 
-  // Section 3 — trajet
+  // Step 1 — trajet
   const [departure, setDeparture] = useState("")
   const [arrival, setArrival] = useState("")
   const [distanceKm, setDistanceKm] = useState<number | null>(null)
   const [durationDisplay, setDurationDisplay] = useState("")
   const [isCalculating, setIsCalculating] = useState(false)
 
-  // Section 4 — chauffeur/véhicule
+  // Step 1 — chauffeur/véhicule
   const [selectedDriverId, setSelectedDriverId] = useState("")
   const [selectedVehicleId, setSelectedVehicleId] = useState("")
 
-  // Section 5 — tarif
+  // Step 1 — tarif
   const [pricePerTrip, setPricePerTrip] = useState("")
   const [billingMode, setBillingMode] = useState<BillingMode>("monthly_invoice")
 
-  // Section 6 — période
+  // Step 1 — période
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [openEnded, setOpenEnded] = useState(false)
-  const [country, setCountry] = useState("FR")
+
+  // Step 2 — type de récurrence
+  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("fixed")
+
+  // Step 2 — Mode "Horaire fixe"
+  const [outboundDays, setOutboundDays] = useState<number[]>([1, 2, 3, 4, 5])
+  const [outboundTime, setOutboundTime] = useState("08:00")
+  const [fixedReturnEnabled, setFixedReturnEnabled] = useState(false)
+  const [fixedReturnTime, setFixedReturnTime] = useState("17:00")
+
+  // Step 2 — Mode "Horaires variables"
+  const [daySchedules, setDaySchedules] = useState<DaySchedule[]>(DEFAULT_DAY_SCHEDULES)
+
+  // Step 2 — Mode "Aller/Retour dissociés" (custom)
+  const [enableReturn, setEnableReturn] = useState(false)
+  const [returnDays, setReturnDays] = useState<number[]>([1, 2, 3, 4, 5])
+  const [returnTime, setReturnTime] = useState("18:00")
+  const [returnDeparture, setReturnDeparture] = useState("")
+
+  // Step 2 — Exceptions (tous modes)
   const [excludeHolidays, setExcludeHolidays] = useState(true)
+  const [country, setCountry] = useState("FR")
+  const [excludedDates, setExcludedDates] = useState<string[]>([])
+  const [excludeDateError, setExcludeDateError] = useState("")
+  const [excludeDateWarning, setExcludeDateWarning] = useState("")
+
+  // Step 3 — sauvegarde
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState("")
+  const [previewNumero, setPreviewNumero] = useState("")
 
   // Validation
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -173,6 +319,20 @@ function CreateRecurringContract({ onBack, onSuccess }: {
     if (arrival.trim()) setErrors(prev => { const e = { ...prev }; delete e.arrival; return e })
   }, [arrival])
 
+  // Pré-remplir l'adresse de départ retour avec l'arrivée de l'étape 1
+  useEffect(() => {
+    if (enableReturn && !returnDeparture && arrival) setReturnDeparture(arrival)
+  }, [enableReturn]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pré-générer le numéro CR à l'entrée en étape 3
+  useEffect(() => {
+    if (step === 3 && !previewNumero) {
+      supabase.rpc("generate_rc_numero").then(({ data }) => {
+        if (typeof data === "string") setPreviewNumero(data)
+      })
+    }
+  }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function calculateDistance() {
     if (!departure || !arrival) return
     setIsCalculating(true)
@@ -229,8 +389,203 @@ function CreateRecurringContract({ onBack, onSuccess }: {
 
   function handleNext() {
     if (!validate()) return
-    // Étape 2 — à implémenter (configuration récurrence)
-    alert("Étape 2 (configuration de la récurrence) — à venir")
+    setStep(2)
+  }
+
+  function validateStep2(): boolean {
+    const e: Record<string, string> = {}
+    if (recurrenceType === "fixed") {
+      if (outboundDays.length === 0) e.outboundDays = "Sélectionnez au moins un jour"
+    } else if (recurrenceType === "variable") {
+      const activeDays = daySchedules.filter(s => s.enabled)
+      if (activeDays.length === 0) e.daySchedules = "Activez au moins un jour"
+      activeDays.forEach(s => {
+        if (!s.outboundTime) e[`day_${s.day}`] = "Heure aller obligatoire"
+      })
+    }
+    setErrors(e)
+    return Object.keys(e).length === 0
+  }
+
+  function handleNextStep2() {
+    if (!validateStep2()) return
+    setStep(3)
+  }
+
+  function patchSchedule(idx: number, patch: Partial<DaySchedule>) {
+    setDaySchedules(prev => prev.map((s, i) => i === idx ? { ...s, ...patch } : s))
+  }
+
+  function isDateInRange(date: string): boolean {
+    if (!date || !startDate) return false
+    if (date < startDate) return false
+    if (!openEnded && endDate && date > endDate) return false
+    return true
+  }
+
+  function getActiveDays(): number[] {
+    if (recurrenceType === "variable") return daySchedules.filter(s => s.enabled).map(s => s.day)
+    return outboundDays // fixed et custom utilisent outboundDays
+  }
+
+  function isDayWorked(date: string): boolean {
+    const active = getActiveDays()
+    if (active.length === 0) return true
+    const jsDay = new Date(date + "T00:00:00").getDay()
+    const ourDay = jsDay === 0 ? 7 : jsDay
+    return active.includes(ourDay)
+  }
+
+  function handleAddExcludedDate(val: string) {
+    setExcludeDateError("")
+    setExcludeDateWarning("")
+    if (!val || excludedDates.includes(val)) return
+    if (!isDateInRange(val)) {
+      const range = (!openEnded && endDate) ? `${startDate} → ${endDate}` : `à partir du ${startDate}`
+      setExcludeDateError(`Cette date est en dehors de la période du contrat (${range})`)
+      return
+    }
+    if (!isDayWorked(val)) {
+      setExcludeDateWarning("⚠️ Ce jour n'est pas dans votre récurrence")
+    }
+    setExcludedDates(prev => [...prev, val].sort())
+  }
+
+  function formatDateDisplay(dateStr: string): string {
+    const d = new Date(dateStr + "T00:00:00")
+    const dayName = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"][d.getDay()]
+    const day = String(d.getDate()).padStart(2, "0")
+    const month = String(d.getMonth() + 1).padStart(2, "0")
+    return `${dayName} ${day}/${month}/${d.getFullYear()}`
+  }
+
+  function getNextTrips(): TripPreview[] {
+    if (!startDate) return []
+    const results: TripPreview[] = []
+    const activeDays = getActiveDays()
+    const cursorStart = new Date(startDate + "T00:00:00")
+    const endLimit = !openEnded && endDate
+      ? new Date(endDate + "T00:00:00")
+      : new Date(cursorStart.getTime() + 90 * 24 * 60 * 60 * 1000)
+    let cursor = new Date(cursorStart)
+    while (cursor <= endLimit && results.length < 5) {
+      const isoDate = cursor.toISOString().split("T")[0]
+      const jsDay = cursor.getDay()
+      const ourDay = jsDay === 0 ? 7 : jsDay
+      if (activeDays.includes(ourDay) && !excludedDates.includes(isoDate)) {
+        let time = outboundTime
+        if (recurrenceType === "variable") {
+          const sched = daySchedules.find(s => s.day === ourDay && s.enabled)
+          if (sched) time = sched.outboundTime
+        }
+        results.push({ date: isoDate, display: formatDateDisplay(isoDate), time })
+      }
+      cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000)
+    }
+    return results
+  }
+
+  function getSaveData() {
+    if (recurrenceType === "fixed") {
+      return {
+        outbound_days: [...outboundDays].sort((a, b) => a - b),
+        outbound_time: outboundTime,
+        return_enabled: fixedReturnEnabled,
+        return_time: fixedReturnEnabled ? fixedReturnTime : null,
+        return_days: null as number[] | null,
+        return_departure: null as string | null,
+        return_arrival: null as string | null,
+        stops: null,
+      }
+    }
+    if (recurrenceType === "variable") {
+      const active = daySchedules.filter(s => s.enabled)
+      return {
+        outbound_days: active.map(s => s.day).sort((a, b) => a - b),
+        outbound_time: active[0]?.outboundTime ?? null,
+        return_enabled: active.some(s => s.returnEnabled),
+        return_time: null as string | null,
+        return_days: null as number[] | null,
+        return_departure: null as string | null,
+        return_arrival: null as string | null,
+        stops: daySchedules as DaySchedule[],
+      }
+    }
+    // custom
+    return {
+      outbound_days: [...outboundDays].sort((a, b) => a - b),
+      outbound_time: outboundTime,
+      return_enabled: enableReturn,
+      return_time: enableReturn ? returnTime : null,
+      return_days: enableReturn ? [...returnDays].sort((a, b) => a - b) : null,
+      return_departure: enableReturn ? (returnDeparture || null) : null,
+      return_arrival: enableReturn ? arrival : null,
+      stops: null,
+    }
+  }
+
+  async function handleSave() {
+    setIsSaving(true)
+    setSaveError("")
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error("Non authentifié")
+
+      // Utiliser le numéro pré-généré à l'entrée étape 3
+      const numero = previewNumero || (() => {
+        const year = new Date().getFullYear()
+        return `CR-${year}-${String(Date.now()).slice(-4)}`
+      })()
+
+      const saveData = getSaveData()
+
+      const payload = {
+        user_id: user.id,
+        numero,
+        label: label.trim(),
+        notes: notes.trim() || null,
+        client_id: selectedClientId || null,
+        passenger_name: passagerNom.trim() || null,
+        passenger_phone: passagerTelephone.trim() || null,
+        departure,
+        arrival,
+        distance_km: distanceKm,
+        driver_id: selectedDriverId || null,
+        vehicle_id: selectedVehicleId || null,
+        price_per_trip: parseFloat(pricePerTrip),
+        billing_mode: billingMode,
+        start_date: startDate,
+        end_date: openEnded ? null : (endDate || null),
+        no_end_date: openEnded,
+        recurrence_type: recurrenceType,
+        exclude_holidays: excludeHolidays,
+        country_code: excludeHolidays ? country : null,
+        excluded_dates: excludedDates.length > 0 ? excludedDates : null,
+        status: "active",
+        ...saveData,
+      }
+
+      const { data: newContract, error } = await supabase
+        .from("recurring_contracts")
+        .insert(payload)
+        .select()
+        .single()
+
+      if (error) {
+        console.error("Recurring contract save error:", JSON.stringify(error, null, 2))
+        console.error("Payload:", JSON.stringify(payload, null, 2))
+        setSaveError(`Erreur : ${error.message} (code : ${error.code})`)
+        return
+      }
+
+      console.log("Recurring contract created:", newContract)
+      onSuccess()
+    } catch (err: unknown) {
+      console.error("Unexpected save error:", err)
+      setSaveError(err instanceof Error ? err.message : "Erreur inattendue lors de la sauvegarde")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const inputClass = (err?: string) => cn(
@@ -240,542 +595,939 @@ function CreateRecurringContract({ onBack, onSuccess }: {
 
   return (
     <div className="flex flex-col min-h-full bg-background">
-      {/* En-tête */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/30 bg-[#0d0d0d] sticky top-0 z-10">
-        <button onClick={onBack} className="p-2 -ml-2 rounded-lg hover:bg-white/5">
-          <ChevronLeft className="h-5 w-5 text-foreground" />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-base font-bold text-foreground">Nouveau contrat récurrent</h1>
-          <p className="text-[10px] text-muted-foreground">Étape 1/4 — Informations générales</p>
-        </div>
-      </div>
 
-      {/* Formulaire */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-32">
-
-        {/* Section 1 — Infos générales */}
-        <Section title="Informations générales" icon={FileText}>
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Label du contrat <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={label}
-              onChange={e => { setLabel(e.target.value); if (e.target.value.trim()) setErrors(prev => { const er = { ...prev }; delete er.label; return er }) }}
-              placeholder="Ex: Transport scolaire Dupont, Mission Entreprise Durand..."
-              className={inputClass(errors.label)}
-              style={{ fontSize: "16px" }}
-            />
-            {errors.label && <p className="text-xs text-red-500">{errors.label}</p>}
+      {/* ── Étape 1 ──────────────────────────────────────────────────────────── */}
+      {step === 1 && (
+        <>
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/30 bg-[#0d0d0d] sticky top-0 z-10">
+            <button onClick={onBack} className="p-2 -ml-2 rounded-lg hover:bg-white/5">
+              <ChevronLeft className="h-5 w-5 text-foreground" />
+            </button>
+            <div className="flex-1">
+              <h1 className="text-base font-bold text-foreground">Nouveau contrat récurrent</h1>
+              <p className="text-[10px] text-muted-foreground">Étape 1/3 — Informations générales</p>
+            </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Notes <span className="text-muted-foreground/50 normal-case">(optionnel)</span>
-            </label>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="Instructions particulières, code portail, informations complémentaires..."
-              rows={3}
-              className={cn(inputClass(), "resize-none")}
-              style={{ fontSize: "16px" }}
-            />
-          </div>
-        </Section>
 
-        {/* Section 2 — Client & Passager */}
-        <Section title="Client & Passager" icon={Building2}>
-          {/* Bouton ajout nouveau client */}
-          <button
-            type="button"
-            onClick={() => setShowQuickAddClient(true)}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-[#242424] border border-dashed border-gold/30 text-gold text-[11px] font-medium hover:bg-gold/5 hover:border-gold/50 transition-all"
-          >
-            <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-            Ajouter un nouveau client
-          </button>
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-32">
 
-          {/* Recherche client */}
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Rechercher un client <span className="text-red-500">*</span>
-            </label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Section title="Informations générales" icon={FileText}>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Label du contrat <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
-                  value={clientSearch}
-                  onChange={e => { setClientSearch(e.target.value); setInlineSelectedCompany(null) }}
-                  onFocus={() => setClientFocused(true)}
-                  onBlur={() => setTimeout(() => setClientFocused(false), 200)}
-                  placeholder="Nom, société, téléphone..."
-                  className={cn("w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#242424] border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50", errors.client ? "border-red-500" : "border-onyx-border/30")}
+                  value={label}
+                  onChange={e => { setLabel(e.target.value); if (e.target.value.trim()) setErrors(prev => { const er = { ...prev }; delete er.label; return er }) }}
+                  placeholder="Ex: Transport scolaire Dupont, Mission Entreprise Durand..."
+                  className={inputClass(errors.label)}
+                  style={{ fontSize: "16px" }}
+                />
+                {errors.label && <p className="text-xs text-red-500">{errors.label}</p>}
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Notes <span className="text-muted-foreground/50 normal-case">(optionnel)</span>
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Instructions particulières, code portail, informations complémentaires..."
+                  rows={3}
+                  className={cn(inputClass(), "resize-none")}
                   style={{ fontSize: "16px" }}
                 />
               </div>
+            </Section>
+
+            <Section title="Client & Passager" icon={Building2}>
               <button
                 type="button"
-                onClick={() => { setShowAllClients(true); setModalClientSearch("") }}
-                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-[11px] text-muted-foreground hover:border-gold/30 hover:text-gold transition-colors whitespace-nowrap"
+                onClick={() => setShowQuickAddClient(true)}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-[#242424] border border-dashed border-gold/30 text-gold text-[11px] font-medium hover:bg-gold/5 hover:border-gold/50 transition-all"
               >
-                <Users className="h-3.5 w-3.5" />
-                Voir tous
+                <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                Ajouter un nouveau client
               </button>
-            </div>
-            {errors.client && <p className="text-xs text-red-500">{errors.client}</p>}
-          </div>
 
-          {/* Dropdown inline */}
-          {(clientFocused || clientSearch.trim() || !!inlineSelectedCompany) && !selectedClientId && (
-            <div className="max-h-[200px] overflow-y-auto rounded-xl bg-[#242424] border border-onyx-border/30 divide-y divide-onyx-border/20">
-              {inlineSelectedCompany ? (
-                <>
-                  <button type="button" className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 text-left"
-                    onClick={() => setInlineSelectedCompany(null)}>
-                    <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-[11px] text-muted-foreground truncate">{inlineSelectedCompany.raisonSociale}</span>
-                  </button>
-                  <button type="button" className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-left"
-                    onClick={() => { setSelectedClientId(inlineSelectedCompany.id); setClientSearch(""); setClientFocused(false); setInlineSelectedCompany(null) }}>
-                    <div className="w-8 h-8 rounded-full bg-onyx-card border border-onyx-border/30 flex items-center justify-center flex-shrink-0">
-                      <Building2 className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">Sans passager distinct</p>
-                      <p className="text-[10px] text-muted-foreground">Société = client et passager</p>
-                    </div>
-                  </button>
-                  {inlineSelectedCompany.contacts!.map(contact => (
-                    <button key={contact.id} type="button" className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-left"
-                      onClick={() => {
-                        setSelectedClientId(inlineSelectedCompany.id)
-                        setPassagerNom(`${contact.prenom ?? ""} ${contact.nom ?? ""}`.trim())
-                        if (contact.phone) setPassagerTelephone(contact.phone)
-                        setClientSearch(""); setClientFocused(false); setInlineSelectedCompany(null)
-                      }}>
-                      <div className="w-8 h-8 rounded-full bg-gold/10 flex items-center justify-center text-gold text-[10px] font-bold flex-shrink-0">
-                        {(contact.prenom?.[0] ?? "").toUpperCase()}{(contact.nom?.[0] ?? "").toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{contact.prenom} {contact.nom}</p>
-                        {contact.phone && <p className="text-[10px] text-muted-foreground truncate">{contact.phone}</p>}
-                      </div>
-                    </button>
-                  ))}
-                </>
-              ) : filteredClients.length === 0 ? (
-                <p className="px-4 py-3 text-[11px] text-muted-foreground italic">
-                  {(clients ?? []).length === 0 ? "Aucun client enregistré" : "Aucun résultat"}
-                </p>
-              ) : (
-                filteredClients.slice(0, 8).map(c => (
-                  <button key={c.id} type="button" className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-left"
-                    onClick={() => {
-                      if (c.type === "professionnel" && (c.contacts?.length ?? 0) > 0) {
-                        setInlineSelectedCompany(c)
-                      } else {
-                        setSelectedClientId(c.id); setClientSearch(""); setClientFocused(false)
-                      }
-                    }}>
-                    <div className="w-8 h-8 rounded-full bg-gold/10 flex items-center justify-center text-gold text-xs font-bold flex-shrink-0">
-                      {c.type === "particulier"
-                        ? `${c.prenom?.[0] ?? ""}${c.nom?.[0] ?? ""}`.toUpperCase()
-                        : (c.raisonSociale?.[0] ?? "").toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {c.type === "particulier" ? `${c.prenom ?? ""} ${c.nom ?? ""}`.trim() : (c.raisonSociale ?? "")}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground truncate">
-                        {c.type === "professionnel"
-                          ? `${c.contacts?.length ?? 0} passager${(c.contacts?.length ?? 0) !== 1 ? "s" : ""}`
-                          : (c.phone ?? "")}
-                      </p>
-                    </div>
-                    {c.type === "professionnel" && (c.contacts?.length ?? 0) > 0 && (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" strokeWidth={1.5} />
-                    )}
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-
-          {/* Client sélectionné */}
-          {selectedClient && (
-            <div className="space-y-3">
-              <div className="p-3 rounded-xl bg-[#242424] border border-gold/20 space-y-1">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-foreground">
-                    {selectedClient.type === "particulier"
-                      ? `${selectedClient.prenom ?? ""} ${selectedClient.nom ?? ""}`.trim()
-                      : (selectedClient.raisonSociale ?? "")}
-                  </p>
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Rechercher un client <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={clientSearch}
+                      onChange={e => { setClientSearch(e.target.value); setInlineSelectedCompany(null) }}
+                      onFocus={() => setClientFocused(true)}
+                      onBlur={() => setTimeout(() => setClientFocused(false), 200)}
+                      placeholder="Nom, société, téléphone..."
+                      className={cn("w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#242424] border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50", errors.client ? "border-red-500" : "border-onyx-border/30")}
+                      style={{ fontSize: "16px" }}
+                    />
+                  </div>
                   <button
-                    onClick={() => { setSelectedClientId(""); setPassagerNom(""); setPassagerTelephone(""); setPassengerSearch("") }}
-                    className="text-[10px] text-muted-foreground hover:text-foreground"
+                    type="button"
+                    onClick={() => { setShowAllClients(true); setModalClientSearch("") }}
+                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-[11px] text-muted-foreground hover:border-gold/30 hover:text-gold transition-colors whitespace-nowrap"
                   >
-                    Modifier
+                    <Users className="h-3.5 w-3.5" />
+                    Voir tous
                   </button>
                 </div>
-                <p className="text-[11px] text-muted-foreground">{selectedClient.phone ?? ""} • {selectedClient.email ?? ""}</p>
-                {selectedClient.type === "professionnel" && selectedClient.siren && (
-                  <p className="text-[11px] text-gold">SIREN : {selectedClient.siren}</p>
-                )}
+                {errors.client && <p className="text-xs text-red-500">{errors.client}</p>}
               </div>
 
-              {/* Passager distinct pour les sociétés */}
-              {selectedClient.type === "professionnel" && (
-                <div className="space-y-2 pt-1">
-                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                    Passager transporté <span className="text-muted-foreground/50 normal-case">(si différent du client payeur)</span>
-                  </label>
-                  {selectedClient.contacts && selectedClient.contacts.length > 0 && !passagerNom && (
-                    <div className="space-y-1">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                        <input
-                          type="text"
-                          value={passengerSearch}
-                          onChange={e => setPassengerSearch(e.target.value)}
-                          placeholder="Rechercher un passager existant..."
-                          className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
-                          style={{ fontSize: "16px" }}
-                        />
-                      </div>
-                      {passengerSearch.trim() && (
-                        <div className="rounded-xl bg-[#242424] border border-onyx-border/30 overflow-hidden">
-                          {filteredPassengers.length > 0 ? filteredPassengers.map(contact => (
-                            <button key={contact.id} type="button"
-                              onClick={() => { setPassagerNom(`${contact.prenom ?? ""} ${contact.nom ?? ""}`.trim()); if (contact.phone) setPassagerTelephone(contact.phone); setPassengerSearch("") }}
-                              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-left border-b border-onyx-border/20 last:border-0">
-                              <div className="w-7 h-7 rounded-full bg-gold/10 flex items-center justify-center text-gold text-[10px] font-bold shrink-0">
-                                {(contact.prenom?.[0] ?? "").toUpperCase()}{(contact.nom?.[0] ?? "").toUpperCase()}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-foreground truncate">{contact.prenom} {contact.nom}</p>
-                                {contact.phone && <p className="text-[10px] text-muted-foreground truncate">{contact.phone}</p>}
-                              </div>
-                            </button>
-                          )) : (
-                            <p className="px-3 py-2.5 text-[11px] text-muted-foreground/60 italic">Aucun passager trouvé</p>
+              {(clientFocused || clientSearch.trim() || !!inlineSelectedCompany) && !selectedClientId && (
+                <div className="max-h-[200px] overflow-y-auto rounded-xl bg-[#242424] border border-onyx-border/30 divide-y divide-onyx-border/20">
+                  {inlineSelectedCompany ? (
+                    <>
+                      <button type="button" className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 text-left"
+                        onClick={() => setInlineSelectedCompany(null)}>
+                        <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-[11px] text-muted-foreground truncate">{inlineSelectedCompany.raisonSociale}</span>
+                      </button>
+                      <button type="button" className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-left"
+                        onClick={() => { setSelectedClientId(inlineSelectedCompany.id); setClientSearch(""); setClientFocused(false); setInlineSelectedCompany(null) }}>
+                        <div className="w-8 h-8 rounded-full bg-onyx-card border border-onyx-border/30 flex items-center justify-center flex-shrink-0">
+                          <Building2 className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground">Sans passager distinct</p>
+                          <p className="text-[10px] text-muted-foreground">Société = client et passager</p>
+                        </div>
+                      </button>
+                      {inlineSelectedCompany.contacts!.map(contact => (
+                        <button key={contact.id} type="button" className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-left"
+                          onClick={() => {
+                            setSelectedClientId(inlineSelectedCompany.id)
+                            setPassagerNom(`${contact.prenom ?? ""} ${contact.nom ?? ""}`.trim())
+                            if (contact.phone) setPassagerTelephone(contact.phone)
+                            setClientSearch(""); setClientFocused(false); setInlineSelectedCompany(null)
+                          }}>
+                          <div className="w-8 h-8 rounded-full bg-gold/10 flex items-center justify-center text-gold text-[10px] font-bold flex-shrink-0">
+                            {(contact.prenom?.[0] ?? "").toUpperCase()}{(contact.nom?.[0] ?? "").toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{contact.prenom} {contact.nom}</p>
+                            {contact.phone && <p className="text-[10px] text-muted-foreground truncate">{contact.phone}</p>}
+                          </div>
+                        </button>
+                      ))}
+                    </>
+                  ) : filteredClients.length === 0 ? (
+                    <p className="px-4 py-3 text-[11px] text-muted-foreground italic">
+                      {(clients ?? []).length === 0 ? "Aucun client enregistré" : "Aucun résultat"}
+                    </p>
+                  ) : (
+                    filteredClients.slice(0, 8).map(c => (
+                      <button key={c.id} type="button" className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-left"
+                        onClick={() => {
+                          if (c.type === "professionnel" && (c.contacts?.length ?? 0) > 0) {
+                            setInlineSelectedCompany(c)
+                          } else {
+                            setSelectedClientId(c.id); setClientSearch(""); setClientFocused(false)
+                          }
+                        }}>
+                        <div className="w-8 h-8 rounded-full bg-gold/10 flex items-center justify-center text-gold text-xs font-bold flex-shrink-0">
+                          {c.type === "particulier"
+                            ? `${c.prenom?.[0] ?? ""}${c.nom?.[0] ?? ""}`.toUpperCase()
+                            : (c.raisonSociale?.[0] ?? "").toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {c.type === "particulier" ? `${c.prenom ?? ""} ${c.nom ?? ""}`.trim() : (c.raisonSociale ?? "")}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground truncate">
+                            {c.type === "professionnel"
+                              ? `${c.contacts?.length ?? 0} passager${(c.contacts?.length ?? 0) !== 1 ? "s" : ""}`
+                              : (c.phone ?? "")}
+                          </p>
+                        </div>
+                        {c.type === "professionnel" && (c.contacts?.length ?? 0) > 0 && (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" strokeWidth={1.5} />
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {selectedClient && (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-[#242424] border border-gold/20 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-foreground">
+                        {selectedClient.type === "particulier"
+                          ? `${selectedClient.prenom ?? ""} ${selectedClient.nom ?? ""}`.trim()
+                          : (selectedClient.raisonSociale ?? "")}
+                      </p>
+                      <button
+                        onClick={() => { setSelectedClientId(""); setPassagerNom(""); setPassagerTelephone(""); setPassengerSearch("") }}
+                        className="text-[10px] text-muted-foreground hover:text-foreground"
+                      >
+                        Modifier
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{selectedClient.phone ?? ""} • {selectedClient.email ?? ""}</p>
+                    {selectedClient.type === "professionnel" && selectedClient.siren && (
+                      <p className="text-[11px] text-gold">SIREN : {selectedClient.siren}</p>
+                    )}
+                  </div>
+
+                  {selectedClient.type === "professionnel" && (
+                    <div className="space-y-2 pt-1">
+                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                        Passager transporté <span className="text-muted-foreground/50 normal-case">(si différent du client payeur)</span>
+                      </label>
+                      {selectedClient.contacts && selectedClient.contacts.length > 0 && !passagerNom && (
+                        <div className="space-y-1">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                            <input
+                              type="text"
+                              value={passengerSearch}
+                              onChange={e => setPassengerSearch(e.target.value)}
+                              placeholder="Rechercher un passager existant..."
+                              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
+                              style={{ fontSize: "16px" }}
+                            />
+                          </div>
+                          {passengerSearch.trim() && (
+                            <div className="rounded-xl bg-[#242424] border border-onyx-border/30 overflow-hidden">
+                              {filteredPassengers.length > 0 ? filteredPassengers.map(contact => (
+                                <button key={contact.id} type="button"
+                                  onClick={() => { setPassagerNom(`${contact.prenom ?? ""} ${contact.nom ?? ""}`.trim()); if (contact.phone) setPassagerTelephone(contact.phone); setPassengerSearch("") }}
+                                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-left border-b border-onyx-border/20 last:border-0">
+                                  <div className="w-7 h-7 rounded-full bg-gold/10 flex items-center justify-center text-gold text-[10px] font-bold shrink-0">
+                                    {(contact.prenom?.[0] ?? "").toUpperCase()}{(contact.nom?.[0] ?? "").toUpperCase()}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-foreground truncate">{contact.prenom} {contact.nom}</p>
+                                    {contact.phone && <p className="text-[10px] text-muted-foreground truncate">{contact.phone}</p>}
+                                  </div>
+                                </button>
+                              )) : (
+                                <p className="px-3 py-2.5 text-[11px] text-muted-foreground/60 italic">Aucun passager trouvé</p>
+                              )}
+                            </div>
                           )}
                         </div>
                       )}
+                      <input type="text" value={passagerNom} onChange={e => setPassagerNom(e.target.value)}
+                        placeholder="Nom du passager"
+                        className={inputClass()}
+                        style={{ fontSize: "16px" }} />
+                      <input type="tel" value={passagerTelephone} onChange={e => setPassagerTelephone(e.target.value)}
+                        placeholder="Téléphone du passager"
+                        className={inputClass()}
+                        style={{ fontSize: "16px" }} />
                     </div>
                   )}
-                  <input type="text" value={passagerNom} onChange={e => setPassagerNom(e.target.value)}
-                    placeholder="Nom du passager"
-                    className={inputClass()}
-                    style={{ fontSize: "16px" }} />
-                  <input type="tel" value={passagerTelephone} onChange={e => setPassagerTelephone(e.target.value)}
-                    placeholder="Téléphone du passager"
-                    className={inputClass()}
-                    style={{ fontSize: "16px" }} />
                 </div>
               )}
-            </div>
-          )}
-        </Section>
+            </Section>
 
-        {/* Section 3 — Trajet */}
-        <Section title="Trajet" icon={Navigation}>
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Adresse de départ <span className="text-red-500">*</span>
-            </label>
-            <div className={cn("flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border focus-within:border-gold/50", errors.departure ? "border-red-500" : "border-onyx-border/30")}>
-              <MapPin className="h-4 w-4 text-green-400 flex-shrink-0" strokeWidth={1.5} />
-              <PlacesAutocomplete value={departure} onChange={v => { setDeparture(v); setDistanceKm(null); setDurationDisplay("") }}
-                placeholder="Rechercher une adresse..."
-                addressMode="full"
-                className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
-                style={{ fontSize: "16px" }} />
-              {departure && <button type="button" onClick={() => { setDeparture(""); setDistanceKm(null); setDurationDisplay("") }} className="text-muted-foreground hover:text-foreground flex-shrink-0"><X className="h-4 w-4" /></button>}
-            </div>
-            {errors.departure && <p className="text-xs text-red-500">{errors.departure}</p>}
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Adresse d'arrivée <span className="text-red-500">*</span>
-            </label>
-            <div className={cn("flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border focus-within:border-gold/50", errors.arrival ? "border-red-500" : "border-onyx-border/30")}>
-              <MapPin className="h-4 w-4 text-red-400 flex-shrink-0" strokeWidth={1.5} />
-              <PlacesAutocomplete value={arrival} onChange={v => { setArrival(v); setDistanceKm(null); setDurationDisplay("") }}
-                placeholder="Rechercher une adresse..."
-                addressMode="full"
-                className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
-                style={{ fontSize: "16px" }} />
-              {arrival && <button type="button" onClick={() => { setArrival(""); setDistanceKm(null); setDurationDisplay("") }} className="text-muted-foreground hover:text-foreground flex-shrink-0"><X className="h-4 w-4" /></button>}
-            </div>
-            {errors.arrival && <p className="text-xs text-red-500">{errors.arrival}</p>}
-          </div>
-
-          {departure && arrival && (
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => void calculateDistance()}
-                disabled={isCalculating}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#242424] border border-onyx-border/30 text-[11px] text-muted-foreground hover:border-gold/30 hover:text-gold transition-colors disabled:opacity-50"
-              >
-                {isCalculating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Navigation className="h-3.5 w-3.5" />}
-                Calculer la distance
-              </button>
-              {distanceKm !== null && (
-                <p className="text-[11px] text-gold font-medium">
-                  {distanceKm} km{durationDisplay ? ` · ${durationDisplay}` : ""}
-                </p>
-              )}
-            </div>
-          )}
-        </Section>
-
-        {/* Section 4 — Chauffeur & Véhicule */}
-        <Section title="Chauffeur & Véhicule" icon={Car}>
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Chauffeur <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={selectedDriverId}
-              onChange={e => { setSelectedDriverId(e.target.value); setErrors(prev => { const er = { ...prev }; delete er.driver; return er }) }}
-              className={cn("w-full px-3 py-2.5 rounded-xl bg-[#242424] border text-sm text-foreground focus:outline-none focus:border-gold/50", errors.driver ? "border-red-500" : "border-onyx-border/30")}
-              style={{ fontSize: "16px" }}
-            >
-              <option value="" disabled>Sélectionner un chauffeur...</option>
-              {(drivers ?? []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-            {errors.driver && <p className="text-xs text-red-500">{errors.driver}</p>}
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Véhicule <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={selectedVehicleId}
-              onChange={e => { setSelectedVehicleId(e.target.value); setErrors(prev => { const er = { ...prev }; delete er.vehicle; return er }) }}
-              className={cn("w-full px-3 py-2.5 rounded-xl bg-[#242424] border text-sm text-foreground focus:outline-none focus:border-gold/50", errors.vehicle ? "border-red-500" : "border-onyx-border/30")}
-              style={{ fontSize: "16px" }}
-            >
-              <option value="" disabled>Sélectionner un véhicule...</option>
-              {(vehicles ?? []).map(v => <option key={v.id} value={v.id}>{v.marque ? `${v.marque} ` : ""}{v.modele} — {v.immatriculation}</option>)}
-            </select>
-            {errors.vehicle && <p className="text-xs text-red-500">{errors.vehicle}</p>}
-          </div>
-        </Section>
-
-        {/* Section 5 — Tarif & Facturation */}
-        <Section title="Tarif & Facturation" icon={Euro}>
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Prix par trajet (€) <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={pricePerTrip}
-              onChange={e => { setPricePerTrip(e.target.value); if (parseFloat(e.target.value) > 0) setErrors(prev => { const er = { ...prev }; delete er.price; return er }) }}
-              placeholder="0.00"
-              className={inputClass(errors.price)}
-              style={{ fontSize: "16px" }}
-            />
-            <p className="text-[10px] text-muted-foreground">Prix convenu avec le client pour chaque trajet</p>
-            {errors.price && <p className="text-xs text-red-500">{errors.price}</p>}
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Mode de facturation <span className="text-red-500">*</span>
-            </label>
-            {([
-              { value: "per_trip", label: "Un BC par trajet", desc: "Chaque course génère un bon de réservation" },
-              { value: "monthly_invoice", label: "Facture groupée mensuelle", desc: "Tous les trajets du mois = 1 facture" },
-              { value: "monthly_summary", label: "Bon mensuel récapitulatif", desc: "1 bon listant tous les trajets et horaires" },
-            ] as const).map(opt => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setBillingMode(opt.value)}
-                className={cn(
-                  "w-full flex items-start gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors",
-                  billingMode === opt.value
-                    ? "bg-gold/10 border-gold/40"
-                    : "bg-[#242424] border-onyx-border/30 hover:border-gold/20"
-                )}
-              >
-                <div className={cn(
-                  "w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center",
-                  billingMode === opt.value ? "border-gold" : "border-muted-foreground/40"
-                )}>
-                  {billingMode === opt.value && <div className="w-2 h-2 rounded-full bg-gold" />}
+            <Section title="Trajet" icon={Navigation}>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Adresse de départ <span className="text-red-500">*</span>
+                </label>
+                <div className={cn("flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border focus-within:border-gold/50", errors.departure ? "border-red-500" : "border-onyx-border/30")}>
+                  <MapPin className="h-4 w-4 text-green-400 flex-shrink-0" strokeWidth={1.5} />
+                  <PlacesAutocomplete value={departure} onChange={v => { setDeparture(v); setDistanceKm(null); setDurationDisplay("") }}
+                    placeholder="Rechercher une adresse..."
+                    addressMode="full"
+                    className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+                    style={{ fontSize: "16px" }} />
+                  {departure && <button type="button" onClick={() => { setDeparture(""); setDistanceKm(null); setDurationDisplay("") }} className="text-muted-foreground hover:text-foreground flex-shrink-0"><X className="h-4 w-4" /></button>}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground">{opt.label}</p>
-                  <p className="text-[10px] text-muted-foreground">{opt.desc}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </Section>
-
-        {/* Section 6 — Période */}
-        <Section title="Période" icon={User}>
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Date de début <span className="text-red-500">*</span>
-            </label>
-            <div className="overflow-hidden max-w-full">
-              <input
-                type="date"
-                value={startDate}
-                min={today}
-                onChange={e => { setStartDate(e.target.value); setErrors(prev => { const er = { ...prev }; delete er.startDate; return er }) }}
-                className={cn(inputClass(errors.startDate), "max-w-full box-border")}
-                style={{ fontSize: "16px" }}
-              />
-            </div>
-            {errors.startDate && <p className="text-xs text-red-500">{errors.startDate}</p>}
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Date de fin</label>
-            <div className="overflow-hidden max-w-full">
-              <input
-                type="date"
-                value={endDate}
-                min={startDate || today}
-                disabled={openEnded}
-                onChange={e => setEndDate(e.target.value)}
-                className={cn(inputClass(), "max-w-full box-border", openEnded && "opacity-40 cursor-not-allowed")}
-                style={{ fontSize: "16px" }}
-              />
-            </div>
-            <label className="flex items-center gap-2.5 cursor-pointer">
-              <Checkbox
-                checked={openEnded}
-                onCheckedChange={v => { setOpenEnded(!!v); if (v) setEndDate("") }}
-              />
-              <span className="text-[11px] text-muted-foreground">Sans date de fin (contrat ouvert)</span>
-            </label>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Pays</label>
-            <select
-              value={country}
-              onChange={e => setCountry(e.target.value)}
-              className={inputClass()}
-              style={{ fontSize: "16px" }}
-            >
-              <option value="FR">🇫🇷 France</option>
-              <option value="BE">🇧🇪 Belgique</option>
-              <option value="CH">🇨🇭 Suisse</option>
-              <option value="LU">🇱🇺 Luxembourg</option>
-            </select>
-          </div>
-
-          <label className="flex items-center gap-2.5 cursor-pointer">
-            <Checkbox
-              checked={excludeHolidays}
-              onCheckedChange={v => setExcludeHolidays(!!v)}
-            />
-            <span className="text-[11px] text-muted-foreground">Exclure les jours fériés</span>
-          </label>
-        </Section>
-
-        {/* Bouton Suivant */}
-        <div className="px-0 pb-32 pt-2">
-          <button
-            type="button"
-            onClick={handleNext}
-            className="w-full py-4 rounded-2xl bg-gold text-black font-bold text-base active:scale-[0.98] transition-all"
-          >
-            Suivant — Configurer la récurrence →
-          </button>
-        </div>
-      </div>
-
-      {/* Modal "Voir tous les clients" */}
-      {showAllClients && (
-        <div className="fixed inset-0 z-[10000] bg-black/70 flex flex-col" onClick={() => setShowAllClients(false)}>
-          <div className="mt-auto w-full max-h-[80vh] bg-[#1a1a1a] rounded-t-3xl flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mt-3 mb-2" />
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/20">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={modalClientSearch}
-                  onChange={e => setModalClientSearch(e.target.value)}
-                  placeholder="Rechercher..."
-                  className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
-                  style={{ fontSize: "16px" }}
-                  autoFocus
-                />
+                {errors.departure && <p className="text-xs text-red-500">{errors.departure}</p>}
               </div>
-              <button onClick={() => setShowAllClients(false)} className="p-2 rounded-lg hover:bg-white/5">
-                <X className="h-4 w-4 text-muted-foreground" />
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Adresse d&apos;arrivée <span className="text-red-500">*</span>
+                </label>
+                <div className={cn("flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#242424] border focus-within:border-gold/50", errors.arrival ? "border-red-500" : "border-onyx-border/30")}>
+                  <MapPin className="h-4 w-4 text-red-400 flex-shrink-0" strokeWidth={1.5} />
+                  <PlacesAutocomplete value={arrival} onChange={v => { setArrival(v); setDistanceKm(null); setDurationDisplay("") }}
+                    placeholder="Rechercher une adresse..."
+                    addressMode="full"
+                    className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+                    style={{ fontSize: "16px" }} />
+                  {arrival && <button type="button" onClick={() => { setArrival(""); setDistanceKm(null); setDurationDisplay("") }} className="text-muted-foreground hover:text-foreground flex-shrink-0"><X className="h-4 w-4" /></button>}
+                </div>
+                {errors.arrival && <p className="text-xs text-red-500">{errors.arrival}</p>}
+              </div>
+
+              {departure && arrival && (
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void calculateDistance()}
+                    disabled={isCalculating}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#242424] border border-onyx-border/30 text-[11px] text-muted-foreground hover:border-gold/30 hover:text-gold transition-colors disabled:opacity-50"
+                  >
+                    {isCalculating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Navigation className="h-3.5 w-3.5" />}
+                    Calculer la distance
+                  </button>
+                  {distanceKm !== null && (
+                    <p className="text-[11px] text-gold font-medium">
+                      {distanceKm} km{durationDisplay ? ` · ${durationDisplay}` : ""}
+                    </p>
+                  )}
+                </div>
+              )}
+            </Section>
+
+            <Section title="Chauffeur & Véhicule" icon={Car}>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Chauffeur <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={selectedDriverId}
+                  onChange={e => { setSelectedDriverId(e.target.value); setErrors(prev => { const er = { ...prev }; delete er.driver; return er }) }}
+                  className={cn("w-full px-3 py-2.5 rounded-xl bg-[#242424] border text-sm text-foreground focus:outline-none focus:border-gold/50", errors.driver ? "border-red-500" : "border-onyx-border/30")}
+                  style={{ fontSize: "16px" }}
+                >
+                  <option value="" disabled>Sélectionner un chauffeur...</option>
+                  {(drivers ?? []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+                {errors.driver && <p className="text-xs text-red-500">{errors.driver}</p>}
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Véhicule <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={selectedVehicleId}
+                  onChange={e => { setSelectedVehicleId(e.target.value); setErrors(prev => { const er = { ...prev }; delete er.vehicle; return er }) }}
+                  className={cn("w-full px-3 py-2.5 rounded-xl bg-[#242424] border text-sm text-foreground focus:outline-none focus:border-gold/50", errors.vehicle ? "border-red-500" : "border-onyx-border/30")}
+                  style={{ fontSize: "16px" }}
+                >
+                  <option value="" disabled>Sélectionner un véhicule...</option>
+                  {(vehicles ?? []).map(v => <option key={v.id} value={v.id}>{v.marque ? `${v.marque} ` : ""}{v.modele} — {v.immatriculation}</option>)}
+                </select>
+                {errors.vehicle && <p className="text-xs text-red-500">{errors.vehicle}</p>}
+              </div>
+            </Section>
+
+            <Section title="Tarif & Facturation" icon={Euro}>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Prix par trajet (€) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={pricePerTrip}
+                  onChange={e => { setPricePerTrip(e.target.value); if (parseFloat(e.target.value) > 0) setErrors(prev => { const er = { ...prev }; delete er.price; return er }) }}
+                  placeholder="0.00"
+                  className={inputClass(errors.price)}
+                  style={{ fontSize: "16px" }}
+                />
+                <p className="text-[10px] text-muted-foreground">Prix convenu avec le client pour chaque trajet</p>
+                {errors.price && <p className="text-xs text-red-500">{errors.price}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Mode de facturation <span className="text-red-500">*</span>
+                </label>
+                {([
+                  { value: "per_trip", label: "Un BC par trajet", desc: "Chaque course génère un bon de réservation" },
+                  { value: "monthly_invoice", label: "Facture groupée mensuelle", desc: "Tous les trajets du mois = 1 facture" },
+                  { value: "monthly_summary", label: "Bon mensuel récapitulatif", desc: "1 bon listant tous les trajets et horaires" },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setBillingMode(opt.value)}
+                    className={cn(
+                      "w-full flex items-start gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors",
+                      billingMode === opt.value
+                        ? "bg-gold/10 border-gold/40"
+                        : "bg-[#242424] border-onyx-border/30 hover:border-gold/20"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center",
+                      billingMode === opt.value ? "border-gold" : "border-muted-foreground/40"
+                    )}>
+                      {billingMode === opt.value && <div className="w-2 h-2 rounded-full bg-gold" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                      <p className="text-[10px] text-muted-foreground">{opt.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </Section>
+
+            <Section title="Période" icon={User}>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Date de début <span className="text-red-500">*</span>
+                </label>
+                <div className="overflow-hidden max-w-full">
+                  <input
+                    type="date"
+                    value={startDate}
+                    min={today}
+                    onChange={e => { setStartDate(e.target.value); setErrors(prev => { const er = { ...prev }; delete er.startDate; return er }) }}
+                    className={cn(inputClass(errors.startDate), "max-w-full box-border")}
+                    style={{ fontSize: "16px" }}
+                  />
+                </div>
+                {errors.startDate && <p className="text-xs text-red-500">{errors.startDate}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Date de fin</label>
+                <div className="overflow-hidden max-w-full">
+                  <input
+                    type="date"
+                    value={endDate}
+                    min={startDate || today}
+                    disabled={openEnded}
+                    onChange={e => setEndDate(e.target.value)}
+                    className={cn(inputClass(), "max-w-full box-border", openEnded && "opacity-40 cursor-not-allowed")}
+                    style={{ fontSize: "16px" }}
+                  />
+                </div>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <Checkbox
+                    checked={openEnded}
+                    onCheckedChange={v => { setOpenEnded(!!v); if (v) setEndDate("") }}
+                  />
+                  <span className="text-[11px] text-muted-foreground">Sans date de fin (contrat ouvert)</span>
+                </label>
+              </div>
+            </Section>
+
+            <div className="px-0 pb-32 pt-2">
+              <button
+                type="button"
+                onClick={handleNext}
+                className="w-full py-4 rounded-2xl bg-gold text-black font-bold text-base active:scale-[0.98] transition-all"
+              >
+                Suivant — Configurer la récurrence →
               </button>
             </div>
-            <p className="px-4 py-2 text-[10px] text-muted-foreground">
-              {(clients ?? []).length} client{(clients ?? []).length !== 1 ? "s" : ""} enregistré{(clients ?? []).length !== 1 ? "s" : ""}
-            </p>
-            <div className="flex-1 overflow-y-auto divide-y divide-onyx-border/20 pb-4">
-              {modalFilteredClients.length === 0 ? (
-                <p className="px-4 py-4 text-[11px] text-muted-foreground italic">Aucun résultat</p>
-              ) : modalFilteredClients.map(c => (
-                <button key={c.id} type="button"
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 text-left"
-                  onClick={() => {
-                    if (c.type === "professionnel" && (c.contacts?.length ?? 0) > 0) {
-                      setInlineSelectedCompany(c)
-                    } else {
-                      setSelectedClientId(c.id)
-                      setClientSearch("")
-                    }
-                    setShowAllClients(false)
-                  }}>
-                  <div className="w-9 h-9 rounded-full bg-gold/10 flex items-center justify-center text-gold text-xs font-bold flex-shrink-0">
-                    {c.type === "particulier"
-                      ? `${c.prenom?.[0] ?? ""}${c.nom?.[0] ?? ""}`.toUpperCase()
-                      : (c.raisonSociale?.[0] ?? "").toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {c.type === "particulier" ? `${c.prenom ?? ""} ${c.nom ?? ""}`.trim() : (c.raisonSociale ?? "")}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      {c.type === "professionnel"
-                        ? `${c.contacts?.length ?? 0} passager${(c.contacts?.length ?? 0) !== 1 ? "s" : ""}`
-                        : (c.phone ?? "")}
-                    </p>
-                  </div>
-                  {c.type === "professionnel" && (c.contacts?.length ?? 0) > 0 && (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" strokeWidth={1.5} />
-                  )}
-                </button>
-              ))}
-            </div>
           </div>
-        </div>
+
+          {/* Modal "Voir tous les clients" */}
+          {showAllClients && (
+            <div className="fixed inset-0 z-[10000] bg-black/70 flex flex-col" onClick={() => setShowAllClients(false)}>
+              <div className="mt-auto w-full max-h-[80vh] bg-[#1a1a1a] rounded-t-3xl flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mt-3 mb-2" />
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/20">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={modalClientSearch}
+                      onChange={e => setModalClientSearch(e.target.value)}
+                      placeholder="Rechercher..."
+                      className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
+                      style={{ fontSize: "16px" }}
+                      autoFocus
+                    />
+                  </div>
+                  <button onClick={() => setShowAllClients(false)} className="p-2 rounded-lg hover:bg-white/5">
+                    <X className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </div>
+                <p className="px-4 py-2 text-[10px] text-muted-foreground">
+                  {(clients ?? []).length} client{(clients ?? []).length !== 1 ? "s" : ""} enregistré{(clients ?? []).length !== 1 ? "s" : ""}
+                </p>
+                <div className="flex-1 overflow-y-auto divide-y divide-onyx-border/20 pb-4">
+                  {modalFilteredClients.length === 0 ? (
+                    <p className="px-4 py-4 text-[11px] text-muted-foreground italic">Aucun résultat</p>
+                  ) : modalFilteredClients.map(c => (
+                    <button key={c.id} type="button"
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 text-left"
+                      onClick={() => {
+                        if (c.type === "professionnel" && (c.contacts?.length ?? 0) > 0) {
+                          setInlineSelectedCompany(c)
+                        } else {
+                          setSelectedClientId(c.id)
+                          setClientSearch("")
+                        }
+                        setShowAllClients(false)
+                      }}>
+                      <div className="w-9 h-9 rounded-full bg-gold/10 flex items-center justify-center text-gold text-xs font-bold flex-shrink-0">
+                        {c.type === "particulier"
+                          ? `${c.prenom?.[0] ?? ""}${c.nom?.[0] ?? ""}`.toUpperCase()
+                          : (c.raisonSociale?.[0] ?? "").toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {c.type === "particulier" ? `${c.prenom ?? ""} ${c.nom ?? ""}`.trim() : (c.raisonSociale ?? "")}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {c.type === "professionnel"
+                            ? `${c.contacts?.length ?? 0} passager${(c.contacts?.length ?? 0) !== 1 ? "s" : ""}`
+                            : (c.phone ?? "")}
+                        </p>
+                      </div>
+                      {c.type === "professionnel" && (c.contacts?.length ?? 0) > 0 && (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" strokeWidth={1.5} />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <QuickAddClientModal
+            open={showQuickAddClient}
+            onClose={() => setShowQuickAddClient(false)}
+            clients={clients ?? []}
+            onClientCreated={(clientId) => {
+              setSelectedClientId(clientId)
+              setShowQuickAddClient(false)
+            }}
+          />
+        </>
       )}
 
-      {/* Modal ajout client */}
-      <QuickAddClientModal
-        open={showQuickAddClient}
-        onClose={() => setShowQuickAddClient(false)}
-        clients={clients ?? []}
-        onClientCreated={(clientId) => {
-          setSelectedClientId(clientId)
-          setShowQuickAddClient(false)
-        }}
-      />
+      {/* ── Étape 2 ──────────────────────────────────────────────────────────── */}
+      {step === 2 && (
+        <>
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/30 bg-[#0d0d0d] sticky top-0 z-10">
+            <button onClick={() => setStep(1)} className="p-2 -ml-2 rounded-lg hover:bg-white/5">
+              <ChevronLeft className="h-5 w-5 text-foreground" />
+            </button>
+            <div className="flex-1">
+              <h1 className="text-base font-bold text-foreground">Nouveau contrat récurrent</h1>
+              <p className="text-[10px] text-muted-foreground">Étape 2/3 — Récurrence</p>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-32">
+
+            {/* Type de récurrence */}
+            <Section title="Type de récurrence" icon={RefreshCw}>
+              <div className="flex gap-2">
+                {([
+                  { value: "fixed",    label: "Horaire fixe" },
+                  { value: "variable", label: "Horaires variables" },
+                  { value: "custom",   label: "Aller/Retour dissociés" },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setRecurrenceType(opt.value)}
+                    className={cn(
+                      "flex-1 py-2.5 rounded-xl text-[11px] font-semibold transition-colors border leading-tight px-1",
+                      recurrenceType === opt.value
+                        ? "bg-gold text-black border-gold"
+                        : "bg-[#242424] text-muted-foreground border-onyx-border/30 hover:border-gold/30 hover:text-foreground"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </Section>
+
+            {/* ── Mode 1 : Horaire fixe ───────────────────────────────────────── */}
+            {recurrenceType === "fixed" && (
+              <Section title="Jours actifs" icon={Navigation}>
+                <DaysSelector selected={outboundDays} onChange={v => { setOutboundDays(v); setErrors(prev => { const er = { ...prev }; delete er.outboundDays; return er }) }} />
+                {errors.outboundDays && <p className="text-xs text-red-500">{errors.outboundDays}</p>}
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                    Heure de prise en charge <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={outboundTime}
+                    onChange={e => setOutboundTime(e.target.value)}
+                    className={inputClass()}
+                    style={{ fontSize: "16px" }}
+                  >
+                    {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+
+                <label className="flex items-center gap-2.5 cursor-pointer pt-1">
+                  <Checkbox checked={fixedReturnEnabled} onCheckedChange={v => setFixedReturnEnabled(!!v)} />
+                  <span className="text-[11px] text-muted-foreground">Activer le retour</span>
+                </label>
+
+                {fixedReturnEnabled && (
+                  <div className="space-y-1 pt-1">
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                      Heure de retour <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={fixedReturnTime}
+                      onChange={e => setFixedReturnTime(e.target.value)}
+                      className={inputClass()}
+                      style={{ fontSize: "16px" }}
+                    >
+                      {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                )}
+              </Section>
+            )}
+
+            {/* ── Mode 2 : Horaires variables ─────────────────────────────────── */}
+            {recurrenceType === "variable" && (
+              <Section title="Horaires par jour" icon={Navigation}>
+                {errors.daySchedules && <p className="text-xs text-red-500 mb-1">{errors.daySchedules}</p>}
+                <div className="space-y-2">
+                  {daySchedules.map((sched, idx) => (
+                    <div
+                      key={sched.day}
+                      className={cn(
+                        "rounded-xl border overflow-hidden",
+                        sched.enabled ? "border-gold/20 bg-[#242424]" : "border-onyx-border/20 bg-[#1e1e1e]"
+                      )}
+                    >
+                      <div className="flex items-center gap-3 px-3 py-2.5 flex-wrap">
+                        {/* Toggle jour */}
+                        <button
+                          type="button"
+                          onClick={() => patchSchedule(idx, { enabled: !sched.enabled })}
+                          className={cn(
+                            "w-9 h-9 rounded-full flex-shrink-0 text-xs font-semibold transition-colors",
+                            sched.enabled
+                              ? "bg-gold text-black"
+                              : "bg-[#2a2a2a] border border-onyx-border/30 text-muted-foreground"
+                          )}
+                        >
+                          {DAY_NAMES[sched.day - 1]}
+                        </button>
+
+                        {sched.enabled && (
+                          <div className="flex items-center gap-2 flex-wrap flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-muted-foreground">Aller</span>
+                              <TimeSelect value={sched.outboundTime} onChange={v => patchSchedule(idx, { outboundTime: v })} />
+                            </div>
+
+                            {sched.returnEnabled && (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-muted-foreground">Retour</span>
+                                <TimeSelect value={sched.returnTime} onChange={v => patchSchedule(idx, { returnTime: v })} />
+                              </div>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => patchSchedule(idx, { returnEnabled: !sched.returnEnabled })}
+                              className={cn(
+                                "text-[10px] px-2 py-1 rounded-lg border transition-colors",
+                                sched.returnEnabled
+                                  ? "bg-gold/10 text-gold border-gold/30 hover:bg-gold/20"
+                                  : "bg-[#1a1a1a] text-muted-foreground border-onyx-border/30 hover:border-gold/30 hover:text-gold"
+                              )}
+                            >
+                              {sched.returnEnabled ? "− Retour" : "+ Retour"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {errors[`day_${sched.day}`] && (
+                        <p className="px-3 pb-2 text-xs text-red-500">{errors[`day_${sched.day}`]}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            {/* ── Mode 3 : Aller/Retour dissociés (custom) ────────────────────── */}
+            {recurrenceType === "custom" && (
+              <Section title="Planification" icon={Navigation}>
+                <p className="text-[10px] uppercase tracking-wider text-gold font-semibold">Trajet aller</p>
+                <DaysSelector selected={outboundDays} onChange={setOutboundDays} />
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                    Heure de prise en charge
+                  </label>
+                  <select
+                    value={outboundTime}
+                    onChange={e => setOutboundTime(e.target.value)}
+                    className={inputClass()}
+                    style={{ fontSize: "16px" }}
+                  >
+                    {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+
+                <label className="flex items-center gap-2.5 cursor-pointer pt-1">
+                  <Checkbox checked={enableReturn} onCheckedChange={v => setEnableReturn(!!v)} />
+                  <span className="text-[11px] text-muted-foreground">Activer le retour</span>
+                </label>
+
+                {enableReturn && (
+                  <div className="space-y-3 pt-2 border-t border-onyx-border/20">
+                    <p className="text-[10px] uppercase tracking-wider text-gold font-semibold">Trajet retour</p>
+                    <DaysSelector selected={returnDays} onChange={setReturnDays} />
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                        Heure de retour
+                      </label>
+                      <select
+                        value={returnTime}
+                        onChange={e => setReturnTime(e.target.value)}
+                        className={inputClass()}
+                        style={{ fontSize: "16px" }}
+                      >
+                        {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                        Adresse de départ retour
+                      </label>
+                      <input
+                        type="text"
+                        value={returnDeparture}
+                        onChange={e => setReturnDeparture(e.target.value)}
+                        placeholder="Adresse de départ pour le retour..."
+                        className={inputClass()}
+                        style={{ fontSize: "16px" }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </Section>
+            )}
+
+            {/* ── Exceptions (tous modes) ──────────────────────────────────────── */}
+            <Section title="Exceptions" icon={FileText}>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <Checkbox checked={excludeHolidays} onCheckedChange={v => setExcludeHolidays(!!v)} />
+                  <span className="text-[11px] text-foreground">Exclure les jours fériés</span>
+                </label>
+
+                {excludeHolidays && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                      Pays (pour les jours fériés)
+                    </label>
+                    <select
+                      value={country}
+                      onChange={e => setCountry(e.target.value)}
+                      className={inputClass()}
+                      style={{ fontSize: "16px" }}
+                    >
+                      {Object.entries(COUNTRY_LABELS).map(([code, label]) => (
+                        <option key={code} value={code}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Dates à exclure manuellement
+                </p>
+                {excludedDates.map(date => (
+                  <div key={date} className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#242424] border border-onyx-border/30">
+                    <span className="text-sm text-foreground">{date}</span>
+                    <button
+                      type="button"
+                      onClick={() => setExcludedDates(prev => prev.filter(d => d !== date))}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                <label className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#242424] border border-dashed border-gold/30 text-gold text-[11px] font-medium hover:bg-gold/5 hover:border-gold/50 transition-all cursor-pointer">
+                  <Plus className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={2} />
+                  Ajouter une date
+                  <input
+                    type="date"
+                    min={startDate || today}
+                    max={!openEnded && endDate ? endDate : ""}
+                    className="sr-only"
+                    onChange={e => {
+                      const val = e.target.value
+                      handleAddExcludedDate(val)
+                      e.target.value = ""
+                    }}
+                  />
+                </label>
+                {excludeDateError && (
+                  <p className="text-xs text-red-500">{excludeDateError}</p>
+                )}
+                {!excludeDateError && excludeDateWarning && (
+                  <p className="text-xs text-orange-400">{excludeDateWarning}</p>
+                )}
+              </div>
+            </Section>
+
+            <div className="px-0 pb-32 pt-2">
+              <button
+                type="button"
+                onClick={handleNextStep2}
+                className="w-full py-4 rounded-2xl bg-gold text-black font-bold text-base active:scale-[0.98] transition-all"
+              >
+                Suivant — Récapitulatif →
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Étape 3 ──────────────────────────────────────────────────────────── */}
+      {step === 3 && (
+        <>
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/30 bg-[#0d0d0d] sticky top-0 z-10">
+            <button onClick={() => setStep(2)} className="p-2 -ml-2 rounded-lg hover:bg-white/5">
+              <ChevronLeft className="h-5 w-5 text-foreground" />
+            </button>
+            <div className="flex-1">
+              <h1 className="text-base font-bold text-foreground">Nouveau contrat récurrent</h1>
+              <p className="text-[10px] text-muted-foreground">Étape 3/3 — Récapitulatif</p>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-32">
+
+            <Section title="Contrat" icon={FileText}>
+              <RecapRow label="Référence" value={
+                <span className="font-mono text-gold">
+                  {previewNumero || "Génération..."}
+                </span>
+              } />
+              <RecapRow label="Label" value={label} />
+              {notes.trim() && <RecapRow label="Notes" value={notes} />}
+            </Section>
+
+            <Section title="Client" icon={Building2}>
+              <RecapRow label="Client" value={
+                selectedClient?.type === "particulier"
+                  ? `${selectedClient.prenom ?? ""} ${selectedClient.nom ?? ""}`.trim()
+                  : (selectedClient?.raisonSociale ?? "")
+              } />
+              {passagerNom && <RecapRow label="Passager" value={passagerNom} />}
+              {passagerTelephone && <RecapRow label="Tél. passager" value={passagerTelephone} />}
+            </Section>
+
+            <Section title="Trajet" icon={Navigation}>
+              <RecapRow label="Départ" value={departure} />
+              <RecapRow label="Arrivée" value={arrival} />
+              {distanceKm !== null && (
+                <RecapRow label="Distance" value={`${distanceKm} km${durationDisplay ? ` · ${durationDisplay}` : ""}`} />
+              )}
+            </Section>
+
+            <Section title="Opérateur" icon={Car}>
+              <RecapRow label="Chauffeur" value={drivers?.find(d => d.id === selectedDriverId)?.name ?? selectedDriverId} />
+              <RecapRow label="Véhicule" value={(() => {
+                const veh = vehicles?.find(v => v.id === selectedVehicleId)
+                return veh ? `${veh.marque ? `${veh.marque} ` : ""}${veh.modele} — ${veh.immatriculation}` : selectedVehicleId
+              })()} />
+            </Section>
+
+            <Section title="Tarif & Facturation" icon={Euro}>
+              <RecapRow label="Prix / trajet" value={`${parseFloat(pricePerTrip).toFixed(2)} €`} />
+              <RecapRow label="Facturation" value={BILLING_LABELS[billingMode]} />
+            </Section>
+
+            <Section title="Récurrence" icon={RefreshCw}>
+              <RecapRow label="Mode" value={RECURRENCE_LABELS[recurrenceType]} />
+              {recurrenceType === "fixed" && (
+                <>
+                  <RecapRow label="Jours" value={[...outboundDays].sort((a, b) => a - b).map(d => DAY_NAMES[d - 1]).join(", ")} />
+                  <RecapRow label="Heure aller" value={outboundTime} />
+                  {fixedReturnEnabled && <RecapRow label="Heure retour" value={fixedReturnTime} />}
+                </>
+              )}
+              {recurrenceType === "variable" && daySchedules.filter(s => s.enabled).map(s => (
+                <RecapRow
+                  key={s.day}
+                  label={DAY_NAMES[s.day - 1]}
+                  value={s.returnEnabled ? `Aller ${s.outboundTime} · Retour ${s.returnTime}` : `Aller ${s.outboundTime}`}
+                />
+              ))}
+              {recurrenceType === "custom" && (
+                <>
+                  <RecapRow label="Jours aller" value={[...outboundDays].sort((a, b) => a - b).map(d => DAY_NAMES[d - 1]).join(", ")} />
+                  <RecapRow label="Heure aller" value={outboundTime} />
+                  {enableReturn && (
+                    <>
+                      <RecapRow label="Jours retour" value={[...returnDays].sort((a, b) => a - b).map(d => DAY_NAMES[d - 1]).join(", ")} />
+                      <RecapRow label="Heure retour" value={returnTime} />
+                      {returnDeparture && <RecapRow label="Départ retour" value={returnDeparture} />}
+                    </>
+                  )}
+                </>
+              )}
+              <RecapRow label="Début" value={formatDateDisplay(startDate)} />
+              {!openEnded && endDate
+                ? <RecapRow label="Fin" value={formatDateDisplay(endDate)} />
+                : openEnded && <RecapRow label="Fin" value="Contrat ouvert" />
+              }
+            </Section>
+
+            {(excludeHolidays || excludedDates.length > 0) && (
+              <Section title="Exceptions" icon={FileText}>
+                {excludeHolidays && <RecapRow label="Jours fériés" value={`Exclus (${COUNTRY_LABELS[country]})`} />}
+                {excludedDates.length > 0 && (
+                  <RecapRow label="Dates exclues" value={
+                    <span className="text-right leading-relaxed">{excludedDates.map(d => formatDateDisplay(d)).join(", ")}</span>
+                  } />
+                )}
+              </Section>
+            )}
+
+            {(() => {
+              const trips = getNextTrips()
+              if (trips.length === 0) return null
+              return (
+                <Section title="Prochains trajets" icon={Navigation}>
+                  <div className="space-y-0">
+                    {trips.map(t => (
+                      <div key={t.date} className="flex items-center justify-between py-2 border-b border-onyx-border/20 last:border-0">
+                        <span className="text-sm text-foreground">{t.display}</span>
+                        <span className="text-[11px] text-gold font-semibold">{t.time}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground pt-1">5 premiers trajets prévisionnels</p>
+                </Section>
+              )
+            })()}
+
+            {saveError && (
+              <p className="text-sm text-red-500 text-center py-1">{saveError}</p>
+            )}
+
+            <div className="px-0 pb-32 pt-2">
+              <button
+                type="button"
+                onClick={() => void handleSave()}
+                disabled={isSaving}
+                className="w-full py-4 rounded-2xl bg-gold text-black font-bold text-base active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {isSaving && <Loader2 className="h-5 w-5 animate-spin" />}
+                {isSaving ? "Enregistrement..." : "Créer le contrat"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
     </div>
   )
 }
@@ -809,7 +1561,6 @@ export function RecurringScreen({ onBack }: RecurringScreenProps) {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* En-tête */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/30 bg-[#0d0d0d]">
         <button onClick={onBack} className="p-2 -ml-2 rounded-lg hover:bg-white/5">
           <ChevronLeft className="h-5 w-5 text-foreground" />
@@ -827,7 +1578,6 @@ export function RecurringScreen({ onBack }: RecurringScreenProps) {
         </button>
       </div>
 
-      {/* Contenu */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 pb-20">
         {loading ? (
           <div className="flex items-center justify-center py-16">
@@ -863,7 +1613,12 @@ export function RecurringScreen({ onBack }: RecurringScreenProps) {
                       <RefreshCw className="h-4 w-4 text-gold" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{contract.label || "Trajet sans nom"}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-foreground truncate">{contract.label || "Trajet sans nom"}</p>
+                        {contract.numero && (
+                          <span className="text-[9px] font-mono text-gold/70 bg-gold/10 px-1.5 py-0.5 rounded flex-shrink-0">{contract.numero}</span>
+                        )}
+                      </div>
                       {contract.passenger_name && (
                         <p className="text-[11px] text-muted-foreground truncate">{contract.passenger_name}</p>
                       )}
@@ -875,7 +1630,7 @@ export function RecurringScreen({ onBack }: RecurringScreenProps) {
                 </div>
                 <div className="pl-[52px] space-y-1">
                   <p className="text-[11px] text-muted-foreground truncate">{contract.departure} → {contract.arrival}</p>
-                  <p className="text-[11px] text-gold font-medium">{formatRecurrence(contract.days_of_week, contract.time)}</p>
+                  <p className="text-[11px] text-gold font-medium">{formatRecurrence(contract.outbound_days, contract.outbound_time)}</p>
                 </div>
               </div>
             )
@@ -883,7 +1638,6 @@ export function RecurringScreen({ onBack }: RecurringScreenProps) {
         )}
       </div>
 
-      {/* Formulaire pleine page */}
       {showCreateContract && (
         <div className="absolute inset-0 z-50 bg-background overflow-y-auto">
           <CreateRecurringContract
