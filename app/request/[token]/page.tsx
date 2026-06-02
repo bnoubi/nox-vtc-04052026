@@ -6,6 +6,11 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+const adminSupabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
 interface Props {
   params: Promise<{ token: string }>
 }
@@ -26,24 +31,39 @@ export default async function TripRequestPage({ params }: Props) {
   if (req.status === "filled" || req.status === "converted") return <ErrorScreen type="filled" />
   if (req.status === "cancelled") return <ErrorScreen type="invalid" />
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("nom_entreprise, siret, prenom_representant_legal, nom_representant_legal, telephone, logo_url")
     .eq("user_id", req.user_id)
     .single()
 
+  if (profileError) {
+    console.error("[TripRequest] Profile error:", profileError)
+  }
+
+  let finalProfile = profile
+  if (!finalProfile) {
+    const { data: profileAdmin } = await adminSupabase
+      .from("profiles")
+      .select("nom_entreprise, siret, prenom_representant_legal, nom_representant_legal, telephone, logo_url")
+      .eq("user_id", req.user_id)
+      .single()
+    finalProfile = profileAdmin
+  }
+
   const operatorName =
-    profile?.nom_entreprise ||
-    [profile?.prenom_representant_legal, profile?.nom_representant_legal].filter(Boolean).join(" ") ||
+    finalProfile?.nom_entreprise ||
+    [finalProfile?.prenom_representant_legal, finalProfile?.nom_representant_legal].filter(Boolean).join(" ") ||
     "Votre chauffeur"
 
   return (
     <TripRequestForm
       token={token}
+      operatorUserId={req.user_id}
       operatorName={operatorName}
-      operatorPhone={profile?.telephone ?? ""}
-      operatorLogo={profile?.logo_url ?? ""}
-      operatorSiren={profile?.siret ?? ""}
+      operatorPhone={finalProfile?.telephone ?? ""}
+      operatorLogo={finalProfile?.logo_url ?? ""}
+      operatorSiren={finalProfile?.siret ?? ""}
       initialDeparture={req.departure ?? ""}
       initialArrival={req.arrival ?? ""}
       initialDate={req.trip_date ?? ""}

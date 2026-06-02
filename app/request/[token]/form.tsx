@@ -20,7 +20,7 @@ const i18n = {
     firstname: "Prénom *", lastname: "Nom *",
     phone: "Téléphone *", email: "Email",
     departure: "Adresse de départ *", arrival: "Adresse d'arrivée *",
-    date: "Date *", time: "Heure",
+    date: "Date *", time: "Heure *",
     passengers: "Passagers", luggage: "Bagages",
     notes: "Notes", notesPlaceholder: "Numéro de vol, instructions… (facultatif)",
     submit: "Envoyer ma demande", submitting: "Envoi en cours…",
@@ -31,6 +31,9 @@ const i18n = {
     error: "Une erreur est survenue. Veuillez réessayer.",
     disclaimer: "Ce formulaire constitue une demande de trajet préliminaire et ne vaut pas bon de réservation. Un bon de réservation officiel vous sera transmis après confirmation par votre chauffeur VTC.",
     poweredBy: "Propulsé par NoX VTC",
+    estimatedDistance: "Distance estimée",
+    estimatedDuration: "Durée estimée",
+    estimatedNote: "Ces estimations sont indicatives et peuvent varier selon le trafic.",
   },
   en: {
     sub: "Fill in this form to confirm your ride",
@@ -42,7 +45,7 @@ const i18n = {
     firstname: "First name *", lastname: "Last name *",
     phone: "Phone *", email: "Email",
     departure: "Departure address *", arrival: "Arrival address *",
-    date: "Date *", time: "Time",
+    date: "Date *", time: "Time *",
     passengers: "Passengers", luggage: "Luggage",
     notes: "Notes", notesPlaceholder: "Flight number, instructions… (optional)",
     submit: "Send my request", submitting: "Sending…",
@@ -53,6 +56,9 @@ const i18n = {
     error: "An error occurred. Please try again.",
     disclaimer: "This form is a preliminary trip request and does not constitute a booking confirmation. An official booking confirmation will be sent to you after validation by your driver.",
     poweredBy: "Powered by NoX VTC",
+    estimatedDistance: "Estimated distance",
+    estimatedDuration: "Estimated duration",
+    estimatedNote: "These estimates are indicative and may vary depending on traffic.",
   },
   es: {
     sub: "Complete este formulario para confirmar su traslado",
@@ -64,7 +70,7 @@ const i18n = {
     firstname: "Nombre *", lastname: "Apellido *",
     phone: "Teléfono *", email: "Email",
     departure: "Dirección de salida *", arrival: "Dirección de llegada *",
-    date: "Fecha *", time: "Hora",
+    date: "Fecha *", time: "Hora *",
     passengers: "Pasajeros", luggage: "Equipaje",
     notes: "Notas", notesPlaceholder: "Número de vuelo, instrucciones… (opcional)",
     submit: "Enviar mi solicitud", submitting: "Enviando…",
@@ -75,12 +81,41 @@ const i18n = {
     error: "Se ha producido un error. Por favor, inténtelo de nuevo.",
     disclaimer: "Este formulario es una solicitud preliminar de viaje y no constituye una confirmación de reserva. Una confirmación oficial le será enviada tras la validación por su conductor.",
     poweredBy: "Powered by NoX VTC",
+    estimatedDistance: "Distancia estimada",
+    estimatedDuration: "Duración estimada",
+    estimatedNote: "Estas estimaciones son indicativas y pueden variar según el tráfico.",
+  },
+  it: {
+    sub: "Compila questo modulo per confermare il tuo trasferimento",
+    sectionIdentity: "I tuoi dati",
+    sectionRoute: "Percorso",
+    sectionSchedule: "Data e passeggeri",
+    sectionNotes: "Note",
+    civility: "Titolo", mr: "Sig.", mme: "Sig.ra",
+    firstname: "Nome *", lastname: "Cognome *",
+    phone: "Telefono *", email: "Email",
+    departure: "Indirizzo di partenza *", arrival: "Indirizzo di arrivo *",
+    date: "Data *", time: "Ora *",
+    passengers: "Passeggeri", luggage: "Bagagli",
+    notes: "Note", notesPlaceholder: "Numero di volo, istruzioni… (facoltativo)",
+    submit: "Invia la mia richiesta", submitting: "Invio in corso…",
+    success: "Richiesta inviata!",
+    successSub: "Il suo conducente ha ricevuto la sua richiesta e la contatterà per la conferma.",
+    whatsapp: "Contatta su WhatsApp",
+    required: "Per favore, compila tutti i campi obbligatori (*) e fornisci almeno un telefono o email.",
+    error: "Si è verificato un errore. Riprova.",
+    disclaimer: "Questo modulo costituisce una richiesta preliminare di viaggio e non costituisce una conferma di prenotazione. Una conferma ufficiale le verrà inviata dopo la validazione da parte del conducente.",
+    poweredBy: "Sviluppato da NoX VTC",
+    estimatedDistance: "Distanza stimata",
+    estimatedDuration: "Durata stimata",
+    estimatedNote: "Queste stime sono indicative e possono variare in base al traffico.",
   },
 } as const
 type Lang = keyof typeof i18n
 
 interface Props {
   token: string
+  operatorUserId: string
   operatorName: string
   operatorPhone: string
   operatorLogo: string
@@ -116,7 +151,7 @@ const LABEL = "text-xs text-[#1A1A1A] font-medium block mb-1"
 const SECTION_TITLE = "text-[10px] font-bold uppercase tracking-wider text-[#C5A059] mb-1"
 
 export function TripRequestForm({
-  token, operatorName, operatorPhone, operatorLogo, operatorSiren,
+  token, operatorUserId, operatorName, operatorPhone, operatorLogo, operatorSiren,
   initialDeparture, initialArrival, initialDate, initialTime,
   initialPassengers, initialLuggage, initialNotes,
 }: Props) {
@@ -193,7 +228,7 @@ export function TripRequestForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!firstname || !lastname || (!phone && !email) || !departure || !arrival || !date) {
+    if (!firstname || !lastname || (!phone && !email) || !departure || !arrival || !date || !time) {
       setError(t.required)
       return
     }
@@ -231,6 +266,20 @@ export function TripRequestForm({
           body: JSON.stringify({ email, firstname, departure, arrival, date, time, lang }),
         })
       }
+      await fetch("/api/trip-request/notify-operator", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: operatorUserId,
+          passengerName: `${civility} ${firstname} ${lastname}`,
+          departure,
+          arrival,
+          date,
+          time,
+          estimatedDistance,
+          estimatedDuration,
+        }),
+      }).catch(() => {})
       setSubmitted(true)
     } catch {
       setError(t.error)
@@ -281,10 +330,10 @@ export function TripRequestForm({
           </div>
         </div>
         <div className="flex gap-1">
-          {(["fr", "en", "es"] as Lang[]).map(l => (
+          {(["fr", "en", "es", "it"] as Lang[]).map(l => (
             <button key={l} type="button" onClick={() => setLang(l)}
               className={`text-base px-1.5 py-0.5 rounded-lg transition-colors ${lang === l ? "bg-[#C5A059]/15 ring-1 ring-[#C5A059]/40" : "opacity-35 hover:opacity-70"}`}>
-              {l === "fr" ? "🇫🇷" : l === "en" ? "🇬🇧" : "🇪🇸"}
+              {l === "fr" ? "🇫🇷" : l === "en" ? "🇬🇧" : l === "es" ? "🇪🇸" : "🇮🇹"}
             </button>
           ))}
         </div>
@@ -370,9 +419,9 @@ export function TripRequestForm({
             )}
             {estimatedDistance !== null && (
               <div style={{ background: "#FFF8EC", borderLeft: "3px solid #C5A059", paddingLeft: 12, paddingRight: 12, paddingTop: 10, paddingBottom: 10, borderRadius: 8 }}>
-                <p style={{ color: "#1A1A1A", fontSize: 13, fontWeight: 600, marginBottom: 2 }}>📍 Distance estimée : {estimatedDistance} km</p>
-                {estimatedDuration && <p style={{ color: "#1A1A1A", fontSize: 13, fontWeight: 600, marginBottom: 4 }}>⏱ Durée estimée : {estimatedDuration}</p>}
-                <p style={{ color: "#999", fontSize: 11, fontStyle: "italic" }}>Ces estimations sont indicatives et peuvent varier selon le trafic.</p>
+                <p style={{ color: "#1A1A1A", fontSize: 13, fontWeight: 600, marginBottom: 2 }}>📍 {t.estimatedDistance} : {estimatedDistance} km</p>
+                {estimatedDuration && <p style={{ color: "#1A1A1A", fontSize: 13, fontWeight: 600, marginBottom: 4 }}>⏱ {t.estimatedDuration} : {estimatedDuration}</p>}
+                <p style={{ color: "#999", fontSize: 11, fontStyle: "italic" }}>{t.estimatedNote}</p>
               </div>
             )}
           </div>
