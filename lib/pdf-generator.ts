@@ -795,3 +795,350 @@ async function _buildPDFDoc(
 
   return doc
 }
+
+// ── Recurring Contract PDF ────────────────────────────────────────────────────
+
+export interface RecurringContractDocument {
+  numero: string
+  createdAt: string
+  enterpriseName: string
+  enterpriseSiren?: string
+  enterpriseEvtc?: string
+  enterpriseAddress?: string
+  enterpriseLogo?: string
+  enterprisePhone?: string
+  clientName: string
+  passengerName?: string
+  passengerPhone?: string
+  departure: string
+  arrival: string
+  distanceKm?: number
+  estimatedDuration?: string
+  recurrenceType: string
+  outboundDays: number[]
+  outboundTime: string | null
+  returnEnabled: boolean
+  returnDays?: number[]
+  returnTime?: string | null
+  daySchedules?: {
+    day: number
+    enabled: boolean
+    outboundTime: string
+    returnEnabled: boolean
+    returnTime: string
+  }[]
+  driverName?: string
+  vehicleName?: string
+  startDate: string
+  endDate?: string | null
+  noEndDate: boolean
+  excludeHolidays: boolean
+  countryCode: string
+  pricePerTrip: number
+  billingFrequency: string
+  cgvText?: string
+}
+
+function _fmtDate(dateStr: string): string {
+  if (!dateStr) return "—"
+  const d = new Date(dateStr + "T00:00:00")
+  const name = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"][d.getDay()]
+  return `${name} ${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`
+}
+
+const _DAY_NAMES_FR = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+
+function _fmtDays(days: number[]): string {
+  return [...days].sort((a, b) => a - b).map(d => _DAY_NAMES_FR[d - 1] ?? "?").join(", ")
+}
+
+const _RECURRENCE_LABELS: Record<string, string> = {
+  fixed: "Horaire fixe",
+  variable: "Horaires variables",
+  custom: "Aller/Retour dissociés",
+  daily: "Quotidien",
+}
+
+const _BILLING_LABELS: Record<string, string> = {
+  monthly: "Automatique (1er du mois)",
+  weekly: "Automatique (chaque lundi)",
+  manual: "Manuelle uniquement",
+}
+
+const _COUNTRY_LABELS: Record<string, string> = {
+  FR: "France",
+  BE: "Belgique",
+  CH: "Suisse",
+  LU: "Luxembourg",
+}
+
+function _buildRecurringContractDoc(d: RecurringContractDocument): jsPDF {
+  const doc = new jsPDF()
+  const gold = "#C5A059"
+  const dark = "#1A1A1A"
+  const gray = "#71717A"
+  const lightLine = "#E5E5E5"
+
+  function pb(y: number, needed = 20): number {
+    if (y + needed > 275) { doc.addPage(); return 20 }
+    return y
+  }
+
+  function separator(y: number): number {
+    doc.setDrawColor(lightLine)
+    doc.setLineWidth(0.2)
+    doc.line(20, y, 190, y)
+    return y + 8
+  }
+
+  function row(y: number, label: string, value: string, labelX = 20, valueX = 55): number {
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(gray)
+    doc.text(label, labelX, y)
+    doc.setTextColor(dark)
+    const lines = doc.splitTextToSize(value, 190 - valueX) as string[]
+    doc.text(lines, valueX, y)
+    return y + lines.length * 4.5 + 1
+  }
+
+  let y = 15
+
+  // ── En-tête ───────────────────────────────────────────────────────────────
+
+  if (d.enterpriseLogo) {
+    try { doc.addImage(d.enterpriseLogo, "PNG", 20, y, 50, 20) } catch { /* skip */ }
+  }
+
+  doc.setFontSize(14)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(dark)
+  doc.text(d.enterpriseName, 190, y + 5, { align: "right" })
+
+  doc.setFontSize(8)
+  doc.setFont("helvetica", "normal")
+  doc.setTextColor(gray)
+  let infoY = y + 11
+  if (d.enterpriseSiren)  { doc.text(`SIREN : ${d.enterpriseSiren}`, 190, infoY, { align: "right" }); infoY += 4.5 }
+  if (d.enterpriseEvtc)   { doc.text(`N° EVTC : ${d.enterpriseEvtc}`, 190, infoY, { align: "right" }); infoY += 4.5 }
+  if (d.enterpriseAddress){ doc.text(d.enterpriseAddress, 190, infoY, { align: "right" }); infoY += 4.5 }
+  if (d.enterprisePhone)  { doc.text(d.enterprisePhone, 190, infoY, { align: "right" }); infoY += 4.5 }
+
+  y = Math.max(y + 26, infoY + 3)
+
+  doc.setDrawColor(gold)
+  doc.setLineWidth(0.6)
+  doc.line(20, y, 190, y)
+  y += 8
+
+  doc.setFontSize(12)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(dark)
+  doc.text("CONTRAT DE TRANSPORT RÉCURRENT", 105, y, { align: "center" })
+  y += 6
+  doc.setFontSize(9)
+  doc.setFont("helvetica", "normal")
+  doc.setTextColor(dark)
+  doc.text(`N° ${d.numero}`, 105, y, { align: "center" })
+  y += 5
+  doc.setFontSize(8)
+  doc.setTextColor(gray)
+  doc.text(`Établi le ${_fmtDate(d.createdAt)}`, 105, y, { align: "center" })
+  y += 10
+
+  // ── Entre les parties ─────────────────────────────────────────────────────
+
+  y = pb(y, 30)
+  doc.setFontSize(9)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(dark)
+  doc.text("ENTRE LES PARTIES", 20, y)
+  y += 7
+
+  doc.setFontSize(8)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(gold)
+  doc.text("LE PRESTATAIRE", 20, y)
+  doc.text("LE CLIENT", 115, y)
+  y += 5
+
+  doc.setFont("helvetica", "normal")
+  doc.setTextColor(dark)
+  doc.text(d.enterpriseName, 20, y)
+  doc.text(d.clientName, 115, y)
+  y += 5
+
+  if (d.passengerName && d.passengerName !== d.clientName) {
+    doc.setTextColor(gray)
+    doc.text(`Passager : ${d.passengerName}`, 115, y)
+    y += 4.5
+    if (d.passengerPhone) {
+      doc.text(`Tél. : ${d.passengerPhone}`, 115, y)
+      y += 4.5
+    }
+  }
+  y += 2
+  y = separator(y)
+
+  // ── Trajet ────────────────────────────────────────────────────────────────
+
+  y = pb(y, 30)
+  doc.setFontSize(9)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(dark)
+  doc.text("TRAJET", 20, y)
+  y += 7
+
+  doc.setFontSize(8)
+  y = row(y, "Départ :", d.departure, 20, 48)
+  y = row(y, "Arrivée :", d.arrival, 20, 48)
+  if (d.distanceKm)  y = row(y, "Distance :", `${d.distanceKm} km${d.estimatedDuration ? ` (${d.estimatedDuration})` : ""}`, 20, 55)
+  if (d.driverName)  y = row(y, "Chauffeur :", d.driverName, 20, 55)
+  if (d.vehicleName) y = row(y, "Véhicule :", d.vehicleName, 20, 52)
+  y += 2
+  y = separator(y)
+
+  // ── Récurrence ────────────────────────────────────────────────────────────
+
+  y = pb(y, 40)
+  doc.setFontSize(9)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(dark)
+  doc.text("RÉCURRENCE", 20, y)
+  y += 7
+
+  doc.setFontSize(8)
+  y = row(y, "Mode :", _RECURRENCE_LABELS[d.recurrenceType] ?? d.recurrenceType)
+
+  if (d.recurrenceType === "fixed" || d.recurrenceType === "daily") {
+    y = row(y, "Jours :", _fmtDays(d.outboundDays))
+    if (d.outboundTime) y = row(y, "Heure aller :", d.outboundTime.substring(0, 5), 20, 58)
+    y = row(y, "Retour :", d.returnEnabled ? `Activé — ${d.returnTime?.substring(0, 5) ?? "?"}` : "Non activé", 20, 48)
+  } else if (d.recurrenceType === "variable" && d.daySchedules) {
+    d.daySchedules.filter(s => s.enabled).forEach(s => {
+      y = pb(y, 6)
+      y = row(y, `${_DAY_NAMES_FR[s.day - 1] ?? "?"} :`, s.returnEnabled ? `Aller ${s.outboundTime} · Retour ${s.returnTime}` : `Aller ${s.outboundTime}`, 20, 48)
+    })
+  } else if (d.recurrenceType === "custom") {
+    y = row(y, "Jours aller :", _fmtDays(d.outboundDays), 20, 58)
+    if (d.outboundTime) y = row(y, "Heure aller :", d.outboundTime.substring(0, 5), 20, 58)
+    if (d.returnEnabled && d.returnDays?.length) {
+      y = row(y, "Jours retour :", _fmtDays(d.returnDays), 20, 62)
+      if (d.returnTime) y = row(y, "Heure retour :", d.returnTime.substring(0, 5), 20, 62)
+    }
+  }
+  y += 2
+  y = separator(y)
+
+  // ── Période ───────────────────────────────────────────────────────────────
+
+  y = pb(y, 30)
+  doc.setFontSize(9)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(dark)
+  doc.text("PÉRIODE", 20, y)
+  y += 7
+
+  doc.setFontSize(8)
+  y = row(y, "Début :", _fmtDate(d.startDate))
+  y = row(y, "Fin :", d.noEndDate ? "Sans date de fin" : d.endDate ? _fmtDate(d.endDate) : "—")
+  const holidayText = d.excludeHolidays
+    ? `Exclus (${_COUNTRY_LABELS[d.countryCode] ?? d.countryCode})`
+    : "Non exclus"
+  y = row(y, "Jours fériés :", holidayText, 20, 58)
+  y += 2
+  y = separator(y)
+
+  // ── Conditions financières ────────────────────────────────────────────────
+
+  y = pb(y, 25)
+  doc.setFontSize(9)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(dark)
+  doc.text("CONDITIONS FINANCIÈRES", 20, y)
+  y += 7
+
+  doc.setFontSize(8)
+  y = row(y, "Prix par trajet :", `${d.pricePerTrip.toFixed(2)} €`, 20, 62)
+  y = row(y, "Fréquence :", _BILLING_LABELS[d.billingFrequency] ?? d.billingFrequency, 20, 55)
+  y += 2
+  y = separator(y)
+
+  // ── CGV ───────────────────────────────────────────────────────────────────
+
+  if (d.cgvText) {
+    y = pb(y, 20)
+    doc.setFontSize(8)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(dark)
+    doc.text("CONDITIONS GÉNÉRALES DE VENTE", 20, y)
+    y += 6
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(7)
+    doc.setTextColor(gray)
+    const cgvLines = doc.splitTextToSize(d.cgvText, 170) as string[]
+    cgvLines.forEach(line => {
+      y = pb(y, 5)
+      doc.text(line, 20, y)
+      y += 4
+    })
+    y += 4
+  }
+
+  // ── Signatures ────────────────────────────────────────────────────────────
+
+  if (y + 55 > 275) { doc.addPage(); y = 20 }
+  doc.setDrawColor(lightLine)
+  doc.setLineWidth(0.2)
+  doc.line(20, y, 190, y)
+  y += 8
+
+  doc.setFontSize(9)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(dark)
+  doc.text("SIGNATURES", 20, y)
+  y += 8
+
+  doc.setFontSize(8)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(gold)
+  doc.text("LE PRESTATAIRE", 20, y)
+  doc.text("LE CLIENT", 115, y)
+  y += 6
+
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(7)
+  doc.setTextColor(gray)
+  doc.text("Bon pour accord", 20, y)
+  doc.text("Bon pour accord", 115, y)
+  y += 18
+
+  doc.setDrawColor(dark)
+  doc.setLineWidth(0.3)
+  doc.line(20, y, 95, y)
+  doc.line(115, y, 190, y)
+  y += 5
+
+  doc.setTextColor(gray)
+  doc.text("Date :", 20, y)
+  doc.text("Date :", 115, y)
+
+  // ── Pied de page ──────────────────────────────────────────────────────────
+
+  doc.setFontSize(7)
+  doc.setFont("helvetica", "italic")
+  doc.setTextColor(gray)
+  doc.text(
+    "Document généré par NoX VTC — Ce contrat engage les deux parties à compter de sa signature.",
+    105, 290, { align: "center" }
+  )
+
+  return doc
+}
+
+export function generateRecurringContractPDF(d: RecurringContractDocument): void {
+  _buildRecurringContractDoc(d).save(`Contrat_${d.numero}.pdf`)
+}
+
+export function generateRecurringContractPDFBlob(d: RecurringContractDocument): Blob {
+  return _buildRecurringContractDoc(d).output("blob")
+}

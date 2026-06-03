@@ -14,7 +14,19 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { useNox } from "./nox-context"
 import { QuickAddClientModal } from "./quick-add-client-modal"
-import { type Client } from "./data"
+import { toast } from "sonner"
+import { type Client, type EnterpriseProfile } from "./data"
+import { generateRecurringContractPDF } from "@/lib/pdf-generator"
+
+function generateCGVSummary(enterprise: EnterpriseProfile): string {
+  if (!enterprise.cgvMode || enterprise.cgvMode === "configurator") {
+    const cfg = enterprise.cgvConfig
+    if (!cfg) return "Aucune condition générale de vente n'a été configurée."
+    return `Conditions Générales de Vente :\n- Annulation : sans frais jusqu'à ${cfg.cancellationDelay} avant le départ. Passé ce délai, des frais de ${cfg.cancellationFee}% seront appliqués.\n- Attente : temps d'attente inclus de ${cfg.waitTime} minutes. Au-delà, facturation de ${cfg.waitFee}€/min.\n- No-Show (non-présentation) : pénalité de ${cfg.noShowFee}% appliquée.\n- Paiement : exigé au format ${cfg.paymentDelay} via ${cfg.paymentMethods.join(", ")}.`
+  }
+  if (enterprise.cgvMode === "freetext") return enterprise.cgvText || "Aucune condition générale de vente n'a été configurée."
+  return "Les conditions générales relatives à cette prestation vous ont été remises en annexe ou sont consultables sur demande."
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,6 +57,7 @@ interface RecurringContract {
   exclude_holidays: boolean
   country_code: string
   excluded_dates: string[] | null
+  stops: DaySchedule[] | null
   driver_id: string | null
   vehicle_id: string | null
   distance_km: number | null
@@ -107,6 +120,14 @@ function formatRecurrence(days: number[], time: string): string {
   if (!days || days.length === 0) return time
   const sorted = [...days].sort((a, b) => a - b)
   return `${sorted.map(d => DAY_LABELS[d] ?? "?").join("/")} · ${time}`
+}
+
+function formatDays(days: number[] | null | undefined): string {
+  return [...(days ?? [])].sort((a, b) => a - b).map(d => DAY_NAMES[d - 1] ?? "?").join(", ")
+}
+
+function formatTime(t: string | null | undefined): string {
+  return t?.substring(0, 5) ?? "—"
 }
 
 const statusConfig = {
@@ -219,7 +240,7 @@ function CreateRecurringContract({ onBack, onSuccess }: {
   onBack: () => void
   onSuccess: () => void
 }) {
-  const { clients, drivers, vehicles } = useNox()
+  const { clients, drivers, vehicles, enterprise } = useNox()
   const supabase = createClient()
 
   // Navigation
@@ -290,6 +311,15 @@ function CreateRecurringContract({ onBack, onSuccess }: {
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState("")
   const [previewNumero, setPreviewNumero] = useState("")
+
+  // Step 3 — CGV contrat
+  const [showCGVModal, setShowCGVModal] = useState(false)
+  const [contractCgvText, setContractCgvText] = useState("")
+  const [generateContractPDF, setGenerateContractPDF] = useState(false)
+
+  useEffect(() => {
+    if (enterprise) setContractCgvText(generateCGVSummary(enterprise))
+  }, [enterprise]) // eslint-disable-line
 
   // Validation
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -417,7 +447,14 @@ function CreateRecurringContract({ onBack, onSuccess }: {
     if (!selectedDriverId) e.driver = "Veuillez sélectionner un chauffeur"
     if (!selectedVehicleId) e.vehicle = "Veuillez sélectionner un véhicule"
     if (!pricePerTrip || parseFloat(pricePerTrip) <= 0) e.price = "Le prix par trajet est obligatoire"
-    if (!startDate) e.startDate = "La date de début est obligatoire"
+    if (!startDate) {
+      e.startDate = "La date de début est obligatoire"
+    } else if (startDate < today) {
+      e.startDate = "La date de début ne peut pas être dans le passé"
+    }
+    if (!openEnded && endDate && startDate && endDate < startDate) {
+      e.endDate = "La date de fin doit être postérieure à la date de début"
+    }
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -486,13 +523,6 @@ function CreateRecurringContract({ onBack, onSuccess }: {
     setExcludedDates(prev => [...prev, val].sort())
   }
 
-  function formatDateDisplay(dateStr: string): string {
-    const d = new Date(dateStr + "T00:00:00")
-    const dayName = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"][d.getDay()]
-    const day = String(d.getDate()).padStart(2, "0")
-    const month = String(d.getMonth() + 1).padStart(2, "0")
-    return `${dayName} ${day}/${month}/${d.getFullYear()}`
-  }
 
   function getNextTrips(): TripPreview[] {
     if (!startDate) return []
@@ -513,7 +543,7 @@ function CreateRecurringContract({ onBack, onSuccess }: {
           const sched = daySchedules.find(s => s.day === ourDay && s.enabled)
           if (sched) time = sched.outboundTime
         }
-        results.push({ date: isoDate, display: formatDateDisplay(isoDate), time })
+        results.push({ date: isoDate, display: formatDate(isoDate), time })
       }
       cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000)
     }
@@ -614,6 +644,55 @@ function CreateRecurringContract({ onBack, onSuccess }: {
       }
 
       console.log("Recurring contract created:", newContract)
+
+      if (generateContractPDF && newContract) {
+        const clientForPDF = clients?.find(c => c.id === selectedClientId)
+        const clientNamePDF = clientForPDF
+          ? clientForPDF.type === "particulier"
+            ? `${clientForPDF.prenom ?? ""} ${clientForPDF.nom ?? ""}`.trim()
+            : (clientForPDF.raisonSociale ?? "")
+          : passagerNom
+        const selDriverPDF = drivers?.find(d => d.id === selectedDriverId)
+        const selVehiclePDF = vehicles?.find(v => v.id === selectedVehicleId)
+        const saveData = getSaveData()
+        generateRecurringContractPDF({
+          numero: (newContract as { numero?: string }).numero ?? numero,
+          createdAt: today,
+          enterpriseName: enterprise.name,
+          enterpriseSiren: enterprise.siren || undefined,
+          enterpriseEvtc: enterprise.evtcNumber || undefined,
+          enterpriseAddress: [enterprise.adresse, enterprise.zipCode, enterprise.city].filter(Boolean).join(", ") || undefined,
+          enterpriseLogo: enterprise.logo || undefined,
+          enterprisePhone: enterprise.phone || undefined,
+          clientName: clientNamePDF,
+          passengerName: passagerNom.trim() || undefined,
+          passengerPhone: passagerTelephone.trim() || undefined,
+          departure,
+          arrival,
+          distanceKm: distanceKm ?? undefined,
+          estimatedDuration: durationDisplay || undefined,
+          recurrenceType,
+          outboundDays: saveData.outbound_days,
+          outboundTime: saveData.outbound_time,
+          returnEnabled: saveData.return_enabled,
+          returnDays: saveData.return_days ?? undefined,
+          returnTime: saveData.return_time ?? undefined,
+          daySchedules: recurrenceType === "variable" ? daySchedules : undefined,
+          driverName: selDriverPDF?.name,
+          vehicleName: selVehiclePDF
+            ? `${selVehiclePDF.marque ? `${selVehiclePDF.marque} ` : ""}${selVehiclePDF.modele} — ${selVehiclePDF.immatriculation}`
+            : undefined,
+          startDate,
+          endDate: openEnded ? null : (endDate || null),
+          noEndDate: openEnded,
+          excludeHolidays,
+          countryCode: country,
+          pricePerTrip: parseFloat(pricePerTrip),
+          billingFrequency,
+          cgvText: contractCgvText || undefined,
+        })
+      }
+
       onSuccess()
     } catch (err: unknown) {
       console.error("Unexpected save error:", err)
@@ -952,7 +1031,7 @@ function CreateRecurringContract({ onBack, onSuccess }: {
               </div>
             </Section>
 
-            <Section title="Tarif & Facturation" icon={Euro}>
+            <Section title="Tarif" icon={Euro}>
               <div className="space-y-1">
                 <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                   Prix par trajet (€) <span className="text-red-500">*</span>
@@ -970,11 +1049,52 @@ function CreateRecurringContract({ onBack, onSuccess }: {
                 <p className="text-[10px] text-muted-foreground">Prix convenu avec le client pour chaque trajet</p>
                 {errors.price && <p className="text-xs text-red-500">{errors.price}</p>}
               </div>
+            </Section>
+
+            <Section title="Période" icon={User}>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Date de début <span className="text-red-500">*</span>
+                </label>
+                <div className="overflow-hidden max-w-full">
+                  <input
+                    type="date"
+                    value={startDate}
+                    min={today}
+                    onChange={e => { setStartDate(e.target.value); setErrors(prev => { const er = { ...prev }; delete er.startDate; return er }) }}
+                    className={cn(inputClass(errors.startDate), "max-w-full box-border")}
+                    style={{ fontSize: "16px" }}
+                  />
+                </div>
+                {errors.startDate && <p className="text-xs text-red-500">{errors.startDate}</p>}
+              </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                  Fréquence de facturation <span className="text-red-500">*</span>
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Date de fin</label>
+                <div className="overflow-hidden max-w-full">
+                  <input
+                    type="date"
+                    value={endDate}
+                    min={startDate || today}
+                    disabled={openEnded}
+                    onChange={e => { setEndDate(e.target.value); setErrors(prev => { const er = { ...prev }; delete er.endDate; return er }) }}
+                    className={cn(inputClass(errors.endDate), "max-w-full box-border", openEnded && "opacity-40 cursor-not-allowed")}
+                    style={{ fontSize: "16px" }}
+                  />
+                </div>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <Checkbox
+                    checked={openEnded}
+                    onCheckedChange={v => { setOpenEnded(!!v); if (v) { setEndDate(""); setErrors(prev => { const er = { ...prev }; delete er.endDate; return er }) } }}
+                  />
+                  <span className="text-[11px] text-muted-foreground">Sans date de fin (contrat ouvert)</span>
                 </label>
+                {errors.endDate && <p className="text-xs text-red-500">{errors.endDate}</p>}
+              </div>
+            </Section>
+
+            <Section title="Fréquence de facturation" icon={Euro}>
+              <div className="space-y-2">
                 {([
                   { value: "monthly", label: "Automatique (1er du mois)", desc: "Document généré automatiquement le 1er de chaque mois" },
                   { value: "weekly",  label: "Automatique (chaque lundi)", desc: "Document généré automatiquement chaque début de semaine" },
@@ -1006,47 +1126,6 @@ function CreateRecurringContract({ onBack, onSuccess }: {
                 <p className="text-[10px] text-muted-foreground pt-1">
                   💡 Vous pouvez toujours générer un document manuellement depuis le détail du contrat.
                 </p>
-              </div>
-            </Section>
-
-            <Section title="Période" icon={User}>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                  Date de début <span className="text-red-500">*</span>
-                </label>
-                <div className="overflow-hidden max-w-full">
-                  <input
-                    type="date"
-                    value={startDate}
-                    min={today}
-                    onChange={e => { setStartDate(e.target.value); setErrors(prev => { const er = { ...prev }; delete er.startDate; return er }) }}
-                    className={cn(inputClass(errors.startDate), "max-w-full box-border")}
-                    style={{ fontSize: "16px" }}
-                  />
-                </div>
-                {errors.startDate && <p className="text-xs text-red-500">{errors.startDate}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Date de fin</label>
-                <div className="overflow-hidden max-w-full">
-                  <input
-                    type="date"
-                    value={endDate}
-                    min={startDate || today}
-                    disabled={openEnded}
-                    onChange={e => setEndDate(e.target.value)}
-                    className={cn(inputClass(), "max-w-full box-border", openEnded && "opacity-40 cursor-not-allowed")}
-                    style={{ fontSize: "16px" }}
-                  />
-                </div>
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <Checkbox
-                    checked={openEnded}
-                    onCheckedChange={v => { setOpenEnded(!!v); if (v) setEndDate("") }}
-                  />
-                  <span className="text-[11px] text-muted-foreground">Sans date de fin (contrat ouvert)</span>
-                </label>
               </div>
             </Section>
 
@@ -1495,9 +1574,9 @@ function CreateRecurringContract({ onBack, onSuccess }: {
               <RecapRow label="Mode" value={RECURRENCE_LABELS[recurrenceType]} />
               {recurrenceType === "fixed" && (
                 <>
-                  <RecapRow label="Jours" value={[...outboundDays].sort((a, b) => a - b).map(d => DAY_NAMES[d - 1]).join(", ")} />
+                  <RecapRow label="Jours" value={formatDays(outboundDays)} />
                   <RecapRow label="Heure aller" value={outboundTime} />
-                  {fixedReturnEnabled && <RecapRow label="Heure retour" value={fixedReturnTime} />}
+                  <RecapRow label="Retour" value={fixedReturnEnabled ? `Activé — ${fixedReturnTime}` : "Non activé"} />
                 </>
               )}
               {recurrenceType === "variable" && daySchedules.filter(s => s.enabled).map(s => (
@@ -1509,34 +1588,34 @@ function CreateRecurringContract({ onBack, onSuccess }: {
               ))}
               {recurrenceType === "custom" && (
                 <>
-                  <RecapRow label="Jours aller" value={[...outboundDays].sort((a, b) => a - b).map(d => DAY_NAMES[d - 1]).join(", ")} />
+                  <RecapRow label="Jours aller" value={formatDays(outboundDays)} />
                   <RecapRow label="Heure aller" value={outboundTime} />
                   {enableReturn && (
                     <>
-                      <RecapRow label="Jours retour" value={[...returnDays].sort((a, b) => a - b).map(d => DAY_NAMES[d - 1]).join(", ")} />
+                      <RecapRow label="Jours retour" value={formatDays(returnDays)} />
                       <RecapRow label="Heure retour" value={returnTime} />
                       {returnDeparture && <RecapRow label="Départ retour" value={returnDeparture} />}
+                      <RecapRow label="Arrivée retour" value={arrival} />
                     </>
                   )}
                 </>
               )}
-              <RecapRow label="Début" value={formatDateDisplay(startDate)} />
-              {!openEnded && endDate
-                ? <RecapRow label="Fin" value={formatDateDisplay(endDate)} />
-                : openEnded && <RecapRow label="Fin" value="Contrat ouvert" />
-              }
             </Section>
 
-            {(excludeHolidays || excludedDates.length > 0) && (
-              <Section title="Exceptions" icon={FileText}>
-                {excludeHolidays && <RecapRow label="Jours fériés" value={`Exclus (${COUNTRY_LABELS[country]})`} />}
-                {excludedDates.length > 0 && (
-                  <RecapRow label="Dates exclues" value={
-                    <span className="text-right leading-relaxed">{excludedDates.map(d => formatDateDisplay(d)).join(", ")}</span>
-                  } />
-                )}
-              </Section>
-            )}
+            <Section title="Période" icon={FileText}>
+              <RecapRow label="Début" value={formatDate(startDate)} />
+              {openEnded
+                ? <RecapRow label="Fin" value="Contrat ouvert" />
+                : endDate && <RecapRow label="Fin" value={formatDate(endDate)} />
+              }
+              <RecapRow label="Pays" value={COUNTRY_LABELS[country] ?? country} />
+              <RecapRow label="Jours fériés" value={excludeHolidays ? "Exclus" : "Non exclus"} />
+              <RecapRow label="Dates exclues" value={
+                excludedDates.length > 0
+                  ? <span className="text-right leading-relaxed">{excludedDates.map(d => formatDate(d)).join(", ")}</span>
+                  : "Aucune"
+              } />
+            </Section>
 
             {(() => {
               const trips = getNextTrips()
@@ -1556,6 +1635,27 @@ function CreateRecurringContract({ onBack, onSuccess }: {
               )
             })()}
 
+            <Section title="Conditions Générales de Vente" icon={FileText}>
+              <div className="text-xs text-muted-foreground bg-[#111] rounded-xl p-3 max-h-32 overflow-y-auto whitespace-pre-wrap">
+                {contractCgvText || "Aucune CGV configurée"}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCGVModal(true)}
+                className="text-xs text-gold underline mt-1"
+              >
+                ✏️ Modifier pour ce contrat
+              </button>
+            </Section>
+
+            <label className="flex items-center gap-3 px-1 cursor-pointer">
+              <Checkbox
+                checked={generateContractPDF}
+                onCheckedChange={v => setGenerateContractPDF(!!v)}
+              />
+              <span className="text-sm text-foreground">Générer le contrat PDF après création</span>
+            </label>
+
             {saveError && (
               <p className="text-sm text-red-500 text-center py-1">{saveError}</p>
             )}
@@ -1573,6 +1673,44 @@ function CreateRecurringContract({ onBack, onSuccess }: {
             </div>
           </div>
         </>
+      )}
+
+      {/* Modale — Modifier CGV pour ce contrat */}
+      {showCGVModal && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/70 flex items-end" onClick={() => setShowCGVModal(false)}>
+          <div className="w-full bg-[#1a1a1a] rounded-t-3xl flex flex-col" style={{ maxHeight: "85vh" }} onClick={e => e.stopPropagation()}>
+            <div className="flex-shrink-0 px-5 pt-5 pb-3">
+              <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-4" />
+              <p className="text-base font-bold text-foreground">Conditions Générales de Vente</p>
+              <p className="text-xs text-muted-foreground mt-1">Modification spécifique à ce contrat — ne modifie pas vos CGV dans les Réglages.</p>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5">
+              <textarea
+                value={contractCgvText}
+                onChange={e => setContractCgvText(e.target.value)}
+                rows={10}
+                className="w-full px-3 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 resize-y focus:outline-none focus:border-gold/50"
+              />
+            </div>
+            <div className="flex gap-3 px-5 pt-3 pb-5 flex-shrink-0 border-t border-onyx-border/20" style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}>
+              <button
+                type="button"
+                onClick={() => setShowCGVModal(false)}
+                className="flex-1 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-muted-foreground"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCGVModal(false)}
+                className="flex-1 py-3 rounded-xl bg-gold text-black text-sm font-bold active:scale-95 transition-all"
+              >
+                Valider
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
     </div>
@@ -1595,7 +1733,7 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
   onContractUpdated: (updated: RecurringContract) => void
 }) {
   const supabase = createClient()
-  const { clients, drivers, vehicles } = useNox()
+  const { clients, drivers, vehicles, enterprise } = useNox()
 
   const [trips, setTrips] = useState<RecurringTrip[]>([])
   const [loadingTrips, setLoadingTrips] = useState(true)
@@ -1603,6 +1741,19 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [openTripMenu, setOpenTripMenu] = useState<string | null>(null)
   const [cancelTripId, setCancelTripId] = useState<string | null>(null)
+
+  const [showPauseModal, setShowPauseModal] = useState(false)
+  const [showEndModal, setShowEndModal] = useState(false)
+  const [endDateValue, setEndDateValue] = useState(today)
+  const [endModalError, setEndModalError] = useState("")
+  const [generateFinalInvoice, setGenerateFinalInvoice] = useState(false)
+  const [isEnding, setIsEnding] = useState(false)
+  const [showGenerateInvoice, setShowGenerateInvoice] = useState(false)
+  const [invoicePeriodStart, setInvoicePeriodStart] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`
+  })
+  const [invoicePeriodEnd, setInvoicePeriodEnd] = useState(today)
 
   useEffect(() => { void loadTrips() }, [contract.id]) // eslint-disable-line
 
@@ -1647,6 +1798,125 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
     setCancelTripId(null)
   }
 
+  async function handleConfirmPause() {
+    setUpdatingStatus(true)
+    try {
+      const { data, error } = await supabase
+        .from("recurring_contracts")
+        .update({ status: "paused" })
+        .eq("id", contract.id)
+        .select()
+        .single()
+      if (!error && data) {
+        setShowPauseModal(false)
+        onContractUpdated(data as RecurringContract)
+      }
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
+
+  async function handleConfirmEnd() {
+    if (endDateValue < today) {
+      setEndModalError("La date d'arrêt ne peut pas être dans le passé")
+      return
+    }
+    if (contract.end_date && !contract.no_end_date && endDateValue > contract.end_date) {
+      setEndModalError(`La date d'arrêt doit être avant le ${formatDate(contract.end_date)}`)
+      return
+    }
+    setEndModalError("")
+    setIsEnding(true)
+    try {
+      const { data, error } = await supabase
+        .from("recurring_contracts")
+        .update({
+          status: "ended",
+          ended_at: new Date().toISOString(),
+          ended_reason: "Résiliation manuelle",
+          end_date: endDateValue || null,
+        } as Record<string, unknown>)
+        .eq("id", contract.id)
+        .select()
+        .single()
+      if (error) throw error
+
+      const { error: cancelError } = await supabase
+        .from("recurring_trips")
+        .update({
+          status: "cancelled",
+          cancelled_by: "operator",
+        } as Record<string, unknown>)
+        .eq("contract_id", contract.id)
+        .eq("status", "upcoming")
+        .gt("trip_date", endDateValue)
+      if (cancelError) throw cancelError
+
+      if (generateFinalInvoice) {
+        toast("Facture finale en cours de préparation...", {
+          description: "La génération sera disponible à l'Étape 6.",
+        })
+      }
+
+      toast.success("Contrat résilié avec succès")
+      setShowEndModal(false)
+      if (data) onContractUpdated(data as RecurringContract)
+    } catch {
+      toast.error("Erreur lors de la résiliation")
+    } finally {
+      setIsEnding(false)
+    }
+  }
+
+  function handleGenerateContractPDF() {
+    if (!enterprise) { toast.error("Profil entreprise manquant"); return }
+    const ep = enterprise
+    const selClient = clients?.find(c => c.id === contract.client_id)
+    const cName = selClient
+      ? selClient.type === "particulier"
+        ? `${selClient.prenom ?? ""} ${selClient.nom ?? ""}`.trim()
+        : (selClient.raisonSociale ?? "")
+      : (contract.passenger_name ?? "Client inconnu")
+    const selDrv = drivers?.find(d => d.id === contract.driver_id)
+    const selVeh = vehicles?.find(v => v.id === contract.vehicle_id)
+    const vehLabel = selVeh
+      ? `${selVeh.marque ? `${selVeh.marque} ` : ""}${selVeh.modele} — ${selVeh.immatriculation}`.trim()
+      : undefined
+    generateRecurringContractPDF({
+      numero: contract.numero ?? "CR-???",
+      createdAt: contract.created_at,
+      enterpriseName: ep.denomination || ep.name,
+      enterpriseSiren: ep.siren,
+      enterpriseEvtc: ep.evtcNumber,
+      enterpriseAddress: [ep.adresse, [ep.zipCode, ep.city].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+      enterpriseLogo: ep.logo,
+      enterprisePhone: ep.phone,
+      clientName: cName,
+      passengerName: contract.passenger_name ?? undefined,
+      passengerPhone: contract.passenger_phone ?? undefined,
+      departure: contract.departure,
+      arrival: contract.arrival,
+      distanceKm: contract.distance_km ?? undefined,
+      recurrenceType: contract.recurrence_type,
+      outboundDays: contract.outbound_days,
+      outboundTime: contract.outbound_time,
+      returnEnabled: contract.return_enabled,
+      returnDays: contract.return_days ?? undefined,
+      returnTime: contract.return_time,
+      daySchedules: contract.stops ?? undefined,
+      driverName: selDrv?.name,
+      vehicleName: vehLabel,
+      startDate: contract.start_date,
+      endDate: contract.end_date,
+      noEndDate: contract.no_end_date,
+      excludeHolidays: contract.exclude_holidays,
+      countryCode: contract.country_code,
+      pricePerTrip: contract.price_per_trip ?? 0,
+      billingFrequency: contract.billing_frequency,
+      cgvText: generateCGVSummary(ep),
+    })
+  }
+
   // Stats
   const monthPrefix = new Date().toISOString().slice(0, 7)
   const thisMonth = trips.filter(t => t.trip_date.startsWith(monthPrefix))
@@ -1670,13 +1940,6 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
   const vehicleName = selVehicle
     ? `${selVehicle.marque ? `${selVehicle.marque} ` : ""}${selVehicle.modele} — ${selVehicle.immatriculation}`.trim()
     : null
-
-  function recurrenceSummary() {
-    const days = [...(contract.outbound_days ?? [])].sort((a, b) => a - b).map(d => DAY_NAMES[d - 1] ?? "?").join(", ")
-    if (contract.recurrence_type === "fixed") return `${days} à ${contract.outbound_time ?? "?"}`
-    if (contract.recurrence_type === "variable") return `Horaires variables — ${days}`
-    return `Aller/Retour dissociés — ${days}`
-  }
 
   const sCfg = statusConfig[contract.status as keyof typeof statusConfig] ?? statusConfig.ended
 
@@ -1705,8 +1968,9 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
                 <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
                 <div className="absolute right-0 top-full mt-1 w-52 bg-[#1a1a1a] border border-onyx-border/30 rounded-xl overflow-hidden shadow-xl z-20">
                   {contract.status === "active" && (
-                    <button onClick={() => void updateContractStatus("paused")} disabled={updatingStatus}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-white/5 text-left disabled:opacity-50">
+                    <button
+                      onClick={() => { setShowMenu(false); setShowPauseModal(true) }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-white/5 text-left">
                       <Pause className="h-4 w-4 text-orange-400" />
                       Mettre en pause
                     </button>
@@ -1719,8 +1983,9 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
                     </button>
                   )}
                   {contract.status !== "ended" && contract.status !== "cancelled" && (
-                    <button onClick={() => void updateContractStatus("ended")} disabled={updatingStatus}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-white/5 text-left border-t border-onyx-border/20 disabled:opacity-50">
+                    <button
+                      onClick={() => { setShowMenu(false); setEndDateValue(today); setGenerateFinalInvoice(false); setEndModalError(""); setShowEndModal(true) }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-white/5 text-left border-t border-onyx-border/20">
                       <X className="h-4 w-4" />
                       Résilier le contrat
                     </button>
@@ -1747,9 +2012,6 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
           {contract.distance_km != null && <RecapRow label="Distance" value={`${contract.distance_km} km`} />}
           {driverName && <RecapRow label="Chauffeur" value={driverName} />}
           {vehicleName && <RecapRow label="Véhicule" value={vehicleName} />}
-          <RecapRow label="Récurrence" value={recurrenceSummary()} />
-          <RecapRow label="Début" value={formatDate(contract.start_date)} />
-          <RecapRow label="Fin" value={contract.no_end_date ? "Contrat ouvert" : contract.end_date ? formatDate(contract.end_date) : "—"} />
           {contract.price_per_trip != null && (
             <RecapRow label="Prix / trajet" value={`${contract.price_per_trip.toFixed(2)} €`} />
           )}
@@ -1764,6 +2026,44 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
                     : "Manuelle uniquement"
               }
             />
+          )}
+          <RecapRow label="Mode récurrence" value={RECURRENCE_LABELS[contract.recurrence_type as RecurrenceType] ?? contract.recurrence_type} />
+          {(contract.recurrence_type === "fixed" || contract.recurrence_type === "daily") && (
+            <>
+              <RecapRow label="Jours" value={formatDays(contract.outbound_days)} />
+              <RecapRow label="Heure aller" value={formatTime(contract.outbound_time)} />
+              <RecapRow label="Retour" value={contract.return_enabled ? `Activé — ${formatTime(contract.return_time)}` : "Non activé"} />
+            </>
+          )}
+          {contract.recurrence_type === "variable" && (
+            contract.stops?.filter(s => s.enabled).map(s => (
+              <RecapRow key={s.day} label={DAY_NAMES[s.day - 1] ?? "?"} value={s.returnEnabled ? `Aller ${s.outboundTime} · Retour ${s.returnTime}` : `Aller ${s.outboundTime}`} />
+            )) ?? <RecapRow label="Jours" value={formatDays(contract.outbound_days)} />
+          )}
+          {contract.recurrence_type === "custom" && (
+            <>
+              <RecapRow label="Jours aller" value={formatDays(contract.outbound_days)} />
+              <RecapRow label="Heure aller" value={formatTime(contract.outbound_time)} />
+              {contract.return_enabled && (
+                <>
+                  <RecapRow label="Jours retour" value={formatDays(contract.return_days)} />
+                  <RecapRow label="Heure retour" value={formatTime(contract.return_time)} />
+                  {contract.return_departure && <RecapRow label="Départ retour" value={contract.return_departure} />}
+                  {contract.return_arrival && <RecapRow label="Arrivée retour" value={contract.return_arrival} />}
+                </>
+              )}
+            </>
+          )}
+          <RecapRow label="Début" value={formatDate(contract.start_date)} />
+          <RecapRow label="Fin" value={contract.no_end_date ? "Contrat ouvert" : contract.end_date ? formatDate(contract.end_date) : "—"} />
+          {contract.country_code && (
+            <RecapRow label="Pays" value={COUNTRY_LABELS[contract.country_code] ?? contract.country_code} />
+          )}
+          <RecapRow label="Jours fériés" value={contract.exclude_holidays ? `Exclus${contract.country_code ? ` (${COUNTRY_LABELS[contract.country_code]??contract.country_code})` : ''}` : 'Non exclus'} />
+          {contract.excluded_dates && contract.excluded_dates.length > 0 && (
+            <RecapRow label="Dates exclues" value={
+              <span className="text-right leading-relaxed">{contract.excluded_dates.map(d => formatDate(d)).join(", ")}</span>
+            } />
           )}
         </Section>
 
@@ -1784,6 +2084,24 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
             ))}
           </div>
         </Section>
+
+        {/* Actions PDF */}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setShowGenerateInvoice(true)}
+            className="py-3 rounded-xl border border-gold/40 text-gold text-sm font-semibold flex items-center justify-center gap-2 hover:bg-gold/10 transition-colors"
+          >
+            <FileText className="h-4 w-4" />
+            Générer une facture
+          </button>
+          <button
+            onClick={handleGenerateContractPDF}
+            className="py-3 rounded-xl border border-onyx-border/40 text-foreground text-sm font-semibold flex items-center justify-center gap-2 hover:bg-white/5 transition-colors"
+          >
+            <FileText className="h-4 w-4" />
+            Contrat PDF
+          </button>
+        </div>
 
         {/* Trajets */}
         <Section title="Trajets" icon={Navigation}>
@@ -1861,6 +2179,197 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
           )}
         </Section>
       </div>
+
+      {/* Modale — Mettre en pause */}
+      {showPauseModal && (
+        <div className="fixed inset-0 z-[200] bg-black/70 flex items-end" onClick={() => setShowPauseModal(false)}>
+          <div className="w-full bg-[#1a1a1a] rounded-t-3xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto" />
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-500/15 border border-orange-500/30 flex items-center justify-center flex-shrink-0">
+                <Pause className="h-5 w-5 text-orange-400" />
+              </div>
+              <p className="text-base font-bold text-foreground">Mettre en pause</p>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Les trajets futurs ne seront plus générés tant que le contrat est en pause.
+              Les trajets déjà générés restent inchangés.
+            </p>
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setShowPauseModal(false)}
+                className="flex-1 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-muted-foreground hover:border-gold/20 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => void handleConfirmPause()}
+                disabled={updatingStatus}
+                className="flex-1 py-3 rounded-xl bg-orange-500/20 border border-orange-500/40 text-sm font-semibold text-orange-300 hover:bg-orange-500/30 transition-colors disabled:opacity-50"
+              >
+                {updatingStatus ? "..." : "Mettre en pause"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale — Résilier */}
+      {showEndModal && (() => {
+        const tripsToCancel = trips.filter(t => t.status === "upcoming" && t.trip_date > endDateValue).length
+        const endInfo = endDateValue === today
+          ? "Le contrat sera résilié immédiatement"
+          : endDateValue > today
+            ? `Le contrat continuera jusqu'au ${formatDate(endDateValue)} puis sera résilié`
+            : null
+        return (
+          <div className="fixed inset-0 z-[200] bg-black/70 flex items-end" onClick={() => !isEnding && setShowEndModal(false)}>
+            <div className="w-full bg-[#1a1a1a] rounded-t-3xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
+              <div className="w-12 h-1 bg-white/20 rounded-full mx-auto" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center flex-shrink-0">
+                  <X className="h-5 w-5 text-red-400" />
+                </div>
+                <p className="text-base font-bold text-foreground">Résilier le contrat</p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Date d&apos;arrêt
+                </label>
+                <input
+                  type="date"
+                  value={endDateValue}
+                  min={today}
+                  max={contract.end_date && !contract.no_end_date ? contract.end_date : undefined}
+                  onChange={e => { setEndDateValue(e.target.value); setEndModalError("") }}
+                  className={cn(
+                    "w-full px-3 py-2.5 rounded-xl bg-[#242424] border text-sm text-foreground focus:outline-none focus:border-gold/50",
+                    endModalError ? "border-red-500" : "border-onyx-border/30"
+                  )}
+                  style={{ fontSize: "16px" }}
+                />
+                {endModalError && <p className="text-xs text-red-400">{endModalError}</p>}
+                {!endModalError && endInfo && (
+                  <p className="text-xs text-muted-foreground">{endInfo}</p>
+                )}
+              </div>
+              {tripsToCancel > 0 ? (
+                <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/30 text-sm text-orange-300">
+                  ⚠️ {tripsToCancel} trajet{tripsToCancel > 1 ? "s" : ""} planifié{tripsToCancel > 1 ? "s" : ""} seront annulés
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-sm text-green-300">
+                  ✅ Aucun trajet planifié à annuler
+                </div>
+              )}
+              <label className="flex items-start gap-3 cursor-pointer">
+                <Checkbox
+                  checked={generateFinalInvoice}
+                  onCheckedChange={v => setGenerateFinalInvoice(!!v)}
+                  className="mt-0.5"
+                />
+                <span className="text-sm text-foreground leading-snug">
+                  Générer une facture finale pour les trajets réalisés jusqu&apos;à cette date
+                </span>
+              </label>
+              <p className="text-xs text-red-400/80">
+                ⚠️ Cette action est irréversible. Les trajets planifiés après la date d&apos;arrêt seront annulés.
+              </p>
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => setShowEndModal(false)}
+                  disabled={isEnding}
+                  className="flex-1 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-muted-foreground hover:border-gold/20 transition-colors disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => void handleConfirmEnd()}
+                  disabled={isEnding}
+                  className="flex-1 py-3 rounded-xl bg-red-500/20 border border-red-500/40 text-sm font-semibold text-red-300 hover:bg-red-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isEnding && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Confirmer la résiliation
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Modale — Générer une facture */}
+      {showGenerateInvoice && (() => {
+        const previewTrips = trips.filter(t =>
+          t.status === "completed" &&
+          t.trip_date >= invoicePeriodStart &&
+          t.trip_date <= invoicePeriodEnd
+        )
+        const previewAmount = previewTrips.length * (contract.price_per_trip ?? 0)
+        return (
+          <div className="fixed inset-0 z-[200] bg-black/70 flex items-end" onClick={() => setShowGenerateInvoice(false)}>
+            <div className="w-full bg-[#1a1a1a] rounded-t-3xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
+              <div className="w-12 h-1 bg-white/20 rounded-full mx-auto" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gold/10 border border-gold/30 flex items-center justify-center flex-shrink-0">
+                  <FileText className="h-5 w-5 text-gold" />
+                </div>
+                <p className="text-base font-bold text-foreground">Générer une facture</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Du</label>
+                  <input
+                    type="date"
+                    value={invoicePeriodStart}
+                    max={invoicePeriodEnd}
+                    onChange={e => setInvoicePeriodStart(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50"
+                    style={{ fontSize: "16px" }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Au</label>
+                  <input
+                    type="date"
+                    value={invoicePeriodEnd}
+                    min={invoicePeriodStart}
+                    max={today}
+                    onChange={e => setInvoicePeriodEnd(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50"
+                    style={{ fontSize: "16px" }}
+                  />
+                </div>
+              </div>
+              <div className="px-4 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 space-y-1">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">Aperçu</p>
+                <p className="text-sm text-foreground">
+                  {previewTrips.length} trajet{previewTrips.length !== 1 ? "s" : ""} réalisé{previewTrips.length !== 1 ? "s" : ""} sur cette période
+                </p>
+                <p className="text-base font-bold text-gold">{previewAmount.toFixed(2)} €</p>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => setShowGenerateInvoice(false)}
+                  className="flex-1 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-muted-foreground hover:border-gold/20 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => {
+                    toast("Fonctionnalité de facturation en cours d'implémentation", {
+                      description: "Disponible à l'Étape 6.",
+                    })
+                    setShowGenerateInvoice(false)
+                  }}
+                  className="flex-1 py-3 rounded-xl bg-gold text-black text-sm font-semibold hover:bg-gold/90 transition-colors active:scale-95"
+                >
+                  Générer
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Modal annulation — qui annule ? */}
       {cancelTripId && (
