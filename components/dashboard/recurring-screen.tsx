@@ -37,6 +37,7 @@ interface RecurringContract {
   recurrence_type: string
   price_per_trip: number | null
   billing_mode: string
+  billing_frequency: "monthly" | "weekly" | "manual"
   start_date: string
   end_date: string | null
   no_end_date: boolean
@@ -97,9 +98,9 @@ const COUNTRY_LABELS: Record<string, string> = {
 }
 
 const BILLING_LABELS: Record<BillingMode, string> = {
-  per_trip: "Un BC par trajet",
-  monthly_invoice: "Facture groupée mensuelle",
-  monthly_summary: "Bon mensuel récapitulatif",
+  per_trip: "Bon de réservation par trajet",
+  monthly_invoice: "Facture groupée",
+  monthly_summary: "Bon récapitulatif",
 }
 
 const RECURRENCE_LABELS: Record<RecurrenceType, string> = {
@@ -260,6 +261,7 @@ function CreateRecurringContract({ onBack, onSuccess }: {
   // Step 1 — tarif
   const [pricePerTrip, setPricePerTrip] = useState("")
   const [billingMode, setBillingMode] = useState<BillingMode>("monthly_invoice")
+  const [billingFrequency, setBillingFrequency] = useState<"monthly" | "weekly" | "manual">("monthly")
 
   // Step 1 — période
   const [startDate, setStartDate] = useState("")
@@ -594,6 +596,7 @@ function CreateRecurringContract({ onBack, onSuccess }: {
         vehicle_id: selectedVehicleId || null,
         price_per_trip: parseFloat(pricePerTrip),
         billing_mode: billingMode,
+        billing_frequency: billingFrequency,
         start_date: startDate,
         end_date: openEnded ? null : (endDate || null),
         no_end_date: openEnded,
@@ -978,12 +981,12 @@ function CreateRecurringContract({ onBack, onSuccess }: {
 
               <div className="space-y-2">
                 <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                  Mode de facturation <span className="text-red-500">*</span>
+                  Type de document <span className="text-red-500">*</span>
                 </label>
                 {([
-                  { value: "per_trip", label: "Un BC par trajet", desc: "Chaque course génère un bon de réservation" },
-                  { value: "monthly_invoice", label: "Facture groupée mensuelle", desc: "Tous les trajets du mois = 1 facture" },
-                  { value: "monthly_summary", label: "Bon mensuel récapitulatif", desc: "1 bon listant tous les trajets et horaires" },
+                  { value: "per_trip", label: "Bon de réservation par trajet", desc: "Chaque course génère un bon de réservation" },
+                  { value: "monthly_invoice", label: "Facture groupée", desc: "Tous les trajets = 1 facture (fréquence au choix)" },
+                  { value: "monthly_summary", label: "Bon récapitulatif", desc: "1 bon listant tous les trajets et horaires" },
                 ] as const).map(opt => (
                   <button
                     key={opt.value}
@@ -1009,6 +1012,45 @@ function CreateRecurringContract({ onBack, onSuccess }: {
                   </button>
                 ))}
               </div>
+
+              {billingMode !== "per_trip" && (
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Fréquence de facturation <span className="text-red-500">*</span>
+                </label>
+                {([
+                  { value: "monthly", label: "Automatique (1er du mois)", desc: "Document généré automatiquement le 1er de chaque mois" },
+                  { value: "weekly",  label: "Automatique (chaque lundi)", desc: "Document généré automatiquement chaque début de semaine" },
+                  { value: "manual",  label: "Manuelle uniquement", desc: "Vous générez le document quand vous voulez" },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setBillingFrequency(opt.value)}
+                    className={cn(
+                      "w-full flex items-start gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors",
+                      billingFrequency === opt.value
+                        ? "bg-gold/10 border-gold/40"
+                        : "bg-[#242424] border-onyx-border/30 hover:border-gold/20"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center",
+                      billingFrequency === opt.value ? "border-gold" : "border-muted-foreground/40"
+                    )}>
+                      {billingFrequency === opt.value && <div className="w-2 h-2 rounded-full bg-gold" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                      <p className="text-[10px] text-muted-foreground">{opt.desc}</p>
+                    </div>
+                  </button>
+                ))}
+                <p className="text-[10px] text-muted-foreground pt-1">
+                  💡 Vous pouvez toujours générer un document manuellement depuis le détail du contrat.
+                </p>
+              </div>
+              )}
             </Section>
 
             <Section title="Période" icon={User}>
@@ -1481,7 +1523,23 @@ function CreateRecurringContract({ onBack, onSuccess }: {
 
             <Section title="Tarif & Facturation" icon={Euro}>
               <RecapRow label="Prix / trajet" value={`${parseFloat(pricePerTrip).toFixed(2)} €`} />
-              <RecapRow label="Facturation" value={BILLING_LABELS[billingMode]} />
+              {billingMode === "per_trip" ? (
+                <RecapRow label="Facturation" value="Par trajet" />
+              ) : (
+                <>
+                  <RecapRow label="Type de document" value={BILLING_LABELS[billingMode]} />
+                  <RecapRow
+                    label="Fréquence"
+                    value={
+                      billingFrequency === "monthly"
+                        ? "Automatique (1er du mois)"
+                        : billingFrequency === "weekly"
+                          ? "Automatique (chaque lundi)"
+                          : "Manuelle uniquement"
+                    }
+                  />
+                </>
+              )}
             </Section>
 
             <Section title="Récurrence" icon={RefreshCw}>
@@ -1746,7 +1804,25 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
           {contract.price_per_trip != null && (
             <RecapRow label="Prix / trajet" value={`${contract.price_per_trip.toFixed(2)} €`} />
           )}
-          <RecapRow label="Facturation" value={BILLING_LABELS[contract.billing_mode as BillingMode] ?? contract.billing_mode} />
+          {contract.billing_mode === "per_trip" ? (
+            <RecapRow label="Facturation" value="Par trajet" />
+          ) : (
+            <>
+              <RecapRow label="Type de document" value={BILLING_LABELS[contract.billing_mode as BillingMode] ?? contract.billing_mode} />
+              {contract.billing_frequency && (
+                <RecapRow
+                  label="Fréquence"
+                  value={
+                    contract.billing_frequency === "monthly"
+                      ? "Automatique (1er du mois)"
+                      : contract.billing_frequency === "weekly"
+                        ? "Automatique (chaque lundi)"
+                        : "Manuelle uniquement"
+                  }
+                />
+              )}
+            </>
+          )}
         </Section>
 
         {/* Statistiques */}

@@ -156,7 +156,7 @@ export function QuickAddClientModal({ open, onClose, clients, onClientCreated }:
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: "100%", opacity: 0 }}
             transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-            className="relative w-full max-w-md bg-background rounded-t-3xl sm:rounded-3xl border border-onyx-border/50 overflow-hidden max-h-[90vh]"
+            className="relative w-full max-w-md bg-background rounded-t-3xl sm:rounded-3xl border border-onyx-border/50 overflow-hidden max-h-[90vh] flex flex-col"
           >
             {/* Handle mobile */}
             <div className="flex justify-center pt-3 sm:hidden">
@@ -187,7 +187,7 @@ export function QuickAddClientModal({ open, onClose, clients, onClientCreated }:
             <div className="mx-5 h-px bg-onyx-border/30" />
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto max-h-[calc(90vh-110px)]">
+            <form id="quick-add-form" onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
 
               {/* Type selector */}
               <div>
@@ -364,30 +364,32 @@ export function QuickAddClientModal({ open, onClose, clients, onClientCreated }:
                 />
               </div>
 
-              {/* Actions */}
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex-1 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-muted-foreground hover:border-gold/20 transition-colors"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={!canSubmit || isSubmitting}
-                  className={cn(
-                    "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all",
-                    canSubmit && !isSubmitting
-                      ? "bg-gold text-black hover:bg-gold/90"
-                      : "bg-onyx-card border border-onyx-border/50 text-muted-foreground cursor-not-allowed"
-                  )}
-                >
-                  {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Créer
-                </button>
-              </div>
             </form>
+
+            {/* Actions — hors zone scrollable */}
+            <div className="px-5 pb-5 pt-3 border-t border-onyx-border/20 flex gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-muted-foreground hover:border-gold/20 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                form="quick-add-form"
+                disabled={!canSubmit || isSubmitting}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all",
+                  canSubmit && !isSubmitting
+                    ? "bg-gold text-black hover:bg-gold/90"
+                    : "bg-onyx-card border border-onyx-border/50 text-muted-foreground cursor-not-allowed"
+                )}
+              >
+                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                Créer
+              </button>
+            </div>
           </motion.div>
         </motion.div>
       )}
