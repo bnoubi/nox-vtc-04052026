@@ -1191,8 +1191,8 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNaviga
                   <Lock className="h-3 w-3 text-gold absolute -top-1 -right-1" />
                 </div>
                 <div className="flex-1 text-left">
-                  <p className="font-semibold text-sm text-foreground">Trajet récurrent</p>
-                  <p className="text-[11px] text-muted-foreground">Courses régulières planifiées — Pro & Premium</p>
+                  <p className="font-semibold text-sm text-foreground">Trajets récurrents</p>
+                  <p className="text-[11px] text-muted-foreground">Gérez vos courses régulières automatiquement — Pro & Premium</p>
                 </div>
               </button>
             ) : (
@@ -1207,8 +1207,8 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNaviga
                   <RefreshCw className="h-5 w-5 text-gold" />
                 </div>
                 <div className="flex-1 text-left">
-                  <p className="font-semibold text-sm text-foreground">Trajet récurrent</p>
-                  <p className="text-[11px] text-muted-foreground">Courses régulières planifiées automatiquement</p>
+                  <p className="font-semibold text-sm text-foreground">Trajets récurrents</p>
+                  <p className="text-[11px] text-muted-foreground">Gérez vos courses régulières automatiquement</p>
                 </div>
               </button>
             )}

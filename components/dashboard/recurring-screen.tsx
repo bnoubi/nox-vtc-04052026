@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { createPortal } from "react-dom"
 import {
   ChevronLeft, ChevronRight, Plus, RefreshCw, Loader2,
   Search, Building2, Users, X, MapPin, Navigation,
@@ -70,7 +71,6 @@ interface DaySchedule {
   returnTime: string
 }
 
-type BillingMode = "per_trip" | "monthly_invoice" | "monthly_summary"
 type RecurrenceType = "fixed" | "variable" | "custom"
 
 interface TripPreview {
@@ -95,12 +95,6 @@ const COUNTRY_LABELS: Record<string, string> = {
   BE: "🇧🇪 Belgique",
   CH: "🇨🇭 Suisse",
   LU: "🇱🇺 Luxembourg",
-}
-
-const BILLING_LABELS: Record<BillingMode, string> = {
-  per_trip: "Bon de réservation par trajet",
-  monthly_invoice: "Facture groupée",
-  monthly_summary: "Bon récapitulatif",
 }
 
 const RECURRENCE_LABELS: Record<RecurrenceType, string> = {
@@ -260,7 +254,6 @@ function CreateRecurringContract({ onBack, onSuccess }: {
 
   // Step 1 — tarif
   const [pricePerTrip, setPricePerTrip] = useState("")
-  const [billingMode, setBillingMode] = useState<BillingMode>("monthly_invoice")
   const [billingFrequency, setBillingFrequency] = useState<"monthly" | "weekly" | "manual">("monthly")
 
   // Step 1 — période
@@ -595,7 +588,6 @@ function CreateRecurringContract({ onBack, onSuccess }: {
         driver_id: selectedDriverId || null,
         vehicle_id: selectedVehicleId || null,
         price_per_trip: parseFloat(pricePerTrip),
-        billing_mode: billingMode,
         billing_frequency: billingFrequency,
         start_date: startDate,
         end_date: openEnded ? null : (endDate || null),
@@ -981,41 +973,6 @@ function CreateRecurringContract({ onBack, onSuccess }: {
 
               <div className="space-y-2">
                 <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                  Type de document <span className="text-red-500">*</span>
-                </label>
-                {([
-                  { value: "per_trip", label: "Bon de réservation par trajet", desc: "Chaque course génère un bon de réservation" },
-                  { value: "monthly_invoice", label: "Facture groupée", desc: "Tous les trajets = 1 facture (fréquence au choix)" },
-                  { value: "monthly_summary", label: "Bon récapitulatif", desc: "1 bon listant tous les trajets et horaires" },
-                ] as const).map(opt => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setBillingMode(opt.value)}
-                    className={cn(
-                      "w-full flex items-start gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors",
-                      billingMode === opt.value
-                        ? "bg-gold/10 border-gold/40"
-                        : "bg-[#242424] border-onyx-border/30 hover:border-gold/20"
-                    )}
-                  >
-                    <div className={cn(
-                      "w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center",
-                      billingMode === opt.value ? "border-gold" : "border-muted-foreground/40"
-                    )}>
-                      {billingMode === opt.value && <div className="w-2 h-2 rounded-full bg-gold" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{opt.label}</p>
-                      <p className="text-[10px] text-muted-foreground">{opt.desc}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              {billingMode !== "per_trip" && (
-              <div className="space-y-2">
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                   Fréquence de facturation <span className="text-red-500">*</span>
                 </label>
                 {([
@@ -1050,7 +1007,6 @@ function CreateRecurringContract({ onBack, onSuccess }: {
                   💡 Vous pouvez toujours générer un document manuellement depuis le détail du contrat.
                 </p>
               </div>
-              )}
             </Section>
 
             <Section title="Période" icon={User}>
@@ -1523,23 +1479,16 @@ function CreateRecurringContract({ onBack, onSuccess }: {
 
             <Section title="Tarif & Facturation" icon={Euro}>
               <RecapRow label="Prix / trajet" value={`${parseFloat(pricePerTrip).toFixed(2)} €`} />
-              {billingMode === "per_trip" ? (
-                <RecapRow label="Facturation" value="Par trajet" />
-              ) : (
-                <>
-                  <RecapRow label="Type de document" value={BILLING_LABELS[billingMode]} />
-                  <RecapRow
-                    label="Fréquence"
-                    value={
-                      billingFrequency === "monthly"
-                        ? "Automatique (1er du mois)"
-                        : billingFrequency === "weekly"
-                          ? "Automatique (chaque lundi)"
-                          : "Manuelle uniquement"
-                    }
-                  />
-                </>
-              )}
+              <RecapRow
+                label="Fréquence"
+                value={
+                  billingFrequency === "monthly"
+                    ? "Automatique (1er du mois)"
+                    : billingFrequency === "weekly"
+                      ? "Automatique (chaque lundi)"
+                      : "Manuelle uniquement"
+                }
+              />
             </Section>
 
             <Section title="Récurrence" icon={RefreshCw}>
@@ -1804,24 +1753,17 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
           {contract.price_per_trip != null && (
             <RecapRow label="Prix / trajet" value={`${contract.price_per_trip.toFixed(2)} €`} />
           )}
-          {contract.billing_mode === "per_trip" ? (
-            <RecapRow label="Facturation" value="Par trajet" />
-          ) : (
-            <>
-              <RecapRow label="Type de document" value={BILLING_LABELS[contract.billing_mode as BillingMode] ?? contract.billing_mode} />
-              {contract.billing_frequency && (
-                <RecapRow
-                  label="Fréquence"
-                  value={
-                    contract.billing_frequency === "monthly"
-                      ? "Automatique (1er du mois)"
-                      : contract.billing_frequency === "weekly"
-                        ? "Automatique (chaque lundi)"
-                        : "Manuelle uniquement"
-                  }
-                />
-              )}
-            </>
+          {contract.billing_frequency && (
+            <RecapRow
+              label="Fréquence"
+              value={
+                contract.billing_frequency === "monthly"
+                  ? "Automatique (1er du mois)"
+                  : contract.billing_frequency === "weekly"
+                    ? "Automatique (chaque lundi)"
+                    : "Manuelle uniquement"
+              }
+            />
           )}
         </Section>
 
@@ -1984,13 +1926,6 @@ export function RecurringScreen({ onBack }: RecurringScreenProps) {
           <h1 className="text-base font-bold text-foreground">Trajets Récurrents</h1>
           <p className="text-[10px] text-muted-foreground">Courses régulières planifiées</p>
         </div>
-        <button
-          onClick={() => setShowCreateContract(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gold text-black text-[11px] font-bold hover:bg-gold/90 transition-colors"
-        >
-          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-          Nouveau contrat
-        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 pb-20">
@@ -2053,8 +1988,16 @@ export function RecurringScreen({ onBack }: RecurringScreenProps) {
         )}
       </div>
 
-      {showCreateContract && (
-        <div className="absolute inset-0 z-50 bg-background overflow-y-auto">
+      {/* Bouton flottant "+" */}
+      <button
+        onClick={() => setShowCreateContract(true)}
+        className="fixed right-5 bottom-28 z-30 w-12 h-12 rounded-full bg-gold flex items-center justify-center gold-glow active:scale-95 transition-all"
+      >
+        <Plus className="h-5 w-5 text-black" strokeWidth={2} />
+      </button>
+
+      {showCreateContract && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-background overflow-y-auto">
           <CreateRecurringContract
             onBack={() => setShowCreateContract(false)}
             onSuccess={() => {
@@ -2062,11 +2005,12 @@ export function RecurringScreen({ onBack }: RecurringScreenProps) {
               void loadContracts()
             }}
           />
-        </div>
+        </div>,
+        document.body
       )}
 
-      {selectedContract && (
-        <div className="absolute inset-0 z-50 bg-background overflow-y-auto">
+      {selectedContract && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-background overflow-y-auto">
           <ContractDetailScreen
             contract={selectedContract}
             onBack={() => setSelectedContract(null)}
@@ -2075,7 +2019,8 @@ export function RecurringScreen({ onBack }: RecurringScreenProps) {
               setContracts(prev => prev.map(c => c.id === updated.id ? updated : c))
             }}
           />
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
