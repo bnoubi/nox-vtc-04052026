@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from "react"
 import {
   ChevronLeft, ChevronRight, Plus, RefreshCw, Loader2,
   Search, Building2, Users, X, MapPin, Navigation,
-  Car, Euro, User, FileText,
+  Car, Euro, User, FileText, MoreHorizontal, Pause, Play,
+  CheckCircle2, AlertCircle,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
@@ -20,12 +21,43 @@ interface RecurringContract {
   id: string
   numero: string | null
   label: string | null
+  notes: string | null
   passenger_name: string | null
+  passenger_phone: string | null
+  client_id: string | null
   departure: string
   arrival: string
   outbound_days: number[]
-  outbound_time: string
-  status: "active" | "paused" | "ended"
+  outbound_time: string | null
+  return_enabled: boolean
+  return_days: number[] | null
+  return_time: string | null
+  return_departure: string | null
+  return_arrival: string | null
+  recurrence_type: string
+  price_per_trip: number | null
+  billing_mode: string
+  start_date: string
+  end_date: string | null
+  no_end_date: boolean
+  exclude_holidays: boolean
+  country_code: string
+  excluded_dates: string[] | null
+  driver_id: string | null
+  vehicle_id: string | null
+  distance_km: number | null
+  status: "active" | "paused" | "ended" | "cancelled"
+  created_at: string
+}
+
+interface RecurringTrip {
+  id: string
+  contract_id: string
+  trip_date: string
+  trip_time: string | null
+  direction: "outbound" | "return"
+  status: "upcoming" | "confirmed" | "completed" | "cancelled" | "missed"
+  cancelled_by: string | null
   created_at: string
 }
 
@@ -83,9 +115,17 @@ function formatRecurrence(days: number[], time: string): string {
 }
 
 const statusConfig = {
-  active: { label: "Actif", className: "bg-green-500/15 text-green-400 border-green-500/30" },
-  paused: { label: "En pause", className: "bg-orange-500/15 text-orange-400 border-orange-500/30" },
-  ended: { label: "Terminé", className: "bg-[#2a2a2a] text-muted-foreground border-onyx-border/30" },
+  active:    { label: "Actif",      className: "bg-green-500/15 text-green-400 border-green-500/30" },
+  paused:    { label: "En pause",   className: "bg-orange-500/15 text-orange-400 border-orange-500/30" },
+  ended:     { label: "Terminé",    className: "bg-[#2a2a2a] text-muted-foreground border-onyx-border/30" },
+  cancelled: { label: "Résilié",    className: "bg-red-500/15 text-red-400 border-red-500/30" },
+}
+
+function formatDate(dateStr: string): string {
+  if (!dateStr) return "—"
+  const d = new Date(dateStr + "T00:00:00")
+  const name = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"][d.getDay()]
+  return `${name} ${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`
 }
 
 const today = new Date().toISOString().split("T")[0]
@@ -1532,6 +1572,304 @@ function CreateRecurringContract({ onBack, onSuccess }: {
   )
 }
 
+// ── ContractDetailScreen ──────────────────────────────────────────────────────
+
+const tripStatusConfig = {
+  upcoming:  { label: "À venir",     cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+  confirmed: { label: "Confirmé",    cls: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
+  completed: { label: "Réalisé",     cls: "bg-green-500/15 text-green-400 border-green-500/30" },
+  cancelled: { label: "Annulé",      cls: "bg-red-500/15 text-red-400 border-red-500/30" },
+  missed:    { label: "Non réalisé", cls: "bg-orange-500/15 text-orange-400 border-orange-500/30" },
+}
+
+function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
+  contract: RecurringContract
+  onBack: () => void
+  onContractUpdated: (updated: RecurringContract) => void
+}) {
+  const supabase = createClient()
+  const { clients, drivers, vehicles } = useNox()
+
+  const [trips, setTrips] = useState<RecurringTrip[]>([])
+  const [loadingTrips, setLoadingTrips] = useState(true)
+  const [showMenu, setShowMenu] = useState(false)
+  const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [openTripMenu, setOpenTripMenu] = useState<string | null>(null)
+  const [cancelTripId, setCancelTripId] = useState<string | null>(null)
+
+  useEffect(() => { void loadTrips() }, [contract.id]) // eslint-disable-line
+
+  async function loadTrips() {
+    setLoadingTrips(true)
+    const { data } = await supabase
+      .from("recurring_trips")
+      .select("*")
+      .eq("contract_id", contract.id)
+      .order("trip_date", { ascending: false })
+      .limit(30)
+    setTrips((data as RecurringTrip[]) ?? [])
+    setLoadingTrips(false)
+  }
+
+  async function updateContractStatus(newStatus: "active" | "paused" | "ended") {
+    setUpdatingStatus(true)
+    const { data, error } = await supabase
+      .from("recurring_contracts")
+      .update({ status: newStatus })
+      .eq("id", contract.id)
+      .select()
+      .single()
+    setUpdatingStatus(false)
+    setShowMenu(false)
+    if (!error && data) onContractUpdated(data as RecurringContract)
+  }
+
+  async function updateTripStatus(tripId: string, newStatus: RecurringTrip["status"], cancelledBy?: string) {
+    const patch: Record<string, string> = { status: newStatus }
+    if (cancelledBy) patch.cancelled_by = cancelledBy
+    const { data, error } = await supabase
+      .from("recurring_trips")
+      .update(patch)
+      .eq("id", tripId)
+      .select()
+      .single()
+    if (!error && data) {
+      setTrips(prev => prev.map(t => t.id === tripId ? (data as RecurringTrip) : t))
+    }
+    setOpenTripMenu(null)
+    setCancelTripId(null)
+  }
+
+  // Stats
+  const monthPrefix = new Date().toISOString().slice(0, 7)
+  const thisMonth = trips.filter(t => t.trip_date.startsWith(monthPrefix))
+  const completedMonth = thisMonth.filter(t => t.status === "completed").length
+  const cancelledMonth = thisMonth.filter(t => t.status === "cancelled").length
+  const billableMonth = completedMonth * (contract.price_per_trip ?? 0)
+  const completedTotal = trips.filter(t => t.status === "completed").length
+  const billableTotal = completedTotal * (contract.price_per_trip ?? 0)
+
+  const client = clients?.find(c => c.id === contract.client_id)
+  const clientName = client
+    ? client.type === "particulier"
+      ? `${client.prenom ?? ""} ${client.nom ?? ""}`.trim()
+      : (client.raisonSociale ?? "")
+    : (contract.passenger_name ?? "—")
+
+  const selDriver = drivers?.find(d => d.id === contract.driver_id)
+  const driverName = selDriver?.name ?? null
+
+  const selVehicle = vehicles?.find(v => v.id === contract.vehicle_id)
+  const vehicleName = selVehicle
+    ? `${selVehicle.marque ? `${selVehicle.marque} ` : ""}${selVehicle.modele} — ${selVehicle.immatriculation}`.trim()
+    : null
+
+  function recurrenceSummary() {
+    const days = [...(contract.outbound_days ?? [])].sort((a, b) => a - b).map(d => DAY_NAMES[d - 1] ?? "?").join(", ")
+    if (contract.recurrence_type === "fixed") return `${days} à ${contract.outbound_time ?? "?"}`
+    if (contract.recurrence_type === "variable") return `Horaires variables — ${days}`
+    return `Aller/Retour dissociés — ${days}`
+  }
+
+  const sCfg = statusConfig[contract.status as keyof typeof statusConfig] ?? statusConfig.ended
+
+  return (
+    <div className="flex flex-col min-h-full bg-background">
+
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-onyx-border/30 bg-[#0d0d0d] sticky top-0 z-10">
+        <button onClick={onBack} className="p-2 -ml-2 rounded-lg hover:bg-white/5">
+          <ChevronLeft className="h-5 w-5 text-foreground" />
+        </button>
+        <div className="flex-1 min-w-0">
+          {contract.numero && (
+            <p className="text-[9px] font-mono text-gold/60 uppercase tracking-wider">{contract.numero}</p>
+          )}
+          <h1 className="text-base font-bold text-foreground truncate leading-tight">{contract.label || "Contrat sans nom"}</h1>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border", sCfg.className)}>{sCfg.label}</span>
+          <div className="relative">
+            <button onClick={() => setShowMenu(v => !v)} className="p-2 rounded-lg hover:bg-white/5 text-muted-foreground">
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+            {showMenu && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+                <div className="absolute right-0 top-full mt-1 w-52 bg-[#1a1a1a] border border-onyx-border/30 rounded-xl overflow-hidden shadow-xl z-20">
+                  {contract.status === "active" && (
+                    <button onClick={() => void updateContractStatus("paused")} disabled={updatingStatus}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-white/5 text-left disabled:opacity-50">
+                      <Pause className="h-4 w-4 text-orange-400" />
+                      Mettre en pause
+                    </button>
+                  )}
+                  {contract.status === "paused" && (
+                    <button onClick={() => void updateContractStatus("active")} disabled={updatingStatus}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-white/5 text-left disabled:opacity-50">
+                      <Play className="h-4 w-4 text-green-400" />
+                      Reprendre
+                    </button>
+                  )}
+                  {contract.status !== "ended" && contract.status !== "cancelled" && (
+                    <button onClick={() => void updateContractStatus("ended")} disabled={updatingStatus}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-white/5 text-left border-t border-onyx-border/20 disabled:opacity-50">
+                      <X className="h-4 w-4" />
+                      Résilier le contrat
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-32">
+
+        {/* Informations */}
+        <Section title="Informations" icon={FileText}>
+          <RecapRow label="Client" value={clientName} />
+          {contract.passenger_name && contract.passenger_name !== clientName && (
+            <RecapRow label="Passager" value={contract.passenger_name} />
+          )}
+          {contract.passenger_phone && <RecapRow label="Tél." value={contract.passenger_phone} />}
+          {contract.notes && <RecapRow label="Notes" value={contract.notes} />}
+          <RecapRow label="Départ" value={contract.departure} />
+          <RecapRow label="Arrivée" value={contract.arrival} />
+          {contract.distance_km != null && <RecapRow label="Distance" value={`${contract.distance_km} km`} />}
+          {driverName && <RecapRow label="Chauffeur" value={driverName} />}
+          {vehicleName && <RecapRow label="Véhicule" value={vehicleName} />}
+          <RecapRow label="Récurrence" value={recurrenceSummary()} />
+          <RecapRow label="Début" value={formatDate(contract.start_date)} />
+          <RecapRow label="Fin" value={contract.no_end_date ? "Contrat ouvert" : contract.end_date ? formatDate(contract.end_date) : "—"} />
+          {contract.price_per_trip != null && (
+            <RecapRow label="Prix / trajet" value={`${contract.price_per_trip.toFixed(2)} €`} />
+          )}
+          <RecapRow label="Facturation" value={BILLING_LABELS[contract.billing_mode as BillingMode] ?? contract.billing_mode} />
+        </Section>
+
+        {/* Statistiques */}
+        <Section title="Ce mois-ci" icon={Euro}>
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { label: "Réalisés",     value: String(completedMonth), sub: "trajets" },
+              { label: "Annulés",      value: String(cancelledMonth), sub: "trajets" },
+              { label: "Facturable",   value: `${billableMonth.toFixed(2)} €`, sub: "ce mois" },
+              { label: "Total cumulé", value: `${billableTotal.toFixed(2)} €`, sub: `${completedTotal} trajet${completedTotal !== 1 ? "s" : ""}` },
+            ]).map(stat => (
+              <div key={stat.label} className="p-3 rounded-xl bg-[#242424] border border-onyx-border/30">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{stat.label}</p>
+                <p className="text-lg font-bold text-foreground mt-0.5">{stat.value}</p>
+                <p className="text-[10px] text-muted-foreground">{stat.sub}</p>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* Trajets */}
+        <Section title="Trajets" icon={Navigation}>
+          {loadingTrips ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-5 w-5 text-gold animate-spin" />
+            </div>
+          ) : trips.length === 0 ? (
+            <div className="py-4 text-center space-y-1.5">
+              <p className="text-sm text-muted-foreground">Aucun trajet généré pour le moment.</p>
+              <p className="text-[10px] text-muted-foreground/60">Les trajets sont générés automatiquement chaque jour à 6h00.</p>
+            </div>
+          ) : (
+            <div className="space-y-0">
+              {trips.map(trip => {
+                const tCfg = tripStatusConfig[trip.status] ?? tripStatusConfig.upcoming
+                const canAct = trip.status === "upcoming" || trip.status === "confirmed"
+                return (
+                  <div key={trip.id} className="flex items-center gap-3 py-2.5 border-b border-onyx-border/20 last:border-0">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-foreground font-medium">{formatDate(trip.trip_date)}</p>
+                        {trip.trip_time && (
+                          <span className="text-[11px] text-gold font-semibold">{trip.trip_time}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-muted-foreground">
+                          {trip.direction === "outbound" ? "Aller" : "Retour"}
+                        </span>
+                        {trip.status === "cancelled" && trip.cancelled_by && (
+                          <span className="text-[10px] text-muted-foreground/50">· {trip.cancelled_by}</span>
+                        )}
+                      </div>
+                    </div>
+                    <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0", tCfg.cls)}>
+                      {tCfg.label}
+                    </span>
+                    {canAct && (
+                      <div className="relative flex-shrink-0">
+                        <button
+                          onClick={() => setOpenTripMenu(openTripMenu === trip.id ? null : trip.id)}
+                          className="p-1.5 rounded-lg hover:bg-white/5 text-muted-foreground"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+                        {openTripMenu === trip.id && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setOpenTripMenu(null)} />
+                            <div className="absolute right-0 top-full mt-1 w-44 bg-[#1a1a1a] border border-onyx-border/30 rounded-xl overflow-hidden shadow-xl z-20">
+                              <button onClick={() => void updateTripStatus(trip.id, "completed")}
+                                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[12px] text-green-400 hover:bg-white/5 text-left">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Réalisé
+                              </button>
+                              <button onClick={() => { setOpenTripMenu(null); setCancelTripId(trip.id) }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[12px] text-red-400 hover:bg-white/5 text-left border-t border-onyx-border/20">
+                                <X className="h-3.5 w-3.5" />
+                                Annulé
+                              </button>
+                              <button onClick={() => void updateTripStatus(trip.id, "missed")}
+                                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[12px] text-orange-400 hover:bg-white/5 text-left border-t border-onyx-border/20">
+                                <AlertCircle className="h-3.5 w-3.5" />
+                                Non réalisé
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Section>
+      </div>
+
+      {/* Modal annulation — qui annule ? */}
+      {cancelTripId && (
+        <div className="fixed inset-0 z-[200] bg-black/70 flex items-end" onClick={() => setCancelTripId(null)}>
+          <div className="w-full bg-[#1a1a1a] rounded-t-3xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto" />
+            <p className="text-base font-bold text-foreground text-center">Qui annule ?</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => void updateTripStatus(cancelTripId, "cancelled", "Abonné")}
+                className="py-3.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm font-semibold text-foreground hover:border-red-500/40 active:scale-[0.98] transition-all">
+                Abonné
+              </button>
+              <button onClick={() => void updateTripStatus(cancelTripId, "cancelled", "Client")}
+                className="py-3.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm font-semibold text-foreground hover:border-red-500/40 active:scale-[0.98] transition-all">
+                Client
+              </button>
+            </div>
+            <button onClick={() => setCancelTripId(null)} className="w-full py-2.5 text-sm text-muted-foreground">
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── RecurringScreen ───────────────────────────────────────────────────────────
 
 interface RecurringScreenProps {
@@ -1543,6 +1881,7 @@ export function RecurringScreen({ onBack }: RecurringScreenProps) {
   const [contracts, setContracts] = useState<RecurringContract[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateContract, setShowCreateContract] = useState(false)
+  const [selectedContract, setSelectedContract] = useState<RecurringContract | null>(null)
 
   async function loadContracts() {
     setLoading(true)
@@ -1606,7 +1945,7 @@ export function RecurringScreen({ onBack }: RecurringScreenProps) {
           contracts.map(contract => {
             const cfg = statusConfig[contract.status] ?? statusConfig.ended
             return (
-              <div key={contract.id} className="p-4 rounded-2xl bg-[#1a1a1a] border border-onyx-border/30 space-y-2">
+              <div key={contract.id} onClick={() => setSelectedContract(contract)} className="p-4 rounded-2xl bg-[#1a1a1a] border border-onyx-border/30 space-y-2 cursor-pointer hover:border-gold/40 transition-colors">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="w-10 h-10 rounded-xl bg-gold/10 flex items-center justify-center flex-shrink-0">
@@ -1630,7 +1969,7 @@ export function RecurringScreen({ onBack }: RecurringScreenProps) {
                 </div>
                 <div className="pl-[52px] space-y-1">
                   <p className="text-[11px] text-muted-foreground truncate">{contract.departure} → {contract.arrival}</p>
-                  <p className="text-[11px] text-gold font-medium">{formatRecurrence(contract.outbound_days, contract.outbound_time)}</p>
+                  <p className="text-[11px] text-gold font-medium">{formatRecurrence(contract.outbound_days, contract.outbound_time ?? "")}</p>
                 </div>
               </div>
             )
@@ -1645,6 +1984,19 @@ export function RecurringScreen({ onBack }: RecurringScreenProps) {
             onSuccess={() => {
               setShowCreateContract(false)
               void loadContracts()
+            }}
+          />
+        </div>
+      )}
+
+      {selectedContract && (
+        <div className="absolute inset-0 z-50 bg-background overflow-y-auto">
+          <ContractDetailScreen
+            contract={selectedContract}
+            onBack={() => setSelectedContract(null)}
+            onContractUpdated={updated => {
+              setSelectedContract(updated)
+              setContracts(prev => prev.map(c => c.id === updated.id ? updated : c))
             }}
           />
         </div>
