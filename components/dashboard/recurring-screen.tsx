@@ -1982,11 +1982,16 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
     setIsGeneratingInvoice(true)
     try {
       let invoiceNumero: string
-      const { data: rpcData } = await supabase.rpc('generate_invoice_numero')
+      const { data: rpcData } = await supabase.rpc('generate_fac_tr_numero')
       if (typeof rpcData === 'string') {
         invoiceNumero = rpcData
       } else {
-        invoiceNumero = `FAC-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`
+        invoiceNumero = `FAC-TR-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`
+      }
+
+      const formatDateFR = (dateStr: string) => {
+        const [y, m, d] = dateStr.split('-')
+        return `${d}/${m}/${y}`
       }
 
       const ep = enterprise
@@ -1997,6 +2002,9 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
           : (selClient.raisonSociale ?? '')
         : (contract.passenger_name ?? 'Client inconnu')
 
+      const outboundCount = completedTrips.filter(t => t.direction === 'outbound').length
+      const returnCount = completedTrips.filter(t => t.direction === 'return').length
+
       const pricePerTrip = contract.price_per_trip ?? 0
       const totalHT = completedTrips.length * pricePerTrip
       const tva = invoiceOverrideFranchise ? 0 : totalHT * 0.10
@@ -2004,9 +2012,9 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
 
       const invoiceDoc: RecurringInvoiceDocument = {
         numero: invoiceNumero,
-        createdAt: new Date().toLocaleDateString('fr-FR'),
-        periodFrom: new Date(invoicePeriodStart + 'T00:00:00').toLocaleDateString('fr-FR'),
-        periodTo: new Date(invoicePeriodEnd + 'T00:00:00').toLocaleDateString('fr-FR'),
+        createdAt: formatDateFR(new Date().toISOString().split('T')[0]),
+        periodFrom: formatDateFR(invoicePeriodStart),
+        periodTo: formatDateFR(invoicePeriodEnd),
         contractNumero: contract.numero ?? '',
         contractLabel: contract.label ?? '',
         enterpriseName: ep.denomination || ep.name,
@@ -2018,6 +2026,12 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
         enterpriseTvaNumber: ep.tvaIntra || undefined,
         clientName,
         passengerName: contract.passenger_name ?? undefined,
+        departure: contract.departure,
+        arrival: contract.arrival,
+        returnDeparture: contract.return_departure ?? undefined,
+        returnArrival: contract.return_arrival ?? undefined,
+        outboundCount,
+        returnCount,
         trips: completedTrips.map(t => ({
           date: formatDate(t.trip_date),
           time: formatTime(t.trip_time),

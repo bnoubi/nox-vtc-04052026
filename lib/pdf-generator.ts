@@ -1162,6 +1162,12 @@ export interface RecurringInvoiceDocument {
   clientName: string
   passengerName?: string
   clientAddress?: string
+  departure: string
+  arrival: string
+  returnDeparture?: string
+  returnArrival?: string
+  outboundCount: number
+  returnCount: number
   trips: {
     date: string
     time: string
@@ -1184,7 +1190,7 @@ function _buildRecurringInvoiceDoc(d: RecurringInvoiceDocument): jsPDF {
   const gold = "#D4AF37"
   const dark = "#1A1A1A"
   const gray = "#71717A"
-  const lightGray = "#F4F4F5"
+  const lightGray = "#F5F5F5"
 
   // ── En-tête ──────────────────────────────────────────────────────────────
   doc.setFontSize(12)
@@ -1215,7 +1221,7 @@ function _buildRecurringInvoiceDoc(d: RecurringInvoiceDocument): jsPDF {
   }
   if (d.enterprisePhone) { doc.text(`Tél : ${d.enterprisePhone}`, 20, leftY); leftY += 4.5 }
 
-  const headerBotEstimate = Math.max(leftY, 45)
+  const headerBotEstimate = Math.max(leftY, 50)
   doc.setDrawColor("#dddddd")
   doc.setLineWidth(0.5)
   doc.line(105, 18, 105, headerBotEstimate)
@@ -1223,16 +1229,15 @@ function _buildRecurringInvoiceDoc(d: RecurringInvoiceDocument): jsPDF {
   doc.setFontSize(12)
   doc.setFont("helvetica", "bold")
   doc.setTextColor(dark)
-  doc.text("FACTURE", 190, 22, { align: "right" })
+  doc.text("FACTURE DE TRAJETS RÉCURRENTS", 190, 22, { align: "right" })
 
   doc.setFontSize(9)
   doc.setFont("helvetica", "normal")
   doc.setTextColor(gray)
   let rightY = 29
-  doc.text(`N° : ${d.numero}`, 190, rightY, { align: "right" }); rightY += 5
+  doc.text(`N° ${d.numero}`, 190, rightY, { align: "right" }); rightY += 5
   doc.text(`Date : ${d.createdAt}`, 190, rightY, { align: "right" }); rightY += 5
   doc.text(`Contrat : ${d.contractNumero} — ${d.contractLabel}`, 190, rightY, { align: "right" }); rightY += 5
-  doc.text(`Période : du ${d.periodFrom} au ${d.periodTo}`, 190, rightY, { align: "right" }); rightY += 5
 
   let currentY = Math.max(leftY, rightY) + 4
   doc.setDrawColor(230)
@@ -1240,13 +1245,27 @@ function _buildRecurringInvoiceDoc(d: RecurringInvoiceDocument): jsPDF {
   doc.line(20, currentY, 190, currentY)
   currentY += 6
 
+  // ── Encadré période ───────────────────────────────────────────────────────
+  doc.setFillColor(lightGray)
+  doc.setDrawColor("#E0E0E0")
+  doc.setLineWidth(0.3)
+  doc.rect(20, currentY, 170, 12, "FD")
+  doc.setFontSize(9)
+  doc.setFont("helvetica", "normal")
+  doc.setTextColor(dark)
+  doc.text(
+    `Période de facturation : du ${d.periodFrom} au ${d.periodTo}`,
+    105, currentY + 7.5,
+    { align: "center" }
+  )
+  currentY += 18
+
   // ── Bloc client ───────────────────────────────────────────────────────────
   doc.setFontSize(9)
   doc.setFont("helvetica", "bold")
   doc.setTextColor(dark)
   doc.text("FACTURÉ À :", 20, currentY)
   currentY += 5
-  doc.setFont("helvetica", "bold")
   doc.text(d.clientName, 20, currentY)
   doc.setFont("helvetica", "normal")
   currentY += 5
@@ -1262,42 +1281,104 @@ function _buildRecurringInvoiceDoc(d: RecurringInvoiceDocument): jsPDF {
   }
   currentY += 6
 
-  // ── Tableau des prestations ───────────────────────────────────────────────
-  doc.setFillColor(lightGray)
-  doc.rect(20, currentY, 170, 8, "F")
-  doc.setFontSize(8)
+  // ── Section TRAJET ────────────────────────────────────────────────────────
+  doc.setFontSize(9)
   doc.setFont("helvetica", "bold")
   doc.setTextColor(dark)
-  doc.text("Date", 24, currentY + 5.5)
-  doc.text("Trajet", 54, currentY + 5.5)
-  doc.text("Dir.", 142, currentY + 5.5)
-  doc.text("Montant", 185, currentY + 5.5, { align: "right" })
-  currentY += 10
+  doc.text("TRAJET", 20, currentY)
+  currentY += 5
+
+  doc.setFontSize(8.5)
+  doc.setFont("helvetica", "normal")
+  doc.setTextColor(gray)
+  doc.text("Départ :", 20, currentY)
+  doc.setTextColor(dark)
+  const depLines = doc.splitTextToSize(d.departure, 130) as string[]
+  doc.text(depLines, 44, currentY)
+  currentY += Math.max(5, depLines.length * 4.5)
+  doc.setTextColor(gray)
+  doc.text("Arrivée :", 20, currentY)
+  doc.setTextColor(dark)
+  const arrLines = doc.splitTextToSize(d.arrival, 130) as string[]
+  doc.text(arrLines, 44, currentY)
+  currentY += Math.max(5, arrLines.length * 4.5)
+  doc.setTextColor(gray)
+  doc.text("Prix unitaire :", 20, currentY)
+  doc.setTextColor(dark)
+  doc.text(`${d.pricePerTrip.toFixed(2)} €`, 55, currentY)
+  currentY += 7
+
+  if (d.returnCount > 0) {
+    doc.setFontSize(9)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(dark)
+    doc.text("TRAJET RETOUR", 20, currentY)
+    currentY += 5
+    doc.setFontSize(8.5)
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(gray)
+    doc.text("Départ :", 20, currentY)
+    doc.setTextColor(dark)
+    const rdepLines = doc.splitTextToSize(d.returnDeparture ?? d.arrival, 130) as string[]
+    doc.text(rdepLines, 44, currentY)
+    currentY += Math.max(5, rdepLines.length * 4.5)
+    doc.setTextColor(gray)
+    doc.text("Arrivée :", 20, currentY)
+    doc.setTextColor(dark)
+    const rarrLines = doc.splitTextToSize(d.returnArrival ?? d.departure, 130) as string[]
+    doc.text(rarrLines, 44, currentY)
+    currentY += Math.max(5, rarrLines.length * 4.5) + 2
+  }
+
+  // ── Tableau simplifié ─────────────────────────────────────────────────────
+  // Colonnes (mm, base x=20): Désignation 85 | Qté 25 | Prix unitaire 35 | Montant 25
+  const COL = [20, 105, 130, 165, 190] // x positions (left edge, then right-aligned at 190)
+
+  if (currentY + 30 > 278) { doc.addPage(); currentY = 20 }
+
+  doc.setFillColor(dark)
+  doc.rect(20, currentY, 170, 9, "F")
+  doc.setFontSize(8.5)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor("#FFFFFF")
+  doc.text("Désignation", COL[0] + 3, currentY + 6)
+  doc.text("Qté", COL[1] + 3, currentY + 6)
+  doc.text("Prix unitaire", COL[2] + 3, currentY + 6)
+  doc.text("Montant", COL[4] - 3, currentY + 6, { align: "right" })
+  currentY += 12
 
   doc.setFont("helvetica", "normal")
-  doc.setFontSize(8)
-  for (const t of d.trips) {
-    if (currentY + 10 > 270) { doc.addPage(); currentY = 20 }
-    const trajet = `${t.departure} → ${t.arrival}`
-    const trajetLines = doc.splitTextToSize(trajet, 83) as string[]
-    const rowH = Math.max(7, trajetLines.length * 4.5 + 3)
-    doc.setTextColor(dark)
-    doc.text(`${t.date} ${t.time}`, 24, currentY + 5)
-    doc.text(trajetLines, 54, currentY + 5)
-    doc.setTextColor(gray)
-    doc.text(t.direction, 142, currentY + 5)
-    doc.setTextColor(dark)
-    doc.text(fmtMontant(t.price), 185, currentY + 5, { align: "right" })
+  doc.setFontSize(9)
+  doc.setTextColor(dark)
+
+  if (d.outboundCount > 0) {
+    if (currentY + 8 > 270) { doc.addPage(); currentY = 20 }
+    doc.text("Trajets Aller", COL[0] + 3, currentY + 6)
+    doc.text(String(d.outboundCount), COL[1] + 3, currentY + 6)
+    doc.text(`${d.pricePerTrip.toFixed(2)} €`, COL[2] + 3, currentY + 6)
+    doc.text(fmtMontant(d.outboundCount * d.pricePerTrip), COL[4] - 3, currentY + 6, { align: "right" })
     doc.setDrawColor(230)
     doc.setLineWidth(0.2)
-    doc.line(20, currentY + rowH, 190, currentY + rowH)
-    currentY += rowH
+    doc.line(20, currentY + 9, 190, currentY + 9)
+    currentY += 10
+  }
+
+  if (d.returnCount > 0) {
+    if (currentY + 8 > 270) { doc.addPage(); currentY = 20 }
+    doc.text("Trajets Retour", COL[0] + 3, currentY + 6)
+    doc.text(String(d.returnCount), COL[1] + 3, currentY + 6)
+    doc.text(`${d.pricePerTrip.toFixed(2)} €`, COL[2] + 3, currentY + 6)
+    doc.text(fmtMontant(d.returnCount * d.pricePerTrip), COL[4] - 3, currentY + 6, { align: "right" })
+    doc.setDrawColor(230)
+    doc.setLineWidth(0.2)
+    doc.line(20, currentY + 9, 190, currentY + 9)
+    currentY += 10
   }
 
   currentY += 6
 
   // ── Totaux ────────────────────────────────────────────────────────────────
-  if (currentY + 30 > 270) { doc.addPage(); currentY = 20 }
+  if (currentY + 35 > 278) { doc.addPage(); currentY = 20 }
   doc.setDrawColor(200)
   doc.setLineWidth(0.3)
   doc.line(130, currentY, 190, currentY)
@@ -1308,33 +1389,32 @@ function _buildRecurringInvoiceDoc(d: RecurringInvoiceDocument): jsPDF {
   doc.setTextColor(dark)
 
   if (!d.isFranchise) {
-    doc.text("Total HT", 140, currentY)
+    doc.text("TOTAL HT", 140, currentY)
     doc.text(fmtMontant(d.totalHT), 185, currentY, { align: "right" })
     currentY += 6
     doc.text("TVA 10% — Transport de personnes", 140, currentY)
     doc.text(fmtMontant(d.tva), 185, currentY, { align: "right" })
-    currentY += 3
-    doc.setFontSize(7.5)
-    doc.setTextColor(gray)
+    currentY += 4
+    doc.setFontSize(7)
+    doc.setTextColor(150, 150, 150)
     doc.setFont("helvetica", "italic")
-    doc.text("(art. 279 b du CGI)", 142, currentY)
+    doc.text("(art. 279 b du CGI)", 140, currentY)
     doc.setFont("helvetica", "normal")
     doc.setTextColor(dark)
     doc.setFontSize(9)
     currentY += 5
   }
 
-  doc.setDrawColor(gold)
-  doc.setLineWidth(0.5)
-  doc.line(130, currentY, 190, currentY)
-  currentY += 5
-
+  doc.setFillColor(lightGray)
+  doc.setDrawColor("#E0E0E0")
+  doc.setLineWidth(0.3)
+  doc.rect(130, currentY, 60, 10, "FD")
   doc.setFont("helvetica", "bold")
   doc.setFontSize(10)
-  doc.setTextColor(gold)
-  doc.text(d.isFranchise ? "TOTAL" : "TOTAL TTC", 130, currentY)
-  doc.text(fmtMontant(d.isFranchise ? d.totalHT : d.totalTTC), 185, currentY, { align: "right" })
-  currentY += 5
+  doc.setTextColor(dark)
+  doc.text(d.isFranchise ? "TOTAL" : "TOTAL TTC", 135, currentY + 7)
+  doc.text(fmtMontant(d.isFranchise ? d.totalHT : d.totalTTC), 187, currentY + 7, { align: "right" })
+  currentY += 14
 
   if (d.isFranchise) {
     doc.setFont("helvetica", "italic")
@@ -1342,6 +1422,8 @@ function _buildRecurringInvoiceDoc(d: RecurringInvoiceDocument): jsPDF {
     doc.setTextColor(gray)
     doc.text("TVA non applicable, art. 293 B du CGI", 130, currentY)
     currentY += 5
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(dark)
   }
 
   // ── CGV ───────────────────────────────────────────────────────────────────
