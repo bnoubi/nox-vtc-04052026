@@ -6,6 +6,13 @@ const LEGAL_BC_MENTION =
   "JUSTIFICATION DE LA RESERVATION PREALABLE" +
   " - Article R3120-2 du Code des transports - Arrete du 6 aout 2025"
 
+function formatDateFR(dateStr: string): string {
+  if (!dateStr) return ''
+  const parts = dateStr.split('-')
+  if (parts.length !== 3) return dateStr
+  return `${parts[2]}/${parts[1]}/${parts[0]}`
+}
+
 function fmtMontant(n: number): string {
   const parts = n.toFixed(2).split('.')
   const entier = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
@@ -276,7 +283,7 @@ async function _buildPDFDoc(
     type InfoRow = { label: string; value: string }
     const infoRows: InfoRow[] = []
     if (d.trajet.time || d.trajet.date) {
-      const depDate: string = d.trajet.date || d.date || ""
+      const depDate: string = formatDateFR(d.trajet.date || d.date || "")
       const depTime: string = d.trajet.time
         ? (d.trajet.time as string).replace(/^(\d{1,2}):(\d{2}).*/, "$1h$2")
         : ""

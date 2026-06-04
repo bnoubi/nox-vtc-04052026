@@ -1,6 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
+
+const formatDateFR = (dateStr: string): string => {
+  if (!dateStr) return ''
+  const parts = dateStr.split('-')
+  if (parts.length !== 3) return dateStr
+  return `${parts[2]}/${parts[1]}/${parts[0]}`
+}
 import { createClient } from "@supabase/supabase-js"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 
@@ -434,6 +441,9 @@ export function TripRequestForm({
                 <label className={LABEL}>{t.date}</label>
                 <input type="date" value={date} onChange={e => setDate(e.target.value)}
                   className={INPUT} />
+                {date && (
+                  <p className="text-xs text-[#C5A059]/70 mt-1">{formatDateFR(date)}</p>
+                )}
               </div>
               <div>
                 <label className={LABEL}>{t.time}</label>

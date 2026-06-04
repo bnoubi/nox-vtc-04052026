@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   Search,
@@ -31,6 +32,7 @@ import { useNav } from "./nav-context"
 import { WalletDrawer } from "./wallet-drawer"
 import { CreateBCFlow } from "./create-bc"
 import { RecurringScreen } from "./recurring-screen"
+import { TripRequestsScreen } from "./trip-requests-screen"
 import { useNox, type TripRequest } from "./nox-context"
 import { type BCDocument, type InvoiceDocument, type BCStatus, type InvoiceStatus, type EnterpriseProfile } from "./data"
 import { generateInvoicePDF, generateBCPDF, generateBCPDFBlob } from "@/lib/pdf-generator"
@@ -1067,6 +1069,8 @@ export function DocumentsTab() {
   const [showNewClientModal, setShowNewClientModal] = useState(false)
   const [addingClient, setAddingClient] = useState(false)
   const [pendingPrefillBC, setPendingPrefillBC] = useState<BCDocument | null>(null)
+  const [showTripRequests, setShowTripRequests] = useState(false)
+  const [openBCFlowOnLink, setOpenBCFlowOnLink] = useState(false)
   const bcIdsBeforeRef = useRef<Set<string>>(new Set())
   const convertingRequestRef = useRef<TripRequest | null>(null)
   const { pendingBcId, clearPendingBcId } = useNav()
@@ -1170,22 +1174,32 @@ export function DocumentsTab() {
       const finalHours = rounded === 60 ? (hours + 1) % 24 : hours
       return `${String(finalHours).padStart(2, "0")}:${String(finalMinutes).padStart(2, "0")}`
     }
-    const buildPrefill = (clientId?: string): BCDocument => ({
-      id: "", number: "", client: passengerName || "Client", clientId,
-      amount: 0, date: new Date().toLocaleDateString("fr-FR"),
-      status: "brouillon", type: "bc",
-      trajet: {
-        depart: req.departure ?? "", arrivee: req.arrival ?? "",
-        date: req.trip_date ?? "", time: req.trip_time ? roundToNearest5(req.trip_time) : "",
-        passengers: req.passengers_count, luggage: req.luggage_count,
-        stops: req.stops ?? [],
-        distance: (req as TripRequest & { estimated_distance?: number }).estimated_distance ?? undefined,
-        duree: (req as TripRequest & { estimated_duration?: string }).estimated_duration ?? undefined,
-      },
-      notes: req.notes ?? undefined,
-      passagerNom: passengerName || undefined,
-      passagerTelephone: req.passenger_phone ?? undefined,
-    })
+    const buildPrefill = (clientId?: string): BCDocument => {
+      const tripDateTime = req.trip_date && req.trip_time
+        ? new Date(`${req.trip_date}T${req.trip_time}`)
+        : null
+      const isPast = tripDateTime ? tripDateTime < new Date() : false
+      if (isPast) {
+        toast.warning("La date de la demande de trajet est dépassée. Veuillez choisir une nouvelle date.")
+      }
+      return {
+        id: "", number: "", client: passengerName || "Client", clientId,
+        amount: 0, date: new Date().toLocaleDateString("fr-FR"),
+        status: "brouillon", type: "bc",
+        trajet: {
+          depart: req.departure ?? "", arrivee: req.arrival ?? "",
+          date: isPast ? "" : (req.trip_date ?? ""),
+          time: isPast ? "" : (req.trip_time ? roundToNearest5(req.trip_time) : ""),
+          passengers: req.passengers_count, luggage: req.luggage_count,
+          stops: req.stops ?? [],
+          distance: (req as TripRequest & { estimated_distance?: number }).estimated_distance ?? undefined,
+          duree: (req as TripRequest & { estimated_duration?: string }).estimated_duration ?? undefined,
+        },
+        notes: req.notes ?? undefined,
+        passagerNom: passengerName || undefined,
+        passagerTelephone: req.passenger_phone ?? undefined,
+      }
+    }
     const foundClient = clients.find(c =>
       (req.passenger_phone && c.phone && c.phone === req.passenger_phone) ||
       (req.passenger_email && c.email && c.email === req.passenger_email)
@@ -1371,57 +1385,6 @@ export function DocumentsTab() {
         )}
       </div>
 
-      {/* Demandes à convertir */}
-      {tripRequests.filter(r => r.status === "filled").length > 0 && (
-        <div className="mx-4 mt-3 mb-1 rounded-2xl border border-gold/40 bg-onyx-card overflow-hidden">
-          <div className="flex items-center gap-2 px-4 pt-3 pb-2">
-            <h2 className="text-sm font-semibold text-foreground">Demandes à convertir</h2>
-            <span className="w-5 h-5 flex items-center justify-center rounded-full bg-gold/20 text-gold text-[10px] font-bold animate-pulse">
-              {tripRequests.filter(r => r.status === "filled").length}
-            </span>
-          </div>
-          <div className="px-3 pb-3 space-y-2">
-            {tripRequests.filter(r => r.status === "filled").map(req => {
-              const passengerName = [req.passenger_civility, req.passenger_firstname, req.passenger_lastname].filter(Boolean).join(" ")
-              return (
-                <div key={req.id} className="p-3 rounded-xl bg-[#111] border border-gold/20">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{passengerName || "Passager"}</p>
-                      {(req.departure || req.arrival) && (
-                        <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                          {req.departure ?? "—"} → {req.arrival ?? "—"}
-                        </p>
-                      )}
-                      <div className="flex gap-3 mt-1">
-                        {req.trip_date && (
-                          <span className="text-[10px] text-muted-foreground/70">
-                            {new Date(req.trip_date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
-                            {req.trip_time ? ` · ${req.trip_time.replace(":", "h")}` : ""}
-                          </span>
-                        )}
-                        {req.passengers_count > 1 && (
-                          <span className="text-[10px] text-muted-foreground/70">{req.passengers_count} passagers</span>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-muted-foreground/50 mt-0.5">
-                        Reçu le {new Date(req.created_at).toLocaleDateString("fr-FR")}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleConvertRequest(req)}
-                      className="shrink-0 px-3 py-2 rounded-xl bg-gold text-black text-xs font-bold hover:bg-gold/90 transition-colors active:scale-95"
-                    >
-                      Convertir en BC
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Summary */}
       <div className="px-4 mb-3">
         <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-onyx-card border border-onyx-border/50">
@@ -1455,13 +1418,19 @@ export function DocumentsTab() {
             setShowBCFlow(false)
             setDuplicateBC(null)
             setPendingPrefillBC(null)
+            setOpenBCFlowOnLink(false)
             convertingRequestRef.current = null
             setConvertingRequest(null)
           }}
           prefillBC={pendingPrefillBC ?? duplicateBC}
+          initialStep={openBCFlowOnLink ? "link" : undefined}
           onNavigateToRecurring={() => {
             setShowBCFlow(false)
             setShowRecurring(true)
+          }}
+          onNavigateToTripRequests={() => {
+            setShowBCFlow(false)
+            setShowTripRequests(true)
           }}
         />
       )}
@@ -1470,6 +1439,24 @@ export function DocumentsTab() {
         <div className="absolute inset-0 z-50 bg-background overflow-y-auto">
           <RecurringScreen onBack={() => setShowRecurring(false)} />
         </div>
+      )}
+
+      {showTripRequests && createPortal(
+        <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
+          <TripRequestsScreen
+            onBack={() => setShowTripRequests(false)}
+            onConvertRequest={(req) => {
+              setShowTripRequests(false)
+              handleConvertRequest(req)
+            }}
+            onCreateNew={() => {
+              setShowTripRequests(false)
+              setOpenBCFlowOnLink(true)
+              setShowBCFlow(true)
+            }}
+          />
+        </div>,
+        document.body
       )}
 
       <WalletDrawer open={walletOpen} onClose={() => setWalletOpen(false)} />

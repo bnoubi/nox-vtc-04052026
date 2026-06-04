@@ -26,7 +26,7 @@ function effectiveStatus(req: TripRequest): TripRequest["status"] {
 
 const ORDER: Record<string, number> = { filled: 0, pending: 1, converted: 2, expired: 3, cancelled: 4 }
 
-function sortRequests(requests: TripRequest[]): TripRequest[] {
+export function sortRequests(requests: TripRequest[]): TripRequest[] {
   return [...requests].sort((a, b) =>
     (ORDER[effectiveStatus(a)] ?? 4) - (ORDER[effectiveStatus(b)] ?? 4)
   )
@@ -50,7 +50,7 @@ function cleanPhone(tel: string) {
   return cleaned
 }
 
-function ResendLinkDrawer({ req, onClose }: { req: TripRequest; onClose: () => void }) {
+export function ResendLinkDrawer({ req, onClose }: { req: TripRequest; onClose: () => void }) {
   const [recipient, setRecipient] = useState(req.passenger_phone ?? req.passenger_email ?? "")
   const [copied, setCopied] = useState(false)
 
@@ -185,7 +185,7 @@ function ResendLinkDrawer({ req, onClose }: { req: TripRequest; onClose: () => v
 
 // ─── Item ─────────────────────────────────────────────────────────────────────
 
-function TripRequestItem({
+export function TripRequestItem({
   req,
   onConvert,
   onResend,
@@ -341,8 +341,11 @@ export function TripRequestsWidget() {
     }
   }
 
-  const filledCount = tripRequests.filter(r => r.status === "filled").length
-  const sorted = sortRequests(tripRequests)
+  const visibleRequests = tripRequests.filter(r => r.status !== "converted" && r.status !== "cancelled")
+  const filledCount = visibleRequests.filter(r => r.status === "filled").length
+  const sorted = sortRequests(visibleRequests)
+
+  if (visibleRequests.length === 0) return null
 
   return (
     <section className="px-4">
@@ -363,34 +366,16 @@ export function TripRequestsWidget() {
         </button>
       </div>
 
-      {tripRequests.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-8 px-4 rounded-2xl bg-onyx-card border border-onyx-border/40 text-center">
-          <Link2 className="h-8 w-8 text-muted-foreground/30 mb-3" strokeWidth={1} />
-          <p className="text-sm font-medium text-muted-foreground">
-            Aucune demande de trajet pour le moment.
-          </p>
-          <p className="text-xs text-muted-foreground/60 mt-1">
-            Partagez un lien à votre client pour commencer.
-          </p>
-          <button
-            onClick={() => setShowBC(true)}
-            className="mt-4 px-4 py-2 rounded-xl bg-gold text-black text-xs font-semibold hover:bg-gold/90 transition-colors"
-          >
-            Créer un lien
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {sorted.map(req => (
-            <TripRequestItem
-              key={req.id}
-              req={req}
-              onConvert={handleConvertRequest}
-              onResend={setResendRequest}
-            />
-          ))}
-        </div>
-      )}
+      <div className="space-y-2">
+        {sorted.map(req => (
+          <TripRequestItem
+            key={req.id}
+            req={req}
+            onConvert={handleConvertRequest}
+            onResend={setResendRequest}
+          />
+        ))}
+      </div>
 
       {/* Resend drawer */}
       {resendRequest && (

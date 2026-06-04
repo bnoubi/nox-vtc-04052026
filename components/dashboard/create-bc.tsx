@@ -74,6 +74,13 @@ function formatDuration(seconds: number): string {
 }
 
 
+const formatDateFR = (dateStr: string): string => {
+  if (!dateStr) return ''
+  const parts = dateStr.split('-')
+  if (parts.length !== 3) return dateStr
+  return `${parts[2]}/${parts[1]}/${parts[0]}`
+}
+
 function formatDateFr(d: Date): string {
   return d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
 }
@@ -315,23 +322,38 @@ interface CreateBCFlowProps {
   prefillClient?: BCPrefillClient | null
   prefillBC?: BCDocument | null
   onNavigateToRecurring?: () => void
+  onNavigateToTripRequests?: () => void
+  initialStep?: "link"
 }
 
-export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNavigateToRecurring }: CreateBCFlowProps) {
+export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNavigateToRecurring, onNavigateToTripRequests, initialStep }: CreateBCFlowProps) {
   const { drivers, clients, vehicles, tariffSettings, enterprise, addBC, bcs, saveDraftBC, updateBC, deleteBC, legalProfile, validateDocumentCompliance, updateEnterprise, plan, tokens, userId, refreshTokens } = useNox()
   const supabase = createClient()
   const { navigateToCGV, navigateToSubscription } = useNav()
-  const [step, setStep] = useState<FlowStep>(() => prefillBC ? "form" : "menu")
+  const [step, setStep] = useState<FlowStep>(() => initialStep === "link" ? "link" : prefillBC ? "form" : "menu")
   const [tab, setTab] = useState<FormTab>("formulaire")
 
   useEffect(() => {
-    if (open && prefillBC) {
+    if (open && initialStep === "link") {
+      setStep("link")
+    } else if (open && prefillBC) {
       setStep("form")
+      if (prefillBC?.trajet?.date && prefillBC?.trajet?.time) {
+        const prefilledDT = new Date(`${prefillBC.trajet.date}T${prefillBC.trajet.time}:00`)
+        if (prefilledDT < new Date()) {
+          setTripDate("")
+          setTripTime(defaultTime())
+          toast.warning("La date du trajet importée est dépassée. Veuillez choisir une nouvelle date et heure.")
+        } else {
+          setTripDate(prefillBC.trajet.date)
+          setTripTime(prefillBC.trajet.time)
+        }
+      }
     }
     if (!open) {
-      setStep(prefillBC ? "form" : "menu")
+      setStep(initialStep === "link" ? "link" : prefillBC ? "form" : "menu")
     }
-  }, [open, prefillBC])
+  }, [open, prefillBC, initialStep]) // eslint-disable-line
 
   // BUG 1 — état de soumission pour éviter les doublons
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -887,6 +909,12 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNaviga
     if (!arrival.trim()) newErrors.arrival = "L'adresse d'arrivée est obligatoire"
     if (!tripDate.trim()) newErrors.date = "La date est obligatoire"
     if (!tripTime.trim()) newErrors.time = "L'heure est obligatoire"
+    if (!newErrors.date && !newErrors.time && tripDate && tripTime) {
+      const selectedDateTime = new Date(`${tripDate}T${tripTime}:00`)
+      if (selectedDateTime < new Date()) {
+        newErrors.date = "La date et l'heure doivent être dans le futur"
+      }
+    }
     if (!selectedDriverId) newErrors.driver = "Le chauffeur est obligatoire"
     if (!selectedVehicleId) newErrors.vehicle = "Le véhicule est obligatoire"
     if (!enterprise.cgvMode) newErrors.cgv = "Les CGV doivent être configurées"
@@ -1169,7 +1197,10 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNaviga
               </div>
             </button>
             <button onClick={() => {
-              if (localStorage.getItem("hide_link_validity_modal") === "true") {
+              if (onNavigateToTripRequests) {
+                onClose()
+                onNavigateToTripRequests()
+              } else if (localStorage.getItem("hide_link_validity_modal") === "true") {
                 setStep("link")
               } else {
                 setShowLinkModal(true)
@@ -2569,7 +2600,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNaviga
                 </div>
                 <div className="mt-2 pt-2 border-t border-gray-200 flex justify-between">
                   <span className="text-gray-500">Date & Heure :</span>
-                  <span className="text-gray-900">{tripDate ? new Date(tripDate).toLocaleDateString("fr-FR") : "—"} à {formatTimeFrFromString(tripTime) || "—"}</span>
+                  <span className="text-gray-900">{tripDate ? formatDateFR(tripDate) : "—"} à {formatTimeFrFromString(tripTime) || "—"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Distance - Durée :</span>
