@@ -16,7 +16,7 @@ import { useNox } from "./nox-context"
 import { QuickAddClientModal } from "./quick-add-client-modal"
 import { toast } from "sonner"
 import { type Client, type EnterpriseProfile } from "./data"
-import { generateRecurringContractPDF } from "@/lib/pdf-generator"
+import { generateRecurringContractPDF, generateRecurringInvoicePDF, type RecurringInvoiceDocument } from "@/lib/pdf-generator"
 
 function generateCGVSummary(enterprise: EnterpriseProfile): string {
   if (!enterprise.cgvMode || enterprise.cgvMode === "configurator") {
@@ -1810,6 +1810,10 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`
   })
   const [invoicePeriodEnd, setInvoicePeriodEnd] = useState(today)
+  const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false)
+  const [invoiceOverrideFranchise, setInvoiceOverrideFranchise] = useState<boolean>(
+    enterprise?.vatMode === 'franchise'
+  )
 
   useEffect(() => { void loadTrips() }, [contract.id]) // eslint-disable-line
 
@@ -1971,6 +1975,75 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
       billingFrequency: contract.billing_frequency,
       cgvText: generateCGVSummary(ep),
     })
+  }
+
+  async function handleGenerateInvoice(completedTrips: RecurringTrip[]) {
+    if (!enterprise) { toast.error("Profil entreprise manquant"); return }
+    setIsGeneratingInvoice(true)
+    try {
+      let invoiceNumero: string
+      const { data: rpcData } = await supabase.rpc('generate_invoice_numero')
+      if (typeof rpcData === 'string') {
+        invoiceNumero = rpcData
+      } else {
+        invoiceNumero = `FAC-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`
+      }
+
+      const ep = enterprise
+      const selClient = clients?.find(c => c.id === contract.client_id)
+      const clientName = selClient
+        ? selClient.type === 'particulier'
+          ? `${selClient.prenom ?? ''} ${selClient.nom ?? ''}`.trim()
+          : (selClient.raisonSociale ?? '')
+        : (contract.passenger_name ?? 'Client inconnu')
+
+      const pricePerTrip = contract.price_per_trip ?? 0
+      const totalHT = completedTrips.length * pricePerTrip
+      const tva = invoiceOverrideFranchise ? 0 : totalHT * 0.10
+      const totalTTC = totalHT + tva
+
+      const invoiceDoc: RecurringInvoiceDocument = {
+        numero: invoiceNumero,
+        createdAt: new Date().toLocaleDateString('fr-FR'),
+        periodFrom: new Date(invoicePeriodStart + 'T00:00:00').toLocaleDateString('fr-FR'),
+        periodTo: new Date(invoicePeriodEnd + 'T00:00:00').toLocaleDateString('fr-FR'),
+        contractNumero: contract.numero ?? '',
+        contractLabel: contract.label ?? '',
+        enterpriseName: ep.denomination || ep.name,
+        enterpriseSiren: ep.siren || undefined,
+        enterpriseEvtc: ep.evtcNumber || undefined,
+        enterpriseAddress: [ep.adresse, [ep.zipCode, ep.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') || undefined,
+        enterpriseLogo: ep.logo || undefined,
+        enterprisePhone: ep.phone || undefined,
+        enterpriseTvaNumber: ep.tvaIntra || undefined,
+        clientName,
+        passengerName: contract.passenger_name ?? undefined,
+        trips: completedTrips.map(t => ({
+          date: formatDate(t.trip_date),
+          time: formatTime(t.trip_time),
+          direction: t.direction === 'outbound' ? 'Aller' : 'Retour',
+          departure: t.direction === 'outbound' ? contract.departure : (contract.return_departure ?? contract.arrival),
+          arrival: t.direction === 'outbound' ? contract.arrival : (contract.return_arrival ?? contract.departure),
+          price: pricePerTrip,
+        })),
+        pricePerTrip,
+        totalTrips: completedTrips.length,
+        totalHT,
+        tva,
+        totalTTC,
+        isFranchise: invoiceOverrideFranchise,
+        cgvText: generateCGVSummary(ep),
+      }
+
+      generateRecurringInvoicePDF(invoiceDoc)
+      toast.success('✅ Facture générée !')
+      setShowGenerateInvoice(false)
+    } catch (err) {
+      console.error('Invoice generation error:', err)
+      toast.error('Erreur lors de la génération')
+    } finally {
+      setIsGeneratingInvoice(false)
+    }
   }
 
   // Stats
@@ -2174,7 +2247,7 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
             <div className="space-y-0">
               {trips.map((trip) => {
                 const tCfg = tripStatusConfig[trip.status] ?? tripStatusConfig.upcoming
-                const canAct = trip.status === "upcoming" || trip.status === "confirmed"
+                const canAct = trip.status === "upcoming" || trip.status === "confirmed" || trip.status === "pending_confirmation"
                 return (
                   <div key={trip.id} className="flex items-center gap-3 py-2.5 border-b border-onyx-border/20 last:border-0">
                     <div className="flex-1 min-w-0">
@@ -2423,23 +2496,29 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
                   ⚠️ {pendingCount} trajet{pendingCount !== 1 ? "s" : ""} en attente de confirmation ne seront pas inclus dans cette facture. Confirmez leur statut depuis la liste des trajets pour les inclure.
                 </div>
               )}
+              <label className="flex items-center gap-2.5 cursor-pointer py-1">
+                <Checkbox
+                  checked={invoiceOverrideFranchise}
+                  onCheckedChange={v => setInvoiceOverrideFranchise(!!v)}
+                  className="border-white/40 data-[state=checked]:bg-gold data-[state=checked]:border-gold data-[state=checked]:text-black"
+                />
+                <span className="text-[12px] text-foreground/80 select-none">TVA non applicable (art. 293B CGI)</span>
+              </label>
               <div className="flex gap-3 pt-1">
                 <button
                   onClick={() => setShowGenerateInvoice(false)}
-                  className="flex-1 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-muted-foreground hover:border-gold/20 transition-colors"
+                  disabled={isGeneratingInvoice}
+                  className="flex-1 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-muted-foreground hover:border-gold/20 transition-colors disabled:opacity-50"
                 >
                   Annuler
                 </button>
                 <button
-                  onClick={() => {
-                    toast("Fonctionnalité de facturation en cours d'implémentation", {
-                      description: "Disponible à l'Étape 6.",
-                    })
-                    setShowGenerateInvoice(false)
-                  }}
-                  className="flex-1 py-3 rounded-xl bg-gold text-black text-sm font-semibold hover:bg-gold/90 transition-colors active:scale-95"
+                  onClick={() => void handleGenerateInvoice(previewTrips)}
+                  disabled={isGeneratingInvoice || previewTrips.length === 0}
+                  className="flex-1 py-3 rounded-xl bg-gold text-black text-sm font-semibold hover:bg-gold/90 transition-colors active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Générer
+                  {isGeneratingInvoice && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Générer la facture
                 </button>
               </div>
             </div>

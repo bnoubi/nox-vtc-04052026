@@ -1142,3 +1142,237 @@ export function generateRecurringContractPDF(d: RecurringContractDocument): void
 export function generateRecurringContractPDFBlob(d: RecurringContractDocument): Blob {
   return _buildRecurringContractDoc(d).output("blob")
 }
+
+// ── Recurring Invoice PDF ─────────────────────────────────────────────────────
+
+export interface RecurringInvoiceDocument {
+  numero: string
+  createdAt: string
+  periodFrom: string
+  periodTo: string
+  contractNumero: string
+  contractLabel: string
+  enterpriseName: string
+  enterpriseSiren?: string
+  enterpriseEvtc?: string
+  enterpriseAddress?: string
+  enterpriseLogo?: string
+  enterprisePhone?: string
+  enterpriseTvaNumber?: string
+  clientName: string
+  passengerName?: string
+  clientAddress?: string
+  trips: {
+    date: string
+    time: string
+    direction: string
+    departure: string
+    arrival: string
+    price: number
+  }[]
+  pricePerTrip: number
+  totalTrips: number
+  totalHT: number
+  tva: number
+  totalTTC: number
+  isFranchise: boolean
+  cgvText?: string
+}
+
+function _buildRecurringInvoiceDoc(d: RecurringInvoiceDocument): jsPDF {
+  const doc = new jsPDF()
+  const gold = "#D4AF37"
+  const dark = "#1A1A1A"
+  const gray = "#71717A"
+  const lightGray = "#F4F4F5"
+
+  // ── En-tête ──────────────────────────────────────────────────────────────
+  doc.setFontSize(12)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(dark)
+  doc.text(d.enterpriseName, 20, 22)
+
+  doc.setFontSize(8.5)
+  doc.setFont("helvetica", "normal")
+  doc.setTextColor(gray)
+  let leftY = 29
+  if (d.enterpriseAddress) { doc.text(d.enterpriseAddress, 20, leftY); leftY += 4.5 }
+  if (d.enterpriseSiren) { doc.text(`SIREN : ${d.enterpriseSiren}`, 20, leftY); leftY += 4.5 }
+  if (!d.isFranchise && d.enterpriseTvaNumber) {
+    doc.text(`TVA : ${d.enterpriseTvaNumber}`, 20, leftY); leftY += 4.5
+  }
+  if (d.isFranchise) {
+    doc.setTextColor("#D97706")
+    doc.text("TVA non applicable, art. 293 B du CGI", 20, leftY)
+    doc.setTextColor(gray)
+    leftY += 4.5
+  }
+  if (d.enterpriseEvtc) {
+    doc.setTextColor(gold)
+    doc.text(`EVTC : ${d.enterpriseEvtc}`, 20, leftY)
+    doc.setTextColor(gray)
+    leftY += 4.5
+  }
+  if (d.enterprisePhone) { doc.text(`Tél : ${d.enterprisePhone}`, 20, leftY); leftY += 4.5 }
+
+  const headerBotEstimate = Math.max(leftY, 45)
+  doc.setDrawColor("#dddddd")
+  doc.setLineWidth(0.5)
+  doc.line(105, 18, 105, headerBotEstimate)
+
+  doc.setFontSize(12)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(dark)
+  doc.text("FACTURE", 190, 22, { align: "right" })
+
+  doc.setFontSize(9)
+  doc.setFont("helvetica", "normal")
+  doc.setTextColor(gray)
+  let rightY = 29
+  doc.text(`N° : ${d.numero}`, 190, rightY, { align: "right" }); rightY += 5
+  doc.text(`Date : ${d.createdAt}`, 190, rightY, { align: "right" }); rightY += 5
+  doc.text(`Contrat : ${d.contractNumero} — ${d.contractLabel}`, 190, rightY, { align: "right" }); rightY += 5
+  doc.text(`Période : du ${d.periodFrom} au ${d.periodTo}`, 190, rightY, { align: "right" }); rightY += 5
+
+  let currentY = Math.max(leftY, rightY) + 4
+  doc.setDrawColor(230)
+  doc.setLineWidth(0.3)
+  doc.line(20, currentY, 190, currentY)
+  currentY += 6
+
+  // ── Bloc client ───────────────────────────────────────────────────────────
+  doc.setFontSize(9)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(dark)
+  doc.text("FACTURÉ À :", 20, currentY)
+  currentY += 5
+  doc.setFont("helvetica", "bold")
+  doc.text(d.clientName, 20, currentY)
+  doc.setFont("helvetica", "normal")
+  currentY += 5
+  if (d.passengerName && d.passengerName !== d.clientName) {
+    doc.setTextColor(gray)
+    doc.text(`Passager : ${d.passengerName}`, 20, currentY); currentY += 4.5
+    doc.setTextColor(dark)
+  }
+  if (d.clientAddress) {
+    doc.setTextColor(gray)
+    doc.text(d.clientAddress, 20, currentY); currentY += 4.5
+    doc.setTextColor(dark)
+  }
+  currentY += 6
+
+  // ── Tableau des prestations ───────────────────────────────────────────────
+  doc.setFillColor(lightGray)
+  doc.rect(20, currentY, 170, 8, "F")
+  doc.setFontSize(8)
+  doc.setFont("helvetica", "bold")
+  doc.setTextColor(dark)
+  doc.text("Date", 24, currentY + 5.5)
+  doc.text("Trajet", 54, currentY + 5.5)
+  doc.text("Dir.", 142, currentY + 5.5)
+  doc.text("Montant", 185, currentY + 5.5, { align: "right" })
+  currentY += 10
+
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(8)
+  for (const t of d.trips) {
+    if (currentY + 10 > 270) { doc.addPage(); currentY = 20 }
+    const trajet = `${t.departure} → ${t.arrival}`
+    const trajetLines = doc.splitTextToSize(trajet, 83) as string[]
+    const rowH = Math.max(7, trajetLines.length * 4.5 + 3)
+    doc.setTextColor(dark)
+    doc.text(`${t.date} ${t.time}`, 24, currentY + 5)
+    doc.text(trajetLines, 54, currentY + 5)
+    doc.setTextColor(gray)
+    doc.text(t.direction, 142, currentY + 5)
+    doc.setTextColor(dark)
+    doc.text(fmtMontant(t.price), 185, currentY + 5, { align: "right" })
+    doc.setDrawColor(230)
+    doc.setLineWidth(0.2)
+    doc.line(20, currentY + rowH, 190, currentY + rowH)
+    currentY += rowH
+  }
+
+  currentY += 6
+
+  // ── Totaux ────────────────────────────────────────────────────────────────
+  if (currentY + 30 > 270) { doc.addPage(); currentY = 20 }
+  doc.setDrawColor(200)
+  doc.setLineWidth(0.3)
+  doc.line(130, currentY, 190, currentY)
+  currentY += 6
+
+  doc.setFontSize(9)
+  doc.setFont("helvetica", "normal")
+  doc.setTextColor(dark)
+
+  if (!d.isFranchise) {
+    doc.text("Total HT", 140, currentY)
+    doc.text(fmtMontant(d.totalHT), 185, currentY, { align: "right" })
+    currentY += 6
+    doc.text("TVA 10% — Transport de personnes", 140, currentY)
+    doc.text(fmtMontant(d.tva), 185, currentY, { align: "right" })
+    currentY += 3
+    doc.setFontSize(7.5)
+    doc.setTextColor(gray)
+    doc.setFont("helvetica", "italic")
+    doc.text("(art. 279 b du CGI)", 142, currentY)
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(dark)
+    doc.setFontSize(9)
+    currentY += 5
+  }
+
+  doc.setDrawColor(gold)
+  doc.setLineWidth(0.5)
+  doc.line(130, currentY, 190, currentY)
+  currentY += 5
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(10)
+  doc.setTextColor(gold)
+  doc.text(d.isFranchise ? "TOTAL" : "TOTAL TTC", 130, currentY)
+  doc.text(fmtMontant(d.isFranchise ? d.totalHT : d.totalTTC), 185, currentY, { align: "right" })
+  currentY += 5
+
+  if (d.isFranchise) {
+    doc.setFont("helvetica", "italic")
+    doc.setFontSize(8.5)
+    doc.setTextColor(gray)
+    doc.text("TVA non applicable, art. 293 B du CGI", 130, currentY)
+    currentY += 5
+  }
+
+  // ── CGV ───────────────────────────────────────────────────────────────────
+  if (d.cgvText) {
+    currentY += 10
+    if (currentY > 238) { doc.addPage(); currentY = 20 }
+    doc.setFontSize(8)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(dark)
+    doc.text("CONDITIONS GÉNÉRALES", 20, currentY)
+    currentY += 5
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(gray)
+    const cgvLines = doc.splitTextToSize(d.cgvText, 170) as string[]
+    if (currentY + cgvLines.length * 4 > 278) { doc.addPage(); currentY = 20 }
+    doc.text(cgvLines, 20, currentY)
+  }
+
+  // ── Pied de page ──────────────────────────────────────────────────────────
+  doc.setFontSize(8)
+  doc.setTextColor("#A0A0A0")
+  doc.setFont("helvetica", "italic")
+  doc.text("Document généré par NoX VTC", 105, 290, { align: "center" })
+
+  return doc
+}
+
+export function generateRecurringInvoicePDF(d: RecurringInvoiceDocument): void {
+  _buildRecurringInvoiceDoc(d).save(`Facture_${d.numero}.pdf`)
+}
+
+export function generateRecurringInvoicePDFBlob(d: RecurringInvoiceDocument): Blob {
+  return _buildRecurringInvoiceDoc(d).output("blob")
+}
