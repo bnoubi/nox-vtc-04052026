@@ -649,6 +649,15 @@ function CreateRecurringContract({ onBack, onSuccess }: {
 
       console.log("Recurring contract created:", newContract)
 
+      // Déclencher la génération des trajets si le contrat commence aujourd'hui
+      const todayStr = new Date().toISOString().split('T')[0]
+      if (startDate === todayStr) {
+        await fetch('/api/cron/recurring-trips', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer nox-cron-f90c40da4c8f9f905b8f510945b30018' },
+        })
+      }
+
       if (generateContractPDF && newContract) {
         const clientForPDF = clients?.find(c => c.id === selectedClientId)
         const clientNamePDF = clientForPDF
@@ -1744,6 +1753,7 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
   const [showMenu, setShowMenu] = useState(false)
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [openTripMenu, setOpenTripMenu] = useState<string | null>(null)
+  const [tripMenuPosition, setTripMenuPosition] = useState<{ top: number; right: number } | null>(null)
   const [cancelTripId, setCancelTripId] = useState<string | null>(null)
 
   const [showPauseModal, setShowPauseModal] = useState(false)
@@ -2120,7 +2130,7 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
             </div>
           ) : (
             <div className="space-y-0">
-              {trips.map(trip => {
+              {trips.map((trip) => {
                 const tCfg = tripStatusConfig[trip.status] ?? tripStatusConfig.upcoming
                 const canAct = trip.status === "upcoming" || trip.status === "confirmed"
                 return (
@@ -2145,35 +2155,17 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
                       {tCfg.label}
                     </span>
                     {canAct && (
-                      <div className="relative flex-shrink-0">
+                      <div className="flex-shrink-0">
                         <button
-                          onClick={() => setOpenTripMenu(openTripMenu === trip.id ? null : trip.id)}
+                          onClick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            setTripMenuPosition({ top: rect.top - 110, right: window.innerWidth - rect.right })
+                            setOpenTripMenu(openTripMenu === trip.id ? null : trip.id)
+                          }}
                           className="p-1.5 rounded-lg hover:bg-white/5 text-muted-foreground"
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
-                        {openTripMenu === trip.id && (
-                          <>
-                            <div className="fixed inset-0 z-10" onClick={() => setOpenTripMenu(null)} />
-                            <div className="absolute right-0 top-full mt-1 w-44 bg-[#1a1a1a] border border-onyx-border/30 rounded-xl overflow-hidden shadow-xl z-20">
-                              <button onClick={() => void updateTripStatus(trip.id, "completed")}
-                                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[12px] text-green-400 hover:bg-white/5 text-left">
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                Réalisé
-                              </button>
-                              <button onClick={() => { setOpenTripMenu(null); setCancelTripId(trip.id) }}
-                                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[12px] text-red-400 hover:bg-white/5 text-left border-t border-onyx-border/20">
-                                <X className="h-3.5 w-3.5" />
-                                Annulé
-                              </button>
-                              <button onClick={() => void updateTripStatus(trip.id, "missed")}
-                                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[12px] text-orange-400 hover:bg-white/5 text-left border-t border-onyx-border/20">
-                                <AlertCircle className="h-3.5 w-3.5" />
-                                Non réalisé
-                              </button>
-                            </div>
-                          </>
-                        )}
                       </div>
                     )}
                   </div>
@@ -2183,6 +2175,34 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
           )}
         </Section>
       </div>
+
+      {/* Menu trajet via portal */}
+      {openTripMenu && tripMenuPosition && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9998]" onClick={() => setOpenTripMenu(null)} />
+          <div
+            className="w-44 bg-[#1a1a1a] border border-onyx-border/30 rounded-xl overflow-hidden shadow-xl"
+            style={{ position: 'fixed', top: tripMenuPosition.top, right: tripMenuPosition.right, zIndex: 9999 }}
+          >
+            <button onClick={() => { void updateTripStatus(openTripMenu, "completed"); setOpenTripMenu(null) }}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[12px] text-green-400 hover:bg-white/5 text-left">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Réalisé
+            </button>
+            <button onClick={() => { setCancelTripId(openTripMenu); setOpenTripMenu(null) }}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[12px] text-red-400 hover:bg-white/5 text-left border-t border-onyx-border/20">
+              <X className="h-3.5 w-3.5" />
+              Annulé
+            </button>
+            <button onClick={() => { void updateTripStatus(openTripMenu, "missed"); setOpenTripMenu(null) }}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[12px] text-orange-400 hover:bg-white/5 text-left border-t border-onyx-border/20">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Non réalisé
+            </button>
+          </div>
+        </>,
+        document.body
+      )}
 
       {/* Modale — Mettre en pause */}
       {showPauseModal && (
