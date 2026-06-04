@@ -71,7 +71,7 @@ interface RecurringTrip {
   trip_date: string
   trip_time: string | null
   direction: "outbound" | "return"
-  status: "upcoming" | "confirmed" | "completed" | "cancelled" | "missed"
+  status: "upcoming" | "pending_confirmation" | "confirmed" | "completed" | "cancelled" | "missed"
   cancelled_by: string | null
   created_at: string
 }
@@ -316,10 +316,16 @@ function CreateRecurringContract({ onBack, onSuccess }: {
   const [showCGVModal, setShowCGVModal] = useState(false)
   const [contractCgvText, setContractCgvText] = useState("")
   const [generateContractPDF, setGenerateContractPDF] = useState(false)
+  const [showConfirmInfo, setShowConfirmInfo] = useState(false)
+  const [hideConfirmInfo, setHideConfirmInfo] = useState(false)
 
   useEffect(() => {
     if (enterprise) setContractCgvText(generateCGVSummary(enterprise))
   }, [enterprise]) // eslint-disable-line
+
+  useEffect(() => {
+    if (localStorage.getItem('hide_recurring_confirm_info') !== 'true') setShowConfirmInfo(true)
+  }, [])
 
   // Validation
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -722,6 +728,41 @@ function CreateRecurringContract({ onBack, onSuccess }: {
 
   return (
     <div className="flex flex-col min-h-full bg-background">
+
+      {/* Modale — Confirmation des courses */}
+      {showConfirmInfo && (
+        <div className="fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center px-5"
+          onClick={() => setShowConfirmInfo(false)}>
+          <div className="w-full max-w-sm bg-[#1a1a1a] rounded-2xl p-5 space-y-4 border border-onyx-border/30"
+            onClick={e => e.stopPropagation()}>
+            <div className="text-center">
+              <p className="text-2xl mb-2">ℹ️</p>
+              <h3 className="text-base font-bold text-foreground">Confirmation des courses</h3>
+            </div>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>Après chaque trajet, vous recevrez une notification pour confirmer si la course a été réalisée.</p>
+              <p>Seules les courses confirmées seront incluses dans vos factures.</p>
+            </div>
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <Checkbox
+                id="hide-confirm-info"
+                checked={hideConfirmInfo}
+                onCheckedChange={(v) => setHideConfirmInfo(!!v)}
+              />
+              <span className="text-[11px] text-muted-foreground">Ne plus afficher ce message</span>
+            </label>
+            <button
+              onClick={() => {
+                if (hideConfirmInfo) localStorage.setItem('hide_recurring_confirm_info', 'true')
+                setShowConfirmInfo(false)
+              }}
+              className="w-full py-3 rounded-xl bg-gold text-black font-semibold text-sm"
+            >
+              J&apos;ai compris
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Étape 1 ──────────────────────────────────────────────────────────── */}
       {step === 1 && (
@@ -1733,11 +1774,12 @@ function CreateRecurringContract({ onBack, onSuccess }: {
 // ── ContractDetailScreen ──────────────────────────────────────────────────────
 
 const tripStatusConfig = {
-  upcoming:  { label: "À venir",     cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
-  confirmed: { label: "Confirmé",    cls: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
-  completed: { label: "Réalisé",     cls: "bg-green-500/15 text-green-400 border-green-500/30" },
-  cancelled: { label: "Annulé",      cls: "bg-red-500/15 text-red-400 border-red-500/30" },
-  missed:    { label: "Non réalisé", cls: "bg-orange-500/15 text-orange-400 border-orange-500/30" },
+  upcoming:             { label: "À venir",      cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+  pending_confirmation: { label: "À confirmer",  cls: "bg-purple-500/15 text-purple-400 border-purple-500/30" },
+  confirmed:            { label: "Confirmé",     cls: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
+  completed:            { label: "Réalisé",      cls: "bg-green-500/15 text-green-400 border-green-500/30" },
+  cancelled:            { label: "Annulé",       cls: "bg-red-500/15 text-red-400 border-red-500/30" },
+  missed:               { label: "Non réalisé",  cls: "bg-orange-500/15 text-orange-400 border-orange-500/30" },
 }
 
 function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
@@ -2328,6 +2370,11 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
           t.trip_date >= invoicePeriodStart &&
           t.trip_date <= invoicePeriodEnd
         )
+        const pendingCount = trips.filter(t =>
+          t.status === "pending_confirmation" &&
+          t.trip_date >= invoicePeriodStart &&
+          t.trip_date <= invoicePeriodEnd
+        ).length
         const previewAmount = previewTrips.length * (contract.price_per_trip ?? 0)
         return (
           <div className="fixed inset-0 z-[200] bg-black/70 flex items-end" onClick={() => setShowGenerateInvoice(false)}>
@@ -2371,6 +2418,11 @@ function ContractDetailScreen({ contract, onBack, onContractUpdated }: {
                 </p>
                 <p className="text-base font-bold text-gold">{previewAmount.toFixed(2)} €</p>
               </div>
+              {pendingCount > 0 && (
+                <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/30 text-sm text-orange-400">
+                  ⚠️ {pendingCount} trajet{pendingCount !== 1 ? "s" : ""} en attente de confirmation ne seront pas inclus dans cette facture. Confirmez leur statut depuis la liste des trajets pour les inclure.
+                </div>
+              )}
               <div className="flex gap-3 pt-1">
                 <button
                   onClick={() => setShowGenerateInvoice(false)}

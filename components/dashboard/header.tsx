@@ -3,12 +3,13 @@
 import { useState, useEffect, useCallback } from "react"
 import Image from "next/image"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Coins, Bell } from "lucide-react"
+import { Coins, Bell, CheckCircle2, XCircle } from "lucide-react"
 import { useNox } from "./nox-context"
 import { useNav } from "./nav-context"
 import { cn } from "@/lib/utils"
 import { WalletDrawer } from "./wallet-drawer"
 import { createClient } from "@/lib/supabase/client"
+import { toast } from "sonner"
 
 const PLAN_LABEL: Record<string, string> = { SOLO: "Starter", DUO: "Pro", TEAM: "Premium" }
 
@@ -17,6 +18,7 @@ interface Notification {
   type: string
   title: string
   message: string
+  data?: { trip_id?: string; contract_id?: string; action?: string }
   read: boolean
   created_at: string
 }
@@ -77,7 +79,7 @@ export function DashboardHeader() {
       }
       const { data } = await supabase
         .from('notifications')
-        .select('id, type, title, message, read, created_at')
+        .select('id, type, title, message, data, read, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(20)
@@ -99,6 +101,20 @@ export function DashboardHeader() {
   async function markRead(id: string) {
     await supabase.from('notifications').update({ read: true }).eq('id', id)
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+  }
+
+  async function confirmTrip(notifId: string, tripId: string, status: 'completed' | 'missed') {
+    const res = await fetch('/api/trips/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trip_id: tripId, status, notification_id: notifId }),
+    })
+    if (res.ok) {
+      setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, read: true } : n))
+      toast.success(status === 'completed' ? 'Course marquée réalisée' : 'Course marquée non réalisée')
+    } else {
+      toast.error('Erreur lors de la mise à jour')
+    }
   }
 
   const openWallet = useCallback(() => setWalletOpen(true), [])
@@ -151,11 +167,10 @@ export function DashboardHeader() {
                   {notifications.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-6">Aucune notification</p>
                   ) : notifications.map(n => (
-                    <button
+                    <div
                       key={n.id}
-                      onClick={() => void markRead(n.id)}
                       className={cn(
-                        "w-full text-left px-4 py-3 border-b border-onyx-border/10 last:border-0 hover:bg-white/5 transition-colors",
+                        "px-4 py-3 border-b border-onyx-border/10 last:border-0",
                         !n.read && "bg-gold/5"
                       )}
                     >
@@ -164,9 +179,27 @@ export function DashboardHeader() {
                         <div className={cn("flex-1 min-w-0", n.read && "pl-3.5")}>
                           <p className="text-[12px] font-semibold text-foreground">{n.title}</p>
                           <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{n.message}</p>
+                          {n.type === 'trip_confirmation' && n.data?.trip_id && !n.read && (
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                onClick={() => void confirmTrip(n.id, n.data!.trip_id!, 'completed')}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-500/15 border border-green-500/30 text-[11px] text-green-400 hover:bg-green-500/25 transition-colors"
+                              >
+                                <CheckCircle2 className="h-3 w-3" />
+                                Réalisé
+                              </button>
+                              <button
+                                onClick={() => void confirmTrip(n.id, n.data!.trip_id!, 'missed')}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-500/30 text-[11px] text-red-400 hover:bg-red-500/25 transition-colors"
+                              >
+                                <XCircle className="h-3 w-3" />
+                                Non réalisé
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>
