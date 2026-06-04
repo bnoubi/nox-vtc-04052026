@@ -528,11 +528,15 @@ function CreateRecurringContract({ onBack, onSuccess }: {
     if (!startDate) return []
     const results: TripPreview[] = []
     const activeDays = getActiveDays()
-    const cursorStart = new Date(startDate + "T00:00:00")
+    const startFrom = new Date(Math.max(
+      new Date(startDate + "T00:00:00").getTime(),
+      new Date().getTime()
+    ))
+    startFrom.setHours(0, 0, 0, 0)
     const endLimit = !openEnded && endDate
       ? new Date(endDate + "T00:00:00")
-      : new Date(cursorStart.getTime() + 90 * 24 * 60 * 60 * 1000)
-    let cursor = new Date(cursorStart)
+      : new Date(startFrom.getTime() + 90 * 24 * 60 * 60 * 1000)
+    let cursor = new Date(startFrom)
     while (cursor <= endLimit && results.length < 5) {
       const isoDate = cursor.toISOString().split("T")[0]
       const jsDay = cursor.getDay()
