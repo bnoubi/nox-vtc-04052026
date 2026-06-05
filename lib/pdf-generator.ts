@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf"
 import type { InvoiceDocument, EnterpriseProfile, BCDocument } from "@/components/dashboard/data"
 import { isVatApplicable, getVatMention } from "@/components/dashboard/data"
+import { buildFacturXFromBC, buildFacturXFromInvoice } from "./facturx-builder"
 
 const LEGAL_BC_MENTION =
   "JUSTIFICATION DE LA RESERVATION PREALABLE" +
@@ -70,6 +71,17 @@ export function generateBCPDF(bc: BCDocument, enterprise: EnterpriseProfile): vo
 export async function generateBCPDFBlob(bc: BCDocument, enterprise: EnterpriseProfile): Promise<Blob> {
   const doc = await _buildPDFDoc(bc, enterprise, false)
   return doc.output('blob')
+}
+
+export async function generateBCPDFBlobFacturX(bc: BCDocument, enterprise: EnterpriseProfile): Promise<Blob> {
+  const visualBlob = await generateBCPDFBlob(bc, enterprise)
+  return buildFacturXFromBC(visualBlob, bc, enterprise)
+}
+
+export async function generateInvoicePDFBlobFacturX(invoice: InvoiceDocument, enterprise: EnterpriseProfile): Promise<Blob> {
+  const doc = await _buildPDFDoc(invoice, enterprise, true)
+  const visualBlob = doc.output("blob")
+  return buildFacturXFromInvoice(visualBlob, invoice, enterprise)
 }
 
 async function _buildPDFDoc(

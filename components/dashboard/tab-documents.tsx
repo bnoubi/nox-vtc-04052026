@@ -35,7 +35,7 @@ import { RecurringScreen } from "./recurring-screen"
 import { TripRequestsScreen } from "./trip-requests-screen"
 import { useNox, type TripRequest } from "./nox-context"
 import { type BCDocument, type InvoiceDocument, type BCStatus, type InvoiceStatus, type EnterpriseProfile } from "./data"
-import { generateInvoicePDF, generateBCPDF, generateBCPDFBlob } from "@/lib/pdf-generator"
+import { generateInvoicePDF, generateBCPDF, generateBCPDFBlob, generateInvoicePDFBlobFacturX } from "@/lib/pdf-generator"
 import { convertBCToInvoice } from "@/lib/convert-bc-to-invoice"
 import { createClient } from "@/lib/supabase/client"
 
@@ -273,7 +273,7 @@ function BCDetail({
                     </span>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={handleDownload}
                   className="px-4 py-2 rounded-xl bg-gold/10 border border-gold/30 text-gold text-[11px] font-bold uppercase tracking-wider hover:bg-gold/20 transition-all flex items-center gap-2"
                 >
@@ -457,6 +457,31 @@ function InvoiceDetail({
     )
   }
 
+  const [invoiceFormat, setInvoiceFormat] = useState<"standard" | "facturx">("standard")
+
+  function handleDownloadFacturX() {
+    toast.promise(
+      generateInvoicePDFBlobFacturX(invoice, enterprise)
+        .then(blob => {
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement("a")
+          a.href = url
+          a.download = `Facture_${invoice.number}_FacturX.pdf`
+          a.click()
+          URL.revokeObjectURL(url)
+        })
+        .catch(err => {
+          console.error("[Factur-X] Erreur génération:", err)
+          throw err
+        }),
+      {
+        loading: "Génération Factur-X...",
+        success: "Factur-X prêt !",
+        error: (err: unknown) => `Erreur : ${err instanceof Error ? err.message : "Génération impossible"}`,
+      }
+    )
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -578,9 +603,9 @@ function InvoiceDetail({
                   <div className="space-y-1">
                     <p className="text-[10px] text-muted-foreground uppercase font-black tracking-[0.2em]">Total TTC</p>
                     <div>
-                      {invoice.discountValue && invoice.originalTTC && invoice.discountValue > 0 && (
+                      {(invoice.discountValue ?? 0) > 0 && (invoice.originalTTC ?? 0) > 0 && (
                         <span className="text-sm text-muted-foreground line-through mr-2">
-                          {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.originalTTC)} &euro;
+                          {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(invoice.originalTTC!)} &euro;
                         </span>
                       )}
                       <span className="text-3xl font-black text-gold leading-none">
@@ -588,13 +613,34 @@ function InvoiceDetail({
                       </span>
                     </div>
                   </div>
-                  <button 
-                    onClick={handleDownload}
-                    className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gold text-primary-foreground text-xs font-black uppercase tracking-widest gold-glow hover:bg-gold-light active:scale-[0.98] transition-all"
-                  >
-                    <FileText className="h-4 w-4" />
-                    PDF
-                  </button>
+                  <div className="flex flex-col items-center gap-3">
+                    <p className="text-xs text-muted-foreground">Téléchargez votre facture</p>
+                    <div className="flex rounded-xl border border-white/10 overflow-hidden w-full max-w-xs">
+                      <button
+                        onClick={() => setInvoiceFormat("standard")}
+                        className={`flex-1 py-2 text-xs font-semibold transition-all ${invoiceFormat === "standard" ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white"}`}
+                      >
+                        📄 PDF Standard
+                      </button>
+                      <div className="w-px bg-white/10" />
+                      <button
+                        onClick={() => setInvoiceFormat("facturx")}
+                        className={`flex-1 py-2 text-xs font-semibold transition-all ${invoiceFormat === "facturx" ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white"}`}
+                      >
+                        ⚖️ PDF Factur-X
+                      </button>
+                    </div>
+                    {invoiceFormat === "facturx" && (
+                      <p className="text-xs text-muted-foreground text-center">Version comptable agréée DGFiP</p>
+                    )}
+                    <button
+                      onClick={() => invoiceFormat === "standard" ? handleDownload() : handleDownloadFacturX()}
+                      className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gold text-primary-foreground text-xs font-black uppercase tracking-widest gold-glow hover:bg-gold-light active:scale-[0.98] transition-all"
+                    >
+                      <FileText className="h-4 w-4" />
+                      Télécharger
+                    </button>
+                  </div>
                </div>
             </div>
             
