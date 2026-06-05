@@ -11,8 +11,10 @@ export interface FacturXData {
   isFranchise: boolean
   buyerName: string
   buyerSiren?: string
+  buyerCountry?: string
   invoiceNumber: string
   invoiceDate: string
+  dueDate?: string
   currency: string
   lines: {
     description: string
@@ -48,6 +50,7 @@ function groupByVatRate(lines: FacturXData["lines"]): { rate: number; basis: num
 
 export function generateFacturXML(data: FacturXData): string {
   const dateCode = toDateCode(data.invoiceDate)
+  const lineTotalSum = data.lines.reduce((acc, l) => acc + l.lineTotal, 0)
 
   const doc = create({ version: "1.0", encoding: "UTF-8" })
   const root = doc.ele("rsm:CrossIndustryInvoice", {
@@ -59,7 +62,7 @@ export function generateFacturXML(data: FacturXData): string {
   // ── ExchangedDocumentContext ──────────────────────────────────────────────
   root.ele("rsm:ExchangedDocumentContext")
     .ele("ram:GuidelineSpecifiedDocumentContextParameter")
-    .ele("ram:ID").txt("urn:factur-x.eu:1p0:en16931")
+    .ele("ram:ID").txt("urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:en16931")
 
   // ── ExchangedDocument ─────────────────────────────────────────────────────
   const excDoc = root.ele("rsm:ExchangedDocument")
@@ -102,21 +105,26 @@ export function generateFacturXML(data: FacturXData): string {
       .ele("ram:ID").att("schemeID", "0002").txt(data.sellerSiren)
   }
   const sellerAddr = seller.ele("ram:PostalTradeAddress")
-  sellerAddr.ele("ram:PostcodeCode").txt(data.sellerPostalCode)
-  sellerAddr.ele("ram:LineOne").txt(data.sellerAddress)
-  sellerAddr.ele("ram:CityName").txt(data.sellerCity)
-  sellerAddr.ele("ram:CountryID").txt(data.sellerCountry)
+  sellerAddr.ele("ram:PostcodeCode").txt(data.sellerPostalCode || "")
+  sellerAddr.ele("ram:LineOne").txt(data.sellerAddress || "")
+  sellerAddr.ele("ram:CityName").txt(data.sellerCity || "")
+  sellerAddr.ele("ram:CountryID").txt(data.sellerCountry || "FR")
   if (!data.isFranchise && data.sellerVatNumber) {
     seller.ele("ram:SpecifiedTaxRegistration")
       .ele("ram:ID").att("schemeID", "VA").txt(data.sellerVatNumber)
   }
-
+  if (data.isFranchise && data.sellerSiren) {
+    seller.ele("ram:SpecifiedTaxRegistration")
+      .ele("ram:ID").att("schemeID", "VA").txt("FR" + data.sellerSiren)
+  }
   const buyer = hta.ele("ram:BuyerTradeParty")
   buyer.ele("ram:Name").txt(data.buyerName)
   if (data.buyerSiren) {
     buyer.ele("ram:SpecifiedLegalOrganization")
       .ele("ram:ID").att("schemeID", "0002").txt(data.buyerSiren)
   }
+  buyer.ele("ram:PostalTradeAddress")
+    .ele("ram:CountryID").txt(data.buyerCountry ?? "FR")
 
   // Header Trade Delivery (required by spec)
   trans.ele("ram:ApplicableHeaderTradeDelivery")
@@ -128,7 +136,8 @@ export function generateFacturXML(data: FacturXData): string {
   const taxGroups = groupByVatRate(data.lines)
   for (const g of taxGroups) {
     const tax = sett.ele("ram:ApplicableTradeTax")
-    tax.ele("ram:CalculatedAmount").txt(data.isFranchise ? "0.00" : g.vat.toFixed(2))
+    const calculatedVat = data.isFranchise ? 0 : parseFloat((g.basis * g.rate / 100).toFixed(2))
+    tax.ele("ram:CalculatedAmount").txt(calculatedVat.toFixed(2))
     tax.ele("ram:TypeCode").txt("VAT")
     if (data.isFranchise) {
       tax.ele("ram:ExemptionReason").txt("Franchise en base de TVA — Article 293 B du CGI")
@@ -138,9 +147,14 @@ export function generateFacturXML(data: FacturXData): string {
     tax.ele("ram:RateApplicablePercent").txt(data.isFranchise ? "0.00" : g.rate.toFixed(2))
   }
 
+  const dueDateCode = toDateCode(data.dueDate ?? data.invoiceDate)
+  sett.ele("ram:SpecifiedTradePaymentTerms")
+    .ele("ram:DueDateDateTime")
+    .ele("udt:DateTimeString").att("format", "102").txt(dueDateCode)
+
   const sum = sett.ele("ram:SpecifiedTradeSettlementHeaderMonetarySummation")
-  sum.ele("ram:LineTotalAmount").txt(data.totalHT.toFixed(2))
-  sum.ele("ram:TaxBasisTotalAmount").txt(data.totalHT.toFixed(2))
+  sum.ele("ram:LineTotalAmount").txt(lineTotalSum.toFixed(2))
+  sum.ele("ram:TaxBasisTotalAmount").txt(lineTotalSum.toFixed(2))
   sum.ele("ram:TaxTotalAmount").att("currencyID", data.currency).txt(data.totalVat.toFixed(2))
   sum.ele("ram:GrandTotalAmount").txt(data.totalTTC.toFixed(2))
   sum.ele("ram:DuePayableAmount").txt(data.totalTTC.toFixed(2))

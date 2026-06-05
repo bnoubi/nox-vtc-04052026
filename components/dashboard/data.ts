@@ -155,10 +155,16 @@ export interface BCDocument {
 }
 
 export interface InvoiceItem {
-  id: string
-  designation: string
-  amountHT: number
-  tvaRate: number
+  id?: string
+  // Factures manuelles (create-invoice, camelCase)
+  designation?: string
+  amountHT?: number
+  tvaRate?: number
+  // Factures converties depuis BC (convert-bc-to-invoice, snake_case DB)
+  label?: string
+  prix_ht?: number
+  tva_rate?: number
+  quantite?: number
 }
 
 export interface InvoiceDocument {

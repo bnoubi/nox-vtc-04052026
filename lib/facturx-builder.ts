@@ -2,6 +2,13 @@ import type { BCDocument, InvoiceDocument, EnterpriseProfile } from "@/component
 import { type FacturXData, generateFacturXML } from "./facturx-xml"
 import { embedFacturXML } from "./facturx-embed"
 
+function vatRateFromMode(tvaMode?: string, fallback?: number): number {
+  if (tvaMode === "franchise") return 0
+  if (tvaMode === "20%") return 20
+  if (tvaMode === "10%") return 10
+  return fallback ?? 10
+}
+
 export async function buildFacturXFromBC(
   pdfBlob: Blob,
   bc: BCDocument,
@@ -25,10 +32,11 @@ export async function buildFacturXFromBC(
     sellerAddress: enterprise.adresse ?? "",
     sellerCity: enterprise.city ?? "",
     sellerPostalCode: enterprise.zipCode ?? "",
-    sellerCountry: enterprise.pays ?? "FR",
+    sellerCountry: "FR",
     sellerVatNumber: enterprise.tvaIntra || enterprise.tva || undefined,
     isFranchise,
     buyerName: bc.client,
+    buyerCountry: "FR",
     invoiceNumber: bc.number,
     invoiceDate: bc.date,
     currency: "EUR",
@@ -37,7 +45,7 @@ export async function buildFacturXFromBC(
         description,
         quantity: 1,
         unitPrice: parseFloat(totalHT.toFixed(2)),
-        vatRate,
+        vatRate: isFranchise ? 0 : (vatRate > 0 ? vatRate : 10),
         lineTotal: parseFloat(totalHT.toFixed(2)),
       },
     ],
@@ -61,16 +69,34 @@ export async function buildFacturXFromInvoice(
   const totalHT = isNaN(rawHT) || rawHT <= 0 ? (isFranchise ? totalTTC : totalTTC / 1.1) : rawHT
   const rawVat = invoice.tva != null ? invoice.tva : Math.max(0, totalTTC - totalHT)
   const totalVat = isFranchise ? 0 : (isNaN(rawVat) ? 0 : rawVat)
-  const vatRate = isFranchise ? 0 : (invoice.tvaRate ?? 10)
+  const vatRate = isFranchise ? 0 : vatRateFromMode(invoice.tvaMode, invoice.tvaRate)
+  const lineVatRate = isFranchise ? 0 : (vatRate > 0 ? vatRate : 10)
+
+  console.log('[FacturX Builder Invoice]', {
+    totalHT: totalHT,
+    totalVat: totalVat,
+    totalTTC: totalTTC,
+    vatRate: vatRate,
+    isFranchise: isFranchise,
+    rawHT: invoice.amountHT,
+    rawTva: invoice.tva,
+    rawAmount: invoice.amount,
+    linesCount: invoice.items?.length ?? 0
+  })
 
   const lines = invoice.items && invoice.items.length > 0
-    ? invoice.items.map(item => ({
-        description: item.designation || "Prestation",
-        quantity: 1,
-        unitPrice: parseFloat((item.amountHT ?? 0).toFixed(2)),
-        vatRate: item.tvaRate ?? 0,
-        lineTotal: parseFloat((item.amountHT ?? 0).toFixed(2)),
-      }))
+    ? invoice.items.map(item => {
+        const desc = item.label || item.designation || "Prestation"
+        const ht = item.prix_ht ?? item.amountHT ?? 0
+        const rate = isFranchise ? 0 : (item.tva_rate ?? item.tvaRate ?? 10)
+        return {
+          description: desc,
+          quantity: 1,
+          unitPrice: parseFloat(ht.toFixed(2)),
+          vatRate: rate,
+          lineTotal: parseFloat(ht.toFixed(2)),
+        }
+      })
     : [{
         description:
           invoice.trajet?.depart && invoice.trajet?.arrivee
@@ -78,7 +104,7 @@ export async function buildFacturXFromInvoice(
             : "Transport VTC",
         quantity: 1,
         unitPrice: parseFloat(totalHT.toFixed(2)),
-        vatRate,
+        vatRate: lineVatRate,
         lineTotal: parseFloat(totalHT.toFixed(2)),
       }]
 
@@ -88,13 +114,15 @@ export async function buildFacturXFromInvoice(
     sellerAddress: enterprise.adresse ?? "",
     sellerCity: enterprise.city ?? "",
     sellerPostalCode: enterprise.zipCode ?? "",
-    sellerCountry: enterprise.pays ?? "FR",
+    sellerCountry: "FR",
     sellerVatNumber: (enterprise.tvaIntra || enterprise.tva) || undefined,
     isFranchise,
     buyerName: invoice.client || "Client",
     buyerSiren: invoice.clientSiren ?? undefined,
+    buyerCountry: "FR",
     invoiceNumber: invoice.number,
     invoiceDate: invoice.date,
+    dueDate: (invoice as any).echeance ?? undefined,
     currency: "EUR",
     lines,
     totalHT: parseFloat(totalHT.toFixed(2)),
