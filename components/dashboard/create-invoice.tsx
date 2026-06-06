@@ -18,6 +18,7 @@ import {
   Plus,
   Users,
   Loader2,
+  Calendar,
 } from "lucide-react"
 import { useNox } from "./nox-context"
 import { type BCDocument, type InvoiceDocument, type Client, type Driver, type Vehicle } from "./data"
@@ -28,6 +29,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
+import { DateTimePickerSheet } from "./date-time-picker-sheet"
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -420,6 +422,15 @@ function formatDuration(seconds: number): string {
   return m === 0 ? `${h} h` : `${h} h ${m} min`
 }
 
+function formatDateFr(dateStr: string): string {
+  if (!dateStr) return ""
+  const d = new Date(dateStr + "T12:00:00")
+  const w = d.toLocaleDateString("fr-FR", { weekday: "short" })
+  const weekday = w.charAt(0).toUpperCase() + w.slice(1)
+  const month = d.toLocaleDateString("fr-FR", { month: "long" })
+  return `${weekday} ${d.getDate()} ${month}`
+}
+
 // ── Facture Libre: Free-form invoice ──────────────────────────
 
 type InvoiceMode = "trajet" | "libre"
@@ -456,15 +467,16 @@ function FactureLibreForm({
 
   // ── Other common fields ────────────────────────────────────
   const [objet, setObjet] = useState("")
-  const [notes, setNotes] = useState("")
 
   // ── Trajet mode fields ─────────────────────────────────────
   const [trajetDepart, setTrajetDepart] = useState("")
   const [trajetArrivee, setTrajetArrivee] = useState("")
-  const [trajetHeure, setTrajetHeure] = useState("")
+  const [trajetDate, setTrajetDate] = useState("")
+  const [trajetTime, setTrajetTime] = useState("")
+  const [showDateTimePicker, setShowDateTimePicker] = useState(false)
   const [trajetDistance, setTrajetDistance] = useState("")
-  const [trajetPassagers, setTrajetPassagers] = useState("")
-  const [trajetBagages, setTrajetBagages] = useState("")
+  const [trajetPassagers, setTrajetPassagers] = useState(1)
+  const [trajetBagages, setTrajetBagages] = useState(0)
   const [selectedDriverId, setSelectedDriverId] = useState("")
   const [selectedVehicleId, setSelectedVehicleId] = useState("")
   const [trajetPrixHT, setTrajetPrixHT] = useState("")
@@ -474,6 +486,8 @@ function FactureLibreForm({
   // ── Common fields ──────────────────────────────────────────
   const [serviceDate, setServiceDate] = useState("")
   const [serviceDateError, setServiceDateError] = useState("")
+  const [showLibreDatePicker, setShowLibreDatePicker] = useState(false)
+  const libreDateRef = useRef<HTMLInputElement>(null)
   const [formErrors, setFormErrors] = useState<Record<string, boolean>>({})
 
   // ── Libre mode fields ──────────────────────────────────────
@@ -604,7 +618,7 @@ function FactureLibreForm({
           const rawSec = parseInt((route.duration ?? "0s").replace("s", ""), 10)
           if (km > 0) {
             setTrajetDistance(String(km))
-            const tarif = detectTarif(trajetHeure, serviceDate)
+            const tarif = detectTarif(trajetTime, trajetDate)
             const { base } = tariffSettings
             const rawBase = base.priseEnCharge + (km * base.prixKm * tarif.coef)
             const price = Math.max(rawBase, base.courseMinimum)
@@ -661,7 +675,7 @@ function FactureLibreForm({
 
     setFormErrors({})
 
-    if (serviceDateError) { toast.error(serviceDateError); return }
+    if (invoiceMode === "libre" && serviceDateError) { toast.error(serviceDateError); return }
 
     // Supabase RPC pour le numéro
     let invoiceNumber = `F-${new Date().getFullYear()}-???`
@@ -697,17 +711,16 @@ function FactureLibreForm({
         status: "brouillon",
         type: "facture",
         bcRef: objet || "Trajet réalisé",
-        notes,
         driverId: driver?.id,
         driverName: driver?.name,
         trajet: {
           depart: trajetDepart,
           arrivee: trajetArrivee,
-          date: serviceDate || undefined,
-          time: trajetHeure || undefined,
+          date: trajetDate || undefined,
+          time: trajetTime || undefined,
           distance: trajetDistance ? parseFloat(trajetDistance) : undefined,
-          passengers: trajetPassagers ? parseInt(trajetPassagers) : undefined,
-          luggage: trajetBagages ? parseInt(trajetBagages) : undefined,
+          passengers: trajetPassagers,
+          luggage: trajetBagages,
         },
         vehicleId: vehicle?.id,
         vehicleName: vehicle ? `${vehicle.marque ?? ""} ${vehicle.modele}`.trim() : undefined,
@@ -739,7 +752,6 @@ function FactureLibreForm({
         status: "brouillon",
         type: "facture",
         bcRef: objet || "Facture Libre",
-        notes,
         items: formattedItems,
         discountValue: discountValue > 0 ? discountValue : undefined,
         discountType: discountValue > 0 ? discountType : undefined,
@@ -971,36 +983,44 @@ function FactureLibreForm({
                 </div>
               </div>
 
-              {/* Date + Heure inline */}
-              <div className="flex gap-2 items-start">
-                <div className="flex-1 flex flex-col gap-1">
-                  <input
-                    type="date"
-                    value={serviceDate}
-                    max={new Date().toISOString().split("T")[0]}
-                    onChange={e => handleServiceDateChange(e.target.value)}
-                    className={cn(inputCls, serviceDateError && "border-red-500/60")}
-                  />
-                  {serviceDateError && (
-                    <p className="text-[10px] text-red-400 leading-tight">{serviceDateError}</p>
-                  )}
-                </div>
-                <input
-                  type="time"
-                  value={trajetHeure}
-                  onChange={e => setTrajetHeure(e.target.value)}
-                  className={cn(inputCls, "w-[120px] shrink-0")}
-                />
+              {/* Date + Heure via DateTimePickerSheet */}
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Date</label>
+                <button
+                  type="button"
+                  onClick={() => setShowDateTimePicker(true)}
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 hover:border-gold/50 transition-colors text-left"
+                >
+                  <Calendar className="h-4 w-4 text-gold/70 flex-shrink-0" strokeWidth={1.5} />
+                  <span className={cn("flex-1 text-sm", trajetDate ? "text-foreground" : "text-muted-foreground/50")}>
+                    {trajetDate ? `${formatDateFr(trajetDate)} à ${trajetTime || "—"}` : "Choisir la date et l'heure"}
+                  </span>
+                  {trajetDate && <span className="text-[11px] text-gold font-medium">Modifier</span>}
+                </button>
               </div>
 
-              {/* Passagers / Bagages */}
-              <div className="flex gap-2">
-                <input type="number" placeholder="Pass." min="1" max="9" value={trajetPassagers}
-                  onChange={e => setTrajetPassagers(e.target.value)}
-                  className={cn(inputCls, "flex-1")} />
-                <input type="number" placeholder="Bag." min="0" max="9" value={trajetBagages}
-                  onChange={e => setTrajetBagages(e.target.value)}
-                  className={cn(inputCls, "flex-1")} />
+              {/* Passagers / Bagages — steppers */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Passagers</label>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setTrajetPassagers(p => Math.max(1, p - 1))}
+                      className="w-10 h-10 rounded-lg bg-[#242424] border border-onyx-border/30 flex items-center justify-center text-foreground hover:bg-white/5 text-lg font-medium">−</button>
+                    <span className="flex-1 text-center text-sm font-semibold text-foreground">{trajetPassagers}</span>
+                    <button type="button" onClick={() => setTrajetPassagers(p => Math.min(9, p + 1))}
+                      className="w-10 h-10 rounded-lg bg-[#242424] border border-onyx-border/30 flex items-center justify-center text-foreground hover:bg-white/5 text-lg font-medium">+</button>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Bagages</label>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setTrajetBagages(b => Math.max(0, b - 1))}
+                      className="w-10 h-10 rounded-lg bg-[#242424] border border-onyx-border/30 flex items-center justify-center text-foreground hover:bg-white/5 text-lg font-medium">−</button>
+                    <span className="flex-1 text-center text-sm font-semibold text-foreground">{trajetBagages}</span>
+                    <button type="button" onClick={() => setTrajetBagages(b => Math.min(9, b + 1))}
+                      className="w-10 h-10 rounded-lg bg-[#242424] border border-onyx-border/30 flex items-center justify-center text-foreground hover:bg-white/5 text-lg font-medium">+</button>
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -1073,6 +1093,45 @@ function FactureLibreForm({
         {/* ── LIBRE MODE ───────────────────────────────────────── */}
         {invoiceMode === "libre" && (
           <>
+            {/* Date de prestation — en haut du mode libre */}
+            <section className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                Date de prestation{" "}
+                <span className="text-muted-foreground/50 normal-case font-normal">(optionnel)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => libreDateRef.current?.showPicker?.() ?? libreDateRef.current?.click()}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 hover:border-gold/50 transition-colors text-left"
+              >
+                <Calendar className="h-4 w-4 text-gold/70 flex-shrink-0" strokeWidth={1.5} />
+                <span className={cn("flex-1 text-sm", serviceDate ? "text-foreground" : "text-muted-foreground/50")}>
+                  {serviceDate ? formatDateFr(serviceDate) : "Choisir une date"}
+                </span>
+                {serviceDate && (
+                  <span
+                    role="button"
+                    onClick={e => { e.stopPropagation(); setServiceDate(""); setServiceDateError("") }}
+                    className="w-5 h-5 rounded-full bg-onyx-border/50 flex items-center justify-center cursor-pointer"
+                  >
+                    <X className="h-3 w-3 text-muted-foreground" />
+                  </span>
+                )}
+              </button>
+              <input
+                ref={libreDateRef}
+                type="date"
+                value={serviceDate}
+                max={new Date().toISOString().split("T")[0]}
+                onChange={e => handleServiceDateChange(e.target.value)}
+                className="sr-only"
+                tabIndex={-1}
+              />
+              {serviceDateError && (
+                <p className="text-[10px] text-red-400 leading-tight">{serviceDateError}</p>
+              )}
+            </section>
+
             {/* Lignes */}
             <section>
               <div className="flex items-center justify-between mb-3">
@@ -1216,39 +1275,12 @@ function FactureLibreForm({
             </label>
           )}
 
-          {/* Date de prestation — mode libre uniquement (trajet a sa propre ligne date+heure) */}
-          {invoiceMode === "libre" && (
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                Date de prestation{" "}
-                <span className="text-muted-foreground/50 normal-case font-normal">(optionnel)</span>
-              </label>
-              <input
-                type="date"
-                value={serviceDate}
-                max={new Date().toISOString().split("T")[0]}
-                onChange={e => handleServiceDateChange(e.target.value)}
-                className={cn(inputCls, serviceDateError && "border-red-500/60")}
-              />
-              {serviceDateError && (
-                <p className="text-[10px] text-red-400 leading-tight">{serviceDateError}</p>
-              )}
-            </div>
-          )}
-
-          <input
-            type="text"
+          <textarea
+            rows={3}
             value={objet}
             onChange={e => setObjet(e.target.value)}
-            placeholder={invoiceMode === "trajet" ? "Référence (ex: Mission aéroport)" : "Référence (ex: Prestation ponctuelle)"}
-            className={inputCls}
-          />
-          <textarea
-            rows={2}
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="Informations supplémentaires..."
-            className="w-full px-4 py-2 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 resize-none"
+            placeholder={invoiceMode === "trajet" ? "Référence, instructions particulières..." : "Référence, description de la prestation..."}
+            className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 resize-none"
           />
         </section>
       </form>
@@ -1345,6 +1377,25 @@ function FactureLibreForm({
           setClientId(newClientId)
           setClientSearch("")
           setShowQuickAddClient(false)
+        }}
+      />
+
+      <DateTimePickerSheet
+        open={showDateTimePicker}
+        initialDate={trajetDate}
+        initialTime={trajetTime}
+        pastOnly
+        onClose={() => setShowDateTimePicker(false)}
+        onConfirm={(date, time) => {
+          const chosen = new Date(date)
+          const today = new Date(); today.setHours(23, 59, 59, 999)
+          if (chosen > today) {
+            toast.error("La date ne peut pas être dans le futur")
+            setTrajetDate(""); setTrajetTime("")
+          } else {
+            setTrajetDate(date); setTrajetTime(time)
+          }
+          setShowDateTimePicker(false)
         }}
       />
     </motion.div>
