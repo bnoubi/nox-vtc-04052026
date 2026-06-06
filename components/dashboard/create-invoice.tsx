@@ -17,6 +17,7 @@ import {
   MapPin,
   Plus,
   Users,
+  Loader2,
 } from "lucide-react"
 import { useNox } from "./nox-context"
 import { type BCDocument, type InvoiceDocument, type Client, type Driver, type Vehicle } from "./data"
@@ -26,6 +27,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
+import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -397,6 +399,27 @@ function FromBCScreen({
   )
 }
 
+// ── Helpers ───────────────────────────────────────────────────
+
+function detectTarif(time: string, date: string): { id: string; name: string; coef: number } {
+  if (date) {
+    const dayOfWeek = new Date(date).getDay()
+    if (dayOfWeek === 0 || dayOfWeek === 6) return { id: "c", name: "Week-end", coef: 1.5 }
+  }
+  if (!time) return { id: "a", name: "Journée", coef: 1.0 }
+  const [h] = time.split(":").map(Number)
+  if (h >= 21 || h < 7) return { id: "b", name: "Nuit", coef: 1.25 }
+  return { id: "a", name: "Journée", coef: 1.0 }
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds <= 0) return ""
+  const h = Math.floor(seconds / 3600)
+  const m = Math.round((seconds % 3600) / 60)
+  if (h === 0) return `${m} min`
+  return m === 0 ? `${h} h` : `${h} h ${m} min`
+}
+
 // ── Facture Libre: Free-form invoice ──────────────────────────
 
 type InvoiceMode = "trajet" | "libre"
@@ -410,7 +433,7 @@ function FactureLibreForm({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const { clients, invoices, enterprise, drivers, vehicles, addInvoice } = useNox()
+  const { clients, invoices, enterprise, drivers, vehicles, addInvoice, tariffSettings } = useNox()
   const supabase = createClient()
   const clientRef = useRef<HTMLDivElement>(null)
   const [isMicroInvoice, setIsMicroInvoice] = useState<boolean>(false)
@@ -438,7 +461,6 @@ function FactureLibreForm({
   // ── Trajet mode fields ─────────────────────────────────────
   const [trajetDepart, setTrajetDepart] = useState("")
   const [trajetArrivee, setTrajetArrivee] = useState("")
-  const [trajetDate, setTrajetDate] = useState("")
   const [trajetHeure, setTrajetHeure] = useState("")
   const [trajetDistance, setTrajetDistance] = useState("")
   const [trajetPassagers, setTrajetPassagers] = useState("")
@@ -446,7 +468,13 @@ function FactureLibreForm({
   const [selectedDriverId, setSelectedDriverId] = useState("")
   const [selectedVehicleId, setSelectedVehicleId] = useState("")
   const [trajetPrixHT, setTrajetPrixHT] = useState("")
-  const [trajetDateError, setTrajetDateError] = useState("")
+  const [trajetDuree, setTrajetDuree] = useState("")
+  const [isAutoCalculating, setIsAutoCalculating] = useState(false)
+
+  // ── Common fields ──────────────────────────────────────────
+  const [serviceDate, setServiceDate] = useState("")
+  const [serviceDateError, setServiceDateError] = useState("")
+  const [formErrors, setFormErrors] = useState<Record<string, boolean>>({})
 
   // ── Libre mode fields ──────────────────────────────────────
   const [items, setItems] = useState([{ id: `item-${Date.now()}`, designation: "", amountHT: "", tvaRate: autoTvaRate }])
@@ -522,23 +550,81 @@ function FactureLibreForm({
   const trajetTva = isMicroInvoice ? 0 : trajetHT * (autoTvaRate / 100)
   const trajetTTC = trajetHT + trajetTva
 
-  function handleDateChange(v: string) {
-    setTrajetDate(v)
+  function handleServiceDateChange(v: string) {
+    setServiceDate(v)
     if (v) {
       const chosen = new Date(v)
       const today = new Date()
       today.setHours(23, 59, 59, 999)
       if (chosen > today) {
-        setTrajetDateError("Pour un trajet futur, utilisez le Bon de Réservation")
+        setServiceDateError("La date ne peut pas être dans le futur")
       } else {
-        setTrajetDateError("")
+        setServiceDateError("")
       }
     } else {
-      setTrajetDateError("")
+      setServiceDateError("")
     }
   }
 
-  const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(n)
+  // ── Calcul automatique distance + tarif ───────────────────
+  useEffect(() => {
+    if (!trajetDepart || !trajetArrivee || trajetDepart.length < 5 || trajetArrivee.length < 5) return
+
+    let cancelled = false
+    setIsAutoCalculating(true)
+    setTrajetDistance("")
+    setTrajetDuree("")
+
+    ;(async () => {
+      try {
+        const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+        if (!apiKey) throw new Error("Clé API manquante")
+
+        const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": apiKey,
+            "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
+          },
+          body: JSON.stringify({
+            origin: { address: trajetDepart },
+            destination: { address: trajetArrivee },
+            travelMode: "DRIVE",
+            routingPreference: "TRAFFIC_UNAWARE",
+          }),
+        })
+
+        if (!res.ok) throw new Error()
+        const data = await res.json()
+
+        if (!cancelled && data.routes?.[0]) {
+          const route = data.routes[0]
+          const km = Math.round((route.distanceMeters ?? 0) / 100) / 10
+          const rawSec = parseInt((route.duration ?? "0s").replace("s", ""), 10)
+          if (km > 0) {
+            setTrajetDistance(String(km))
+            const tarif = detectTarif(trajetHeure, serviceDate)
+            const { base } = tariffSettings
+            const rawBase = base.priseEnCharge + (km * base.prixKm * tarif.coef)
+            const price = Math.max(rawBase, base.courseMinimum)
+            setTrajetPrixHT(String(Math.round(price * 100) / 100))
+          }
+          if (rawSec > 0) {
+            setTrajetDuree(formatDuration(rawSec))
+          }
+        }
+      } catch {
+        // Fallback gracieux — les champs restent vides
+      } finally {
+        if (!cancelled) setIsAutoCalculating(false)
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [trajetDepart, trajetArrivee]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
   const fmtDate = (d: Date) =>
     `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`
 
@@ -548,19 +634,34 @@ function FactureLibreForm({
 
     const clientName = clientDisplayName || "Inconnu"
 
-    if (!clientId) { toast.error("Veuillez sélectionner un client"); return }
-
     if (invoiceMode === "trajet") {
-      if (!trajetDepart) { toast.error("Adresse de départ requise"); return }
-      if (!trajetArrivee) { toast.error("Adresse d'arrivée requise"); return }
-      if (!trajetDate) { toast.error("Date du trajet requise"); return }
-      if (trajetDateError) { toast.error(trajetDateError); return }
-      if (!trajetPrixHT || trajetHT <= 0) { toast.error("Prix HT requis"); return }
-    } else {
-      if (items.some(i => !i.designation || !i.amountHT)) {
-        toast.error("Toutes les lignes doivent avoir une désignation et un montant"); return
+      const errors: Record<string, boolean> = {}
+      if (!clientId) errors.client = true
+      if (!trajetDepart) errors.depart = true
+      if (!trajetArrivee) errors.arrivee = true
+      if (!trajetPrixHT || trajetHT <= 0) errors.prixHT = true
+      if (Object.keys(errors).length > 0) {
+        setFormErrors(errors)
+        toast.error("Veuillez remplir tous les champs obligatoires")
+        return
       }
     }
+
+    if (invoiceMode === "libre") {
+      const errors: Record<string, boolean> = {}
+      if (!clientId) errors.client = true
+      const itemErrors = items.map(i => !i.designation || !i.amountHT)
+      if (itemErrors.some(Boolean)) errors.items = true
+      if (Object.keys(errors).length > 0) {
+        setFormErrors(errors)
+        toast.error("Veuillez remplir tous les champs obligatoires")
+        return
+      }
+    }
+
+    setFormErrors({})
+
+    if (serviceDateError) { toast.error(serviceDateError); return }
 
     // Supabase RPC pour le numéro
     let invoiceNumber = `F-${new Date().getFullYear()}-???`
@@ -602,7 +703,7 @@ function FactureLibreForm({
         trajet: {
           depart: trajetDepart,
           arrivee: trajetArrivee,
-          date: trajetDate,
+          date: serviceDate || undefined,
           time: trajetHeure || undefined,
           distance: trajetDistance ? parseFloat(trajetDistance) : undefined,
           passengers: trajetPassagers ? parseInt(trajetPassagers) : undefined,
@@ -647,6 +748,7 @@ function FactureLibreForm({
         tva10Amount: (!isMicroInvoice && tva10 > 0) ? tva10 : undefined,
         tva20Amount: (!isMicroInvoice && tva20 > 0) ? tva20 : undefined,
         tva55Amount: (!isMicroInvoice && tva55 > 0) ? tva55 : undefined,
+        serviceDate: serviceDate || undefined,
       }
     }
 
@@ -681,43 +783,7 @@ function FactureLibreForm({
       {/* Scrollable Form */}
       <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-5 space-y-6 pb-32">
 
-        {/* Mode Toggle */}
-        <div className="flex gap-2 p-1 rounded-2xl bg-onyx-card border border-onyx-border/50">
-          {([
-            { id: "trajet" as InvoiceMode, icon: <Car className="h-3.5 w-3.5" />, label: "Trajet réalisé" },
-            { id: "libre" as InvoiceMode, icon: <Receipt className="h-3.5 w-3.5" />, label: "Prestation libre" },
-          ] as const).map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => setInvoiceMode(m.id)}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition-all",
-                invoiceMode === m.id
-                  ? "bg-gold text-black shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {m.icon}
-              {m.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Franchise TVA checkbox — affiché uniquement pour les abonnés en franchise */}
-        {enterprise?.vatMode === "franchise" && (
-          <label className="flex items-center gap-2.5 cursor-pointer py-1">
-            <Checkbox
-              id="micro-invoice"
-              checked={isMicroInvoice}
-              onCheckedChange={(v) => setIsMicroInvoice(v === true)}
-              className="border-white/40 data-[state=checked]:bg-gold data-[state=checked]:border-gold data-[state=checked]:text-black"
-            />
-            <span className="text-[12px] text-foreground/80 select-none">TVA non applicable (art. 293B CGI)</span>
-          </label>
-        )}
-
-        {/* Client — pattern BC ─────────────────────────────── */}
+        {/* Client — commun aux deux modes ─────────────────── */}
         <section className="space-y-2">
           <button
             type="button"
@@ -732,13 +798,13 @@ function FactureLibreForm({
             <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
               Client <span className="text-red-500">*</span>
             </label>
-            <div className="flex gap-2">
+            <div className={cn("flex gap-2 rounded-xl", formErrors.client && "ring-1 ring-red-500")}>
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
                   type="text"
                   value={clientSearch}
-                  onChange={e => { setClientSearch(e.target.value); setClientId("") }}
+                  onChange={e => { setClientSearch(e.target.value); setClientId(""); if (formErrors.client) setFormErrors(prev => ({ ...prev, client: false })) }}
                   onFocus={() => setClientFocused(true)}
                   onBlur={() => setTimeout(() => setClientFocused(false), 200)}
                   placeholder="Nom, société, téléphone..."
@@ -804,41 +870,137 @@ function FactureLibreForm({
           )}
         </section>
 
+        {/* Mode Toggle */}
+        <div className="flex gap-2 p-1 rounded-2xl bg-onyx-card border border-onyx-border/50">
+          {([
+            { id: "trajet" as InvoiceMode, icon: <Car className="h-3.5 w-3.5" />, label: "Trajet réalisé" },
+            { id: "libre" as InvoiceMode, icon: <Receipt className="h-3.5 w-3.5" />, label: "Prestation libre" },
+          ] as const).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setInvoiceMode(m.id)}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition-all",
+                invoiceMode === m.id
+                  ? "bg-gold text-black shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {m.icon}
+              {m.label}
+            </button>
+          ))}
+        </div>
+
         {/* ── TRAJET MODE ──────────────────────────────────────── */}
         {invoiceMode === "trajet" && (
           <>
-            {/* Trajet */}
+            {/* Adresses */}
             <section className="space-y-3">
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5" strokeWidth={1.5} />
                 Trajet
               </p>
-              <input type="text" placeholder="Adresse de départ" value={trajetDepart}
-                onChange={e => setTrajetDepart(e.target.value)} className={inputCls} />
-              <input type="text" placeholder="Adresse d'arrivée" value={trajetArrivee}
-                onChange={e => setTrajetArrivee(e.target.value)} className={inputCls} />
+
+              {/* Départ */}
+              <div className={cn("relative", formErrors.depart && "ring-1 ring-red-500 rounded-xl")}>
+                <PlacesAutocomplete
+                  value={trajetDepart}
+                  onChange={v => { setTrajetDepart(v); if (v && formErrors.depart) setFormErrors(prev => ({ ...prev, depart: false })); if (!v) { setTrajetArrivee(""); setTrajetDistance(""); setTrajetPrixHT(""); setTrajetDuree("") } }}
+                  placeholder="Adresse de départ"
+                  addressMode="full"
+                  className={cn(inputCls, "pr-10")}
+                />
+                {trajetDepart && (
+                  <button
+                    type="button"
+                    onClick={() => { setTrajetDepart(""); setTrajetDistance(""); setTrajetPrixHT(""); setTrajetDuree("") }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-onyx-border/50 flex items-center justify-center hover:bg-onyx-border transition-colors"
+                  >
+                    <X className="h-3 w-3 text-muted-foreground" />
+                  </button>
+                )}
+              </div>
+
+              {/* Arrivée */}
+              <div className={cn("relative", formErrors.arrivee && "ring-1 ring-red-500 rounded-xl")}>
+                <PlacesAutocomplete
+                  value={trajetArrivee}
+                  onChange={v => { setTrajetArrivee(v); if (v && formErrors.arrivee) setFormErrors(prev => ({ ...prev, arrivee: false })); if (!v) { setTrajetDistance(""); setTrajetPrixHT(""); setTrajetDuree("") } }}
+                  placeholder="Adresse d'arrivée"
+                  addressMode="full"
+                  className={cn(inputCls, "pr-10")}
+                />
+                {trajetArrivee && (
+                  <button
+                    type="button"
+                    onClick={() => { setTrajetArrivee(""); setTrajetDistance(""); setTrajetPrixHT(""); setTrajetDuree("") }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-onyx-border/50 flex items-center justify-center hover:bg-onyx-border transition-colors"
+                  >
+                    <X className="h-3 w-3 text-muted-foreground" />
+                  </button>
+                )}
+              </div>
+
+              {/* Distance + Durée estimées */}
               <div className="flex gap-2">
-                <div className="flex-1 flex flex-col gap-1">
-                  <input type="date" value={trajetDate} max={new Date().toISOString().split("T")[0]}
-                    onChange={e => handleDateChange(e.target.value)}
-                    className={cn(inputCls, trajetDateError && "border-red-500/60")} />
-                  {trajetDateError && (
-                    <p className="text-[10px] text-red-400 leading-tight">{trajetDateError}</p>
+                <div className="flex-1 rounded-xl bg-[#1c1c1c] border border-onyx-border/20 px-3 py-2.5">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Distance estimée</p>
+                  {isAutoCalculating ? (
+                    <span className="flex items-center gap-1.5 text-sm text-gold/60">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />…
+                    </span>
+                  ) : trajetDistance ? (
+                    <p className="text-sm font-medium text-foreground">{trajetDistance} km</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground/40">—</p>
                   )}
                 </div>
-                <input type="time" value={trajetHeure} onChange={e => setTrajetHeure(e.target.value)}
-                  className={cn(inputCls, "w-32 shrink-0")} />
+                <div className="flex-1 rounded-xl bg-[#1c1c1c] border border-onyx-border/20 px-3 py-2.5">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Durée estimée</p>
+                  {isAutoCalculating ? (
+                    <span className="flex items-center gap-1.5 text-sm text-gold/60">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />…
+                    </span>
+                  ) : trajetDuree ? (
+                    <p className="text-sm font-medium text-foreground">{trajetDuree}</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground/40">—</p>
+                  )}
+                </div>
               </div>
+
+              {/* Date + Heure inline */}
+              <div className="flex gap-2 items-start">
+                <div className="flex-1 flex flex-col gap-1">
+                  <input
+                    type="date"
+                    value={serviceDate}
+                    max={new Date().toISOString().split("T")[0]}
+                    onChange={e => handleServiceDateChange(e.target.value)}
+                    className={cn(inputCls, serviceDateError && "border-red-500/60")}
+                  />
+                  {serviceDateError && (
+                    <p className="text-[10px] text-red-400 leading-tight">{serviceDateError}</p>
+                  )}
+                </div>
+                <input
+                  type="time"
+                  value={trajetHeure}
+                  onChange={e => setTrajetHeure(e.target.value)}
+                  className={cn(inputCls, "w-[120px] shrink-0")}
+                />
+              </div>
+
+              {/* Passagers / Bagages */}
               <div className="flex gap-2">
-                <input type="number" placeholder="Distance km" min="0" step="0.1" value={trajetDistance}
-                  onChange={e => setTrajetDistance(e.target.value)}
-                  className={cn(inputCls, "flex-1")} />
                 <input type="number" placeholder="Pass." min="1" max="9" value={trajetPassagers}
                   onChange={e => setTrajetPassagers(e.target.value)}
-                  className={cn(inputCls, "w-24 shrink-0")} />
+                  className={cn(inputCls, "flex-1")} />
                 <input type="number" placeholder="Bag." min="0" max="9" value={trajetBagages}
                   onChange={e => setTrajetBagages(e.target.value)}
-                  className={cn(inputCls, "w-24 shrink-0")} />
+                  className={cn(inputCls, "flex-1")} />
               </div>
             </section>
 
@@ -870,7 +1032,7 @@ function FactureLibreForm({
               </section>
             )}
 
-            {/* Prix */}
+            {/* Tarif */}
             <section className="space-y-2">
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                 <Receipt className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -878,8 +1040,8 @@ function FactureLibreForm({
               </p>
               <div className="relative">
                 <input type="number" placeholder="0.00" min="0" step="0.01" value={trajetPrixHT}
-                  onChange={e => setTrajetPrixHT(e.target.value)}
-                  className="w-full px-4 py-3 pr-16 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40" />
+                  onChange={e => { setTrajetPrixHT(e.target.value); if (e.target.value && formErrors.prixHT) setFormErrors(prev => ({ ...prev, prixHT: false })) }}
+                  className={cn("w-full px-4 py-3 pr-16 rounded-xl bg-onyx-card border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40", formErrors.prixHT ? "border-red-500/60" : "border-onyx-border/50")} />
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">EUR HT</span>
               </div>
               {trajetHT > 0 && (
@@ -905,19 +1067,6 @@ function FactureLibreForm({
                 </div>
               )}
             </section>
-
-            {/* Notes */}
-            <section className="space-y-2">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <StickyNote className="h-3.5 w-3.5" strokeWidth={1.5} />
-                Référence et notes
-              </p>
-              <input type="text" value={objet} onChange={e => setObjet(e.target.value)}
-                placeholder="Référence (ex: Mission aéroport)" className={inputCls} />
-              <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Informations supplémentaires..."
-                className="w-full px-4 py-2 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 resize-none" />
-            </section>
           </>
         )}
 
@@ -934,10 +1083,10 @@ function FactureLibreForm({
               </div>
               <div className="space-y-3">
                 {items.map((item) => (
-                  <div key={item.id} className="p-3 bg-[#242424] border border-onyx-border/30 rounded-xl relative group">
+                  <div key={item.id} className={cn("p-3 bg-[#242424] border rounded-xl relative group", formErrors.items && (!item.designation || !item.amountHT) ? "border-red-500/60" : "border-onyx-border/30")}>
                     <input type="text" placeholder="Désignation (ex: Supplément attente, etc.)"
                       value={item.designation}
-                      onChange={e => updateItem(item.id, "designation", e.target.value)}
+                      onChange={e => { updateItem(item.id, "designation", e.target.value); if (formErrors.items) setFormErrors(prev => ({ ...prev, items: false })) }}
                       className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none mb-3" />
                     <div className="flex gap-2">
                       <div className="relative flex-1">
@@ -989,20 +1138,7 @@ function FactureLibreForm({
               </div>
             </section>
 
-            {/* Notes */}
-            <section className="space-y-2">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <StickyNote className="h-3.5 w-3.5" strokeWidth={1.5} />
-                Référence et notes
-              </p>
-              <input type="text" value={objet} onChange={e => setObjet(e.target.value)}
-                placeholder="Référence (ex: Prestation ponctuelle)" className={inputCls} />
-              <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Informations supplémentaires pour le client..."
-                className="w-full px-4 py-2 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 resize-none" />
-            </section>
-
-            {/* Live preview */}
+            {/* Aperçu total */}
             {subtotalHT > 0 && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
                 className="p-4 rounded-2xl bg-onyx-card border border-gold/20 space-y-1.5">
@@ -1059,6 +1195,62 @@ function FactureLibreForm({
             )}
           </>
         )}
+
+        {/* ── ZONE COMMUNE ─────────────────────────────────────── */}
+        <section className="space-y-2">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <StickyNote className="h-3.5 w-3.5" strokeWidth={1.5} />
+            Référence et notes
+          </p>
+
+          {/* Checkbox TVA franchise */}
+          {enterprise?.vatMode === "franchise" && (
+            <label className="flex items-center gap-2.5 cursor-pointer py-1">
+              <Checkbox
+                id="micro-invoice"
+                checked={isMicroInvoice}
+                onCheckedChange={(v) => setIsMicroInvoice(v === true)}
+                className="border-white/40 data-[state=checked]:bg-gold data-[state=checked]:border-gold data-[state=checked]:text-black"
+              />
+              <span className="text-[12px] text-foreground/80 select-none">TVA non applicable (art. 293B CGI)</span>
+            </label>
+          )}
+
+          {/* Date de prestation — mode libre uniquement (trajet a sa propre ligne date+heure) */}
+          {invoiceMode === "libre" && (
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                Date de prestation{" "}
+                <span className="text-muted-foreground/50 normal-case font-normal">(optionnel)</span>
+              </label>
+              <input
+                type="date"
+                value={serviceDate}
+                max={new Date().toISOString().split("T")[0]}
+                onChange={e => handleServiceDateChange(e.target.value)}
+                className={cn(inputCls, serviceDateError && "border-red-500/60")}
+              />
+              {serviceDateError && (
+                <p className="text-[10px] text-red-400 leading-tight">{serviceDateError}</p>
+              )}
+            </div>
+          )}
+
+          <input
+            type="text"
+            value={objet}
+            onChange={e => setObjet(e.target.value)}
+            placeholder={invoiceMode === "trajet" ? "Référence (ex: Mission aéroport)" : "Référence (ex: Prestation ponctuelle)"}
+            className={inputCls}
+          />
+          <textarea
+            rows={2}
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Informations supplémentaires..."
+            className="w-full px-4 py-2 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 resize-none"
+          />
+        </section>
       </form>
 
       {/* Fixed bottom CTA */}

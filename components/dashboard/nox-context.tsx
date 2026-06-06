@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { toast } from "sonner"
 import {
   Driver, Vehicle, Client, EnterpriseProfile, TarifBase, TarifForfait, TarifSupplement, TrancheHoraire, TariffGrid,
   BCDocument, InvoiceDocument, InvoiceStatus, Plan,
@@ -1298,7 +1299,11 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         .insert([payload])
         .select()
         .single()
-      if (error) return
+      if (error) {
+        console.error("addInvoice error:", error)
+        toast.error("Erreur lors de l'enregistrement de la facture. Veuillez réessayer.")
+        return
+      }
       if (data) {
         setInvoices(prev => [{ ...invoice, id: data.id, number: data.numero }, ...prev])
       }
