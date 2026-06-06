@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(req: Request) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data } = await supabase
     .from('invoices')
     .select('id, number, amount, amountHT, tva, tvaRate, items')

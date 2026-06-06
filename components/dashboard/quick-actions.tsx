@@ -18,12 +18,13 @@ import { SubscriptionDrawer } from "./subscription-drawer"
 interface QuickActionProps {
   icon: React.ReactNode
   label: string
+  subtitle?: string
   locked?: boolean
   onClick?: () => void
   onLockedClick?: () => void
 }
 
-function QuickActionTile({ icon, label, locked, onClick, onLockedClick }: QuickActionProps) {
+function QuickActionTile({ icon, label, subtitle, locked, onClick, onLockedClick }: QuickActionProps) {
   return (
     <button
       onClick={locked ? onLockedClick : onClick}
@@ -50,14 +51,21 @@ function QuickActionTile({ icon, label, locked, onClick, onLockedClick }: QuickA
         </span>
       </div>
 
-      <span
-        className={cn(
-          "text-[10px] font-medium leading-tight text-center px-1",
-          locked ? "text-zinc-400" : "text-foreground",
+      <div className="flex flex-col items-center gap-0.5 px-1">
+        <span
+          className={cn(
+            "text-[10px] font-medium leading-tight text-center",
+            locked ? "text-zinc-400" : "text-foreground",
+          )}
+        >
+          {label}
+        </span>
+        {subtitle && (
+          <span className="text-[9px] text-muted-foreground/60 leading-tight text-center">
+            {subtitle}
+          </span>
         )}
-      >
-        {label}
-      </span>
+      </div>
     </button>
   )
 }
@@ -125,7 +133,7 @@ export function QuickActions() {
       <div className="grid grid-cols-3 gap-2.5">
         <QuickActionTile
           icon={<FileText className="h-5 w-5" strokeWidth={1.5} />}
-          label="+ Bon de Réservation"
+          label="Réservation"
           onClick={() => setShowBCFlow(true)}
         />
         <QuickActionTile

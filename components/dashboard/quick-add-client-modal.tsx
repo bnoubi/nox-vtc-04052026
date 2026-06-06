@@ -150,7 +150,7 @@ export function QuickAddClientModal({ open, onClose, clients, onClientCreated }:
   if (!open) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-end justify-center">
+    <div className="fixed inset-0 z-[100000] flex items-end justify-center">
       {/* Overlay */}
       <motion.div
         initial={{ opacity: 0 }}

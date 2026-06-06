@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   Receipt,
@@ -11,16 +11,21 @@ import {
   Search,
   Check,
   FileText,
-  ChevronDown,
   StickyNote,
-  User,
   FilePlus2,
+  Car,
+  MapPin,
+  Plus,
+  Users,
 } from "lucide-react"
 import { useNox } from "./nox-context"
-import { type BCDocument, type InvoiceDocument, type Client } from "./data"
+import { type BCDocument, type InvoiceDocument, type Client, type Driver, type Vehicle } from "./data"
 import { CreateBCFlow } from "./create-bc"
+import { QuickAddClientModal } from "./quick-add-client-modal"
+import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { createClient } from "@/lib/supabase/client"
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -148,7 +153,7 @@ function ChooseInvoiceSheet({
             <ArrowRight className="h-4 w-4 text-muted-foreground/40 shrink-0 group-hover:text-gold/50 group-hover:translate-x-0.5 transition-all" strokeWidth={1.5} />
           </button>
 
-          {/* Option 3: Facture Libre */}
+          {/* Option 3: Nouvelle Facture */}
           <button
             onClick={onLibre}
             className="flex items-center gap-3.5 w-full p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all group"
@@ -157,9 +162,9 @@ function ChooseInvoiceSheet({
               <PlusCircle className="h-5 w-5 text-muted-foreground group-hover:text-gold transition-colors" strokeWidth={1.5} />
             </div>
             <div className="text-left flex-1">
-              <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">Facture Libre</p>
+              <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">Nouvelle Facture</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Frais annexes : attente, nettoyage, etc.
+                Trajet réalisé ou prestation libre
               </p>
             </div>
             <ArrowRight className="h-4 w-4 text-muted-foreground/40 shrink-0 group-hover:text-gold/50 group-hover:translate-x-0.5 transition-all" strokeWidth={1.5} />
@@ -394,6 +399,8 @@ function FromBCScreen({
 
 // ── Facture Libre: Free-form invoice ──────────────────────────
 
+type InvoiceMode = "trajet" | "libre"
+
 function FactureLibreForm({
   onBack,
   onClose,
@@ -403,128 +410,248 @@ function FactureLibreForm({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const { clients, invoices, addInvoice } = useNox()
-  const [form, setForm] = useState({
-    clientMode: "existing" as "existing" | "libre",
-    clientId: "",
-    clientLibre: "",
-    objet: "",
-    notes: "",
-  })
-  
-  const [items, setItems] = useState([{ id: `item-${Date.now()}`, designation: "", amountHT: "", tvaRate: 20 }])
+  const { clients, invoices, enterprise, drivers, vehicles, addInvoice } = useNox()
+  const supabase = createClient()
+  const clientRef = useRef<HTMLDivElement>(null)
+  const defaultFranchise = enterprise?.vatMode === "franchise"
+  const [isMicroInvoice, setIsMicroInvoice] = useState<boolean>(defaultFranchise)
+  const autoTvaRate = isMicroInvoice ? 0 : 10
+
+  // ── Mode toggle ────────────────────────────────────────────
+  const [invoiceMode, setInvoiceMode] = useState<InvoiceMode>("libre")
+
+  // ── Client search (pattern BC) ─────────────────────────────
+  const [clientSearch, setClientSearch] = useState("")
+  const [clientFocused, setClientFocused] = useState(false)
+  const [clientId, setClientId] = useState("")
+  const [showQuickAddClient, setShowQuickAddClient] = useState(false)
+  const [showClientModal, setShowClientModal] = useState(false)
+  const [modalSearch, setModalSearch] = useState("")
+
+  // ── Other common fields ────────────────────────────────────
+  const [objet, setObjet] = useState("")
+  const [notes, setNotes] = useState("")
+
+  // ── Trajet mode fields ─────────────────────────────────────
+  const [trajetDepart, setTrajetDepart] = useState("")
+  const [trajetArrivee, setTrajetArrivee] = useState("")
+  const [trajetDate, setTrajetDate] = useState("")
+  const [trajetHeure, setTrajetHeure] = useState("")
+  const [trajetDistance, setTrajetDistance] = useState("")
+  const [trajetPassagers, setTrajetPassagers] = useState("")
+  const [trajetBagages, setTrajetBagages] = useState("")
+  const [selectedDriverId, setSelectedDriverId] = useState("")
+  const [selectedVehicleId, setSelectedVehicleId] = useState("")
+  const [trajetPrixHT, setTrajetPrixHT] = useState("")
+  const [trajetDateError, setTrajetDateError] = useState("")
+
+  // ── Libre mode fields ──────────────────────────────────────
+  const [items, setItems] = useState([{ id: `item-${Date.now()}`, designation: "", amountHT: "", tvaRate: autoTvaRate }])
   const [discountValue, setDiscountValue] = useState<number>(0)
   const [discountType, setDiscountType] = useState<"percent" | "amount">("percent")
 
-  const [clientDropdownOpen, setClientDropdownOpen] = useState(false)
+  // ── Computed ───────────────────────────────────────────────
+  const filteredClients = useMemo(() => {
+    const s = clientSearch.trim().toLowerCase()
+    if (!s) return clients ?? []
+    return (clients ?? []).filter((c: Client) => {
+      const name = c.type === "particulier"
+        ? `${c.prenom ?? ""} ${c.nom ?? ""}`.toLowerCase()
+        : (c.raisonSociale ?? "").toLowerCase()
+      return name.includes(s) || (c.phone ?? "").includes(s)
+    })
+  }, [clientSearch, clients])
 
-  const clientOptions = clients.map((c: Client) => ({
-    value: c.id,
-    label: (c.type === "particulier" ? `${c.prenom} ${c.nom}` : c.raisonSociale) ?? "Client Inconnu",
-    sub: c.phone,
-  }))
+  const modalFilteredClients = useMemo(() => {
+    const s = modalSearch.trim().toLowerCase()
+    if (!s) return clients ?? []
+    return (clients ?? []).filter((c: Client) => {
+      const name = c.type === "particulier"
+        ? `${c.prenom ?? ""} ${c.nom ?? ""}`.toLowerCase()
+        : (c.raisonSociale ?? "").toLowerCase()
+      return name.includes(s) || (c.phone ?? "").includes(s)
+    })
+  }, [modalSearch, clients])
 
-  const selectedClient = clientOptions.find((o: { value: string; label: string }) => o.value === form.clientId)
+  const selectedClient = (clients ?? []).find((c: Client) => c.id === clientId)
+  const clientDisplayName = selectedClient
+    ? (selectedClient.type === "particulier"
+        ? `${selectedClient.prenom ?? ""} ${selectedClient.nom ?? ""}`.trim()
+        : (selectedClient.raisonSociale ?? ""))
+    : ""
 
-  function update(field: string, value: string | number) {
-    setForm((prev: any) => ({ ...prev, [field]: value }))
-  }
+  const activeDrivers = drivers.filter((d: Driver) => d.id)
+  const activeVehicles = vehicles.filter((v: Vehicle) => v.inService)
 
-  const addItem = () => setItems([...items, { id: `item-${Date.now()}`, designation: "", amountHT: "", tvaRate: 20 }])
+  // ── Item helpers ───────────────────────────────────────────
+  const addItem = () => setItems([...items, { id: `item-${Date.now()}`, designation: "", amountHT: "", tvaRate: autoTvaRate }])
   const removeItem = (id: string) => setItems(items.filter(i => i.id !== id))
-  const updateItem = (id: string, field: string, value: any) => {
+  const updateItem = (id: string, field: string, value: any) =>
     setItems(items.map(i => i.id === id ? { ...i, [field]: value } : i))
-  }
 
-  // Calculations
+  // ── Libre calculations ─────────────────────────────────────
   const subtotalHT = items.reduce((sum, item) => sum + (parseFloat(item.amountHT as string) || 0), 0)
   let discountAmount = 0
-  if (discountValue > 0) {
+  if (discountValue > 0)
     discountAmount = discountType === "percent" ? subtotalHT * (discountValue / 100) : discountValue
-  }
   const discountRatio = subtotalHT > 0 ? discountAmount / subtotalHT : 0
 
-  let tva10Amount = 0
-  let tva20Amount = 0
-  let tva55Amount = 0
-
+  let tva10Base = 0, tva20Base = 0, tva55Base = 0
   items.forEach(item => {
-    const discountedHT = (parseFloat(item.amountHT as string) || 0) * (1 - discountRatio)
-    if (item.tvaRate === 10) tva10Amount += discountedHT
-    else if (item.tvaRate === 20) tva20Amount += discountedHT
-    else if (item.tvaRate === 5.5) tva55Amount += discountedHT
+    const ht = (parseFloat(item.amountHT as string) || 0) * (1 - discountRatio)
+    if (item.tvaRate === 10) tva10Base += ht
+    else if (item.tvaRate === 20) tva20Base += ht
+    else if (item.tvaRate === 5.5) tva55Base += ht
   })
-
-  const totalHT = tva10Amount + tva20Amount + tva55Amount
-  const tva10 = tva10Amount * 0.10
-  const tva20 = tva20Amount * 0.20
-  const tva55 = tva55Amount * 0.055
-  const tvaTotal = tva10 + tva20 + tva55
+  const totalHT = tva10Base + tva20Base + tva55Base
+  const tva10 = tva10Base * 0.10
+  const tva20 = tva20Base * 0.20
+  const tva55 = tva55Base * 0.055
+  const tvaTotal = isMicroInvoice ? 0 : (tva10 + tva20 + tva55)
   const totalTTC = totalHT + tvaTotal
-  
-  const originalTTC = items.reduce((sum, item) => sum + ((parseFloat(item.amountHT as string) || 0) * (1 + item.tvaRate / 100)), 0)
+  const originalTTC = items.reduce((sum, item) => {
+    const rate = isMicroInvoice ? 0 : item.tvaRate
+    return sum + ((parseFloat(item.amountHT as string) || 0) * (1 + rate / 100))
+  }, 0)
 
-  function handleSubmit(e: React.FormEvent) {
+  // ── Trajet calculations ────────────────────────────────────
+  const trajetHT = parseFloat(trajetPrixHT) || 0
+  const trajetTva = isMicroInvoice ? 0 : trajetHT * (autoTvaRate / 100)
+  const trajetTTC = trajetHT + trajetTva
+
+  function handleDateChange(v: string) {
+    setTrajetDate(v)
+    if (v) {
+      const chosen = new Date(v)
+      const today = new Date()
+      today.setHours(23, 59, 59, 999)
+      if (chosen > today) {
+        setTrajetDateError("Pour un trajet futur, utilisez le Bon de Réservation")
+      } else {
+        setTrajetDateError("")
+      }
+    } else {
+      setTrajetDateError("")
+    }
+  }
+
+  const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(n)
+  const fmtDate = (d: Date) =>
+    `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`
+
+  // ── Submit ─────────────────────────────────────────────────
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (form.clientMode === "existing" && !form.clientId) {
-      toast.error("Veuillez sélectionner un client")
-      return
-    }
-    if (form.clientMode === "libre" && !form.clientLibre) {
-      toast.error("Veuillez saisir le nom du client")
-      return
-    }
-    if (items.some(i => !i.designation || !i.amountHT)) {
-      toast.error("Toutes les lignes doivent avoir une désignation et un montant")
-      return
+
+    const clientName = clientDisplayName || "Inconnu"
+
+    if (!clientId) { toast.error("Veuillez sélectionner un client"); return }
+
+    if (invoiceMode === "trajet") {
+      if (!trajetDepart) { toast.error("Adresse de départ requise"); return }
+      if (!trajetArrivee) { toast.error("Adresse d'arrivée requise"); return }
+      if (!trajetDate) { toast.error("Date du trajet requise"); return }
+      if (trajetDateError) { toast.error(trajetDateError); return }
+      if (!trajetPrixHT || trajetHT <= 0) { toast.error("Prix HT requis"); return }
+    } else {
+      if (items.some(i => !i.designation || !i.amountHT)) {
+        toast.error("Toutes les lignes doivent avoir une désignation et un montant"); return
+      }
     }
 
-    const nextNum = invoices.length + 1
-    const padded = String(nextNum).padStart(3, "0")
+    // Supabase RPC pour le numéro
+    let invoiceNumber = `F-${new Date().getFullYear()}-???`
+    try {
+      const { data, error } = await supabase.rpc("generate_fac_numero")
+      if (!error && data) invoiceNumber = data as string
+    } catch {
+      // fallback si RPC indisponible
+      invoiceNumber = `F-${new Date().getFullYear()}-${String(invoices.length + 1).padStart(3, "0")}`
+    }
+
     const today = new Date()
     const echeance = new Date(today)
     echeance.setDate(echeance.getDate() + 30)
-    const fmtDate = (d: Date) =>
-      `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`
 
-    const clientName = form.clientMode === "existing" 
-      ? clientOptions.find(o => o.value === form.clientId)?.label ?? "Inconnu"
-      : form.clientLibre
+    let newInvoice: InvoiceDocument
 
-    const formattedItems = items.map(i => ({
-      id: i.id,
-      designation: i.designation,
-      amountHT: parseFloat(i.amountHT as string) || 0,
-      tvaRate: i.tvaRate
-    }))
-
-    const newInvoice: InvoiceDocument = {
-      id: `fac-libre-${Date.now()}`,
-      number: `F-2026-${padded}`,
-      client: clientName,
-      amount: Math.round(totalTTC * 100) / 100,
-      amountHT: Math.round(totalHT * 100) / 100,
-      tva: Math.round(tvaTotal * 100) / 100,
-      date: fmtDate(today),
-      echeance: fmtDate(echeance),
-      status: "brouillon",
-      type: "facture",
-      bcRef: form.objet || "Facture Libre",
-      notes: form.notes,
-      
-      items: formattedItems,
-      discountValue: discountValue > 0 ? discountValue : undefined,
-      discountType: discountValue > 0 ? discountType : undefined,
-      originalHT: subtotalHT,
-      originalTTC: originalTTC,
-      tva10Amount: tva10Amount > 0 ? tva10 : undefined,
-      tva20Amount: tva20Amount > 0 ? tva20 : undefined,
-      tva55Amount: tva55Amount > 0 ? tva55 : undefined,
+    if (invoiceMode === "trajet") {
+      const driver = activeDrivers.find((d: Driver) => d.id === selectedDriverId)
+      const vehicle = activeVehicles.find((v: Vehicle) => v.id === selectedVehicleId)
+      newInvoice = {
+        id: `fac-trajet-${Date.now()}`,
+        number: invoiceNumber,
+        client: clientName,
+        clientId: clientId || undefined,
+        amount: Math.round(trajetTTC * 100) / 100,
+        amountHT: Math.round(trajetHT * 100) / 100,
+        tva: Math.round(trajetTva * 100) / 100,
+        tvaRate: isMicroInvoice ? 0 : autoTvaRate,
+        tva10Amount: (!isMicroInvoice && autoTvaRate === 10) ? Math.round(trajetTva * 100) / 100 : undefined,
+        date: fmtDate(today),
+        echeance: fmtDate(echeance),
+        status: "brouillon",
+        type: "facture",
+        bcRef: objet || "Trajet réalisé",
+        notes,
+        driverId: driver?.id,
+        driverName: driver?.name,
+        trajet: {
+          depart: trajetDepart,
+          arrivee: trajetArrivee,
+          date: trajetDate,
+          time: trajetHeure || undefined,
+          distance: trajetDistance ? parseFloat(trajetDistance) : undefined,
+          passengers: trajetPassagers ? parseInt(trajetPassagers) : undefined,
+          luggage: trajetBagages ? parseInt(trajetBagages) : undefined,
+        },
+        vehicleId: vehicle?.id,
+        vehicleName: vehicle ? `${vehicle.marque ?? ""} ${vehicle.modele}`.trim() : undefined,
+        vehiclePlate: vehicle?.immatriculation,
+        items: [{
+          id: `item-trajet-${Date.now()}`,
+          designation: "Transport de personnes",
+          amountHT: Math.round(trajetHT * 100) / 100,
+          tvaRate: isMicroInvoice ? 0 : autoTvaRate,
+        }],
+      }
+    } else {
+      const formattedItems = items.map(i => ({
+        id: i.id,
+        designation: i.designation,
+        amountHT: parseFloat(i.amountHT as string) || 0,
+        tvaRate: isMicroInvoice ? 0 : i.tvaRate,
+      }))
+      newInvoice = {
+        id: `fac-libre-${Date.now()}`,
+        number: invoiceNumber,
+        client: clientName,
+        clientId: clientId || undefined,
+        amount: Math.round(totalTTC * 100) / 100,
+        amountHT: Math.round(totalHT * 100) / 100,
+        tva: Math.round(tvaTotal * 100) / 100,
+        date: fmtDate(today),
+        echeance: fmtDate(echeance),
+        status: "brouillon",
+        type: "facture",
+        bcRef: objet || "Facture Libre",
+        notes,
+        items: formattedItems,
+        discountValue: discountValue > 0 ? discountValue : undefined,
+        discountType: discountValue > 0 ? discountType : undefined,
+        originalHT: subtotalHT,
+        originalTTC,
+        tva10Amount: (!isMicroInvoice && tva10 > 0) ? tva10 : undefined,
+        tva20Amount: (!isMicroInvoice && tva20 > 0) ? tva20 : undefined,
+        tva55Amount: (!isMicroInvoice && tva55 > 0) ? tva55 : undefined,
+      }
     }
 
     addInvoice(newInvoice)
     onSuccess()
   }
+
+  const inputCls = "w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
 
   return (
     <motion.div
@@ -536,283 +663,396 @@ function FactureLibreForm({
     >
       {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-onyx-border/30">
-        <button
-          onClick={onBack}
-          className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 transition-colors"
-        >
+        <button onClick={onBack} className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 transition-colors">
           <ChevronLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
         </button>
         <div className="flex-1">
-          <h1 className="text-base font-bold text-foreground">Facture Libre</h1>
-          <p className="text-[10px] text-muted-foreground">
-            Frais annexes et services complémentaires
-          </p>
+          <h1 className="text-base font-bold text-foreground">Nouvelle Facture</h1>
+          <p className="text-[10px] text-muted-foreground">Trajet réalisé ou prestation libre</p>
         </div>
-        <button
-          onClick={onClose}
-          className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 transition-colors"
-        >
+        <button onClick={onClose} className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 transition-colors">
           <X className="h-4 w-4 text-foreground" strokeWidth={1.5} />
         </button>
       </div>
 
       {/* Scrollable Form */}
       <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-5 space-y-6 pb-32">
-        {/* Destinataire */}
-        <section>
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-            <User className="h-3.5 w-3.5" strokeWidth={1.5} />
-            Destinataire
-          </p>
 
-          <div className="flex gap-2 mb-3">
-            {[
-              { id: "existing" as const, label: "Client existant" },
-              { id: "libre" as const, label: "Saisie libre" },
-            ].map((mode) => (
+        {/* Mode Toggle */}
+        <div className="flex gap-2 p-1 rounded-2xl bg-onyx-card border border-onyx-border/50">
+          {([
+            { id: "trajet" as InvoiceMode, icon: <Car className="h-3.5 w-3.5" />, label: "Trajet réalisé" },
+            { id: "libre" as InvoiceMode, icon: <Receipt className="h-3.5 w-3.5" />, label: "Prestation libre" },
+          ] as const).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setInvoiceMode(m.id)}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition-all",
+                invoiceMode === m.id
+                  ? "bg-gold text-black shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {m.icon}
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Franchise TVA checkbox */}
+        <label className="flex items-center gap-2.5 cursor-pointer py-1">
+          <Checkbox
+            id="micro-invoice"
+            checked={isMicroInvoice}
+            onCheckedChange={(v) => setIsMicroInvoice(v === true)}
+            className="border-white/40 data-[state=checked]:bg-gold data-[state=checked]:border-gold data-[state=checked]:text-black"
+          />
+          <span className="text-[12px] text-foreground/80 select-none">TVA non applicable (art. 293B CGI)</span>
+        </label>
+
+        {/* Client — pattern BC ─────────────────────────────── */}
+        <section className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setShowQuickAddClient(true)}
+            className="flex items-center gap-1.5 text-[11px] text-gold hover:text-gold-light transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+            Nouveau client
+          </button>
+
+          <div ref={clientRef} className="space-y-2">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              Client <span className="text-red-500">*</span>
+            </label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={clientSearch}
+                  onChange={e => { setClientSearch(e.target.value); setClientId("") }}
+                  onFocus={() => setClientFocused(true)}
+                  onBlur={() => setTimeout(() => setClientFocused(false), 200)}
+                  placeholder="Nom, société, téléphone..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
+                  style={{ fontSize: "16px" }}
+                />
+              </div>
               <button
-                key={mode.id}
                 type="button"
-                onClick={() => update("clientMode", mode.id)}
-                className={cn(
-                  "flex-1 py-2.5 rounded-xl text-xs font-medium border transition-all",
-                  form.clientMode === mode.id
-                    ? "bg-gold/15 border-gold/40 text-gold"
-                    : "bg-onyx-card border-onyx-border/50 text-muted-foreground",
-                )}
+                onClick={() => { setShowClientModal(true); setModalSearch("") }}
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-[11px] text-muted-foreground hover:border-gold/30 hover:text-gold transition-colors whitespace-nowrap"
               >
-                {mode.label}
+                <Users className="h-3.5 w-3.5" />
+                Voir tous
               </button>
-            ))}
+            </div>
           </div>
 
-          {form.clientMode === "existing" ? (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setClientDropdownOpen(!clientDropdownOpen)}
-                className={cn(
-                  "w-full flex items-center justify-between px-4 py-3 rounded-xl bg-onyx-card border text-sm transition-colors text-left",
-                  clientDropdownOpen ? "border-gold/40" : "border-onyx-border/50 hover:border-onyx-border",
-                )}
-              >
-                <span className={selectedClient ? "text-foreground" : "text-muted-foreground/50"}>
-                  {selectedClient ? selectedClient.label : "Sélectionner un client"}
-                </span>
-                <ChevronDown
-                  className={cn("h-4 w-4 text-muted-foreground transition-transform", clientDropdownOpen && "rotate-180")}
-                  strokeWidth={1.5}
-                />
-              </button>
-
-              <AnimatePresence>
-                {clientDropdownOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute top-full left-0 right-0 z-20 mt-1 py-1 rounded-xl bg-onyx-card border border-onyx-border/50 shadow-2xl shadow-black/60 max-h-48 overflow-y-auto scrollbar-hide"
-                  >
-                    {clientOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => {
-                          update("clientId", option.value)
-                          setClientDropdownOpen(false)
-                        }}
-                        className={cn(
-                          "w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-secondary/30 transition-colors",
-                          form.clientId === option.value && "bg-gold/5",
-                        )}
-                      >
-                        <div>
-                          <p className={cn("text-sm", form.clientId === option.value ? "text-gold font-medium" : "text-foreground")}>
-                            {option.label}
-                          </p>
-                          {option.sub && <p className="text-[10px] text-muted-foreground">{option.sub}</p>}
-                        </div>
-                        {form.clientId === option.value && (
-                          <Check className="h-3.5 w-3.5 text-gold shrink-0" strokeWidth={2} />
-                        )}
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+          {(clientFocused || clientSearch.trim()) && !clientId && (
+            <div className="max-h-[200px] overflow-y-auto rounded-xl bg-[#242424] border border-onyx-border/30 divide-y divide-onyx-border/20">
+              {filteredClients.length === 0 ? (
+                <p className="px-4 py-3 text-[11px] text-muted-foreground italic">
+                  {(clients ?? []).length === 0 ? "Aucun client enregistré" : "Aucun résultat"}
+                </p>
+              ) : filteredClients.slice(0, 8).map((c: Client) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => { setClientId(c.id); setClientSearch(""); setClientFocused(false) }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 text-left"
+                >
+                  <div className="w-8 h-8 rounded-full bg-gold/10 flex items-center justify-center text-gold text-xs font-bold flex-shrink-0">
+                    {c.type === "particulier"
+                      ? `${c.prenom?.[0] ?? ""}${c.nom?.[0] ?? ""}`.toUpperCase()
+                      : (c.raisonSociale?.[0] ?? "").toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {c.type === "particulier" ? `${c.prenom ?? ""} ${c.nom ?? ""}`.trim() : (c.raisonSociale ?? "")}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground truncate">{c.phone ?? ""}</p>
+                  </div>
+                  <Check className="h-3.5 w-3.5 text-gold opacity-0" strokeWidth={2} />
+                </button>
+              ))}
             </div>
-          ) : (
-            <input
-              type="text"
-              placeholder="Nom du destinataire"
-              value={form.clientLibre}
-              onChange={(e) => update("clientLibre", e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
-            />
+          )}
+
+          {selectedClient && (
+            <div className="p-3 rounded-xl bg-[#242424] border border-gold/20 space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-foreground">{clientDisplayName}</p>
+                <button
+                  type="button"
+                  onClick={() => { setClientId(""); setClientSearch("") }}
+                  className="text-[10px] text-muted-foreground hover:text-foreground"
+                >
+                  Modifier
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">{selectedClient.phone ?? ""}</p>
+            </div>
           )}
         </section>
 
-        {/* Lignes de Facture */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <Receipt className="h-3.5 w-3.5" strokeWidth={1.5} />
-              Détail des Prestations
-            </p>
-          </div>
-          
-          <div className="space-y-3">
-            {items.map((item, index) => (
-              <div key={item.id} className="p-3 bg-[#242424] border border-onyx-border/30 rounded-xl relative group">
-                <input
-                  type="text"
-                  placeholder="Désignation (ex: Supplément attente, etc.)"
-                  value={item.designation}
-                  onChange={e => updateItem(item.id, "designation", e.target.value)}
-                  className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none mb-3"
-                />
-                <div className="flex gap-2">
-                   <div className="relative flex-1">
-                      <input
-                        type="number"
-                        placeholder="0.00"
-                        min="0"
-                        step="0.01"
-                        value={item.amountHT}
-                        onChange={(e) => updateItem(item.id, "amountHT", e.target.value)}
-                        className="w-full px-3 py-2 pr-10 rounded-lg bg-black text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border focus:border-gold border border-onyx-border/50"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">EUR HT</span>
-                   </div>
-                   <select 
-                     value={item.tvaRate} 
-                     onChange={e => updateItem(item.id, "tvaRate", Number(e.target.value))}
-                     className="px-3 py-2 rounded-lg bg-black text-sm text-foreground border border-onyx-border/50 focus:outline-none focus:border-gold"
-                   >
-                     <option value={20}>20% (Standard)</option>
-                     <option value={10}>10% (Transport)</option>
-                     <option value={5.5}>5.5% (Autre)</option>
-                   </select>
+        {/* ── TRAJET MODE ──────────────────────────────────────── */}
+        {invoiceMode === "trajet" && (
+          <>
+            {/* Trajet */}
+            <section className="space-y-3">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5" strokeWidth={1.5} />
+                Trajet
+              </p>
+              <input type="text" placeholder="Adresse de départ" value={trajetDepart}
+                onChange={e => setTrajetDepart(e.target.value)} className={inputCls} />
+              <input type="text" placeholder="Adresse d'arrivée" value={trajetArrivee}
+                onChange={e => setTrajetArrivee(e.target.value)} className={inputCls} />
+              <div className="flex gap-2">
+                <div className="flex-1 flex flex-col gap-1">
+                  <input type="date" value={trajetDate} max={new Date().toISOString().split("T")[0]}
+                    onChange={e => handleDateChange(e.target.value)}
+                    className={cn(inputCls, trajetDateError && "border-red-500/60")} />
+                  {trajetDateError && (
+                    <p className="text-[10px] text-red-400 leading-tight">{trajetDateError}</p>
+                  )}
                 </div>
-                {items.length > 1 && (
-                  <button 
-                    type="button"
-                    onClick={() => removeItem(item.id)}
-                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
+                <input type="time" value={trajetHeure} onChange={e => setTrajetHeure(e.target.value)}
+                  className={cn(inputCls, "w-32 shrink-0")} />
               </div>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={addItem}
-            className="mt-3 w-full py-2 rounded-xl text-xs font-semibold text-muted-foreground border border-dashed border-onyx-border hover:text-foreground hover:border-onyx-border/80 transition-all flex items-center justify-center gap-2"
-          >
-            <PlusCircle className="h-4 w-4" />
-            Ajouter une ligne
-          </button>
-        </section>
+              <div className="flex gap-2">
+                <input type="number" placeholder="Distance km" min="0" step="0.1" value={trajetDistance}
+                  onChange={e => setTrajetDistance(e.target.value)}
+                  className={cn(inputCls, "flex-1")} />
+                <input type="number" placeholder="Pass." min="1" max="9" value={trajetPassagers}
+                  onChange={e => setTrajetPassagers(e.target.value)}
+                  className={cn(inputCls, "w-24 shrink-0")} />
+                <input type="number" placeholder="Bag." min="0" max="9" value={trajetBagages}
+                  onChange={e => setTrajetBagages(e.target.value)}
+                  className={cn(inputCls, "w-24 shrink-0")} />
+              </div>
+            </section>
 
-        {/* Remise & Notes */}
-        <section className="space-y-4">
-           <div className="space-y-2">
-             <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Remise commerciale</label>
-             <div className="flex gap-2">
-               <div className="flex-1 flex items-center gap-2">
-                 <input type="number" inputMode="decimal" value={discountValue || ""} onChange={e => setDiscountValue(Number(e.target.value) || 0)} placeholder="0"
-                   className="flex-1 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50" style={{ fontSize: "16px" }} />
-               </div>
-               <div className="flex">
-                 <button type="button" onClick={() => setDiscountType("percent")}
-                   className={cn("px-3 py-2 rounded-l-xl text-xs font-semibold", discountType === "percent" ? "bg-gold text-black" : "bg-[#242424] text-muted-foreground border border-onyx-border/30")}>%</button>
-                 <button type="button" onClick={() => setDiscountType("amount")}
-                   className={cn("px-3 py-2 rounded-r-xl text-xs font-semibold", discountType === "amount" ? "bg-gold text-black" : "bg-[#242424] text-muted-foreground border border-onyx-border/30")}>€</button>
-               </div>
-             </div>
-           </div>
+            {/* Chauffeur / Véhicule */}
+            {(activeDrivers.length > 0 || activeVehicles.length > 0) && (
+              <section className="space-y-2">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Car className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  Chauffeur & Véhicule <span className="font-normal normal-case">(optionnel)</span>
+                </p>
+                {activeDrivers.length > 0 && (
+                  <select value={selectedDriverId} onChange={e => setSelectedDriverId(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors">
+                    <option value="">— Chauffeur —</option>
+                    {activeDrivers.map((d: Driver) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                )}
+                {activeVehicles.length > 0 && (
+                  <select value={selectedVehicleId} onChange={e => setSelectedVehicleId(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors">
+                    <option value="">— Véhicule —</option>
+                    {activeVehicles.map((v: Vehicle) => (
+                      <option key={v.id} value={v.id}>{v.marque} {v.modele} • {v.immatriculation}</option>
+                    ))}
+                  </select>
+                )}
+              </section>
+            )}
 
-          <div>
-             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
-               <StickyNote className="h-3.5 w-3.5" strokeWidth={1.5} />
-               Référence et notes
-             </p>
-             <input
-               type="text"
-               value={form.objet}
-               onChange={(e) => update("objet", e.target.value)}
-               placeholder="Référence (ex: Prestation ponctuelle)"
-               className="w-full px-4 py-2 mb-2 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40"
-             />
-             <textarea
-               rows={2}
-               value={form.notes}
-               onChange={(e) => update("notes", e.target.value)}
-               placeholder="Informations supplémentaires pour le client..."
-               className="w-full px-4 py-2 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 resize-none"
-             />
-          </div>
-        </section>
+            {/* Prix */}
+            <section className="space-y-2">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Receipt className="h-3.5 w-3.5" strokeWidth={1.5} />
+                Tarif
+              </p>
+              <div className="relative">
+                <input type="number" placeholder="0.00" min="0" step="0.01" value={trajetPrixHT}
+                  onChange={e => setTrajetPrixHT(e.target.value)}
+                  className="w-full px-4 py-3 pr-16 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40" />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">EUR HT</span>
+              </div>
+              {trajetHT > 0 && (
+                <div className="p-3 rounded-xl bg-onyx-card border border-gold/20 space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Montant HT</span>
+                    <span>{fmt(trajetHT)} €</span>
+                  </div>
+                  {!isMicroInvoice && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">TVA {autoTvaRate}% Transport</span>
+                      <span>{fmt(trajetTva)} €</span>
+                    </div>
+                  )}
+                  <div className="h-px bg-onyx-border/30" />
+                  <div className="flex justify-between text-sm font-bold">
+                    <span>Total TTC</span>
+                    <span className="text-gold">{fmt(trajetTTC)} €</span>
+                  </div>
+                  {isMicroInvoice && (
+                    <p className="text-[10px] text-muted-foreground italic">TVA non applicable, art. 293 B du CGI</p>
+                  )}
+                </div>
+              )}
+            </section>
 
-        {/* Live preview */}
-        {subtotalHT > 0 && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            className="p-4 rounded-2xl bg-onyx-card border border-gold/20 space-y-1.5"
-          >
-             <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-2.5">
-               Total Aperçu
-             </p>
-             <div className="flex items-center justify-between text-xs">
-               <span className="text-muted-foreground">Base HT</span>
-               <span className="text-foreground">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(subtotalHT)} &euro;</span>
-             </div>
-             {discountAmount > 0 && (
-               <div className="flex items-center justify-between text-xs">
-                 <span className="text-red-400">Remise</span>
-                 <span className="text-red-400">-{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(discountAmount)} &euro;</span>
-               </div>
-             )}
-             <div className="h-px bg-onyx-border/30 my-1" />
-             <div className="flex items-center justify-between text-xs">
-               <span className="text-muted-foreground">Total HT</span>
-               <span className="text-foreground font-medium">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(totalHT)} &euro;</span>
-             </div>
-             {tva10Amount > 0 && (
-               <div className="flex items-center justify-between text-xs">
-                 <span className="text-muted-foreground">TVA (10%)</span>
-                 <span className="text-foreground">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(tva10)} &euro;</span>
-               </div>
-             )}
-             {tva20Amount > 0 && (
-               <div className="flex items-center justify-between text-xs">
-                 <span className="text-muted-foreground">TVA (20%)</span>
-                 <span className="text-foreground">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(tva20)} &euro;</span>
-               </div>
-             )}
-             {tva55Amount > 0 && (
-               <div className="flex items-center justify-between text-xs">
-                 <span className="text-muted-foreground">TVA (5.5%)</span>
-                 <span className="text-foreground">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(tva55)} &euro;</span>
-               </div>
-             )}
-             <div className="h-px bg-onyx-border/30 my-1" />
-             <div className="flex items-center justify-between">
-               <span className="text-xs font-semibold text-foreground">TOTAL TTC</span>
-               {discountAmount > 0 ? (
-                 <div className="text-right">
-                   <span className="text-muted-foreground line-through text-xs mr-2">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(originalTTC)} &euro;</span>
-                   <span className="text-lg font-bold text-gold">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(totalTTC)} &euro;</span>
-                 </div>
-               ) : (
-                 <span className="text-lg font-bold text-gold">{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(totalTTC)} &euro;</span>
-               )}
-             </div>
-          </motion.div>
+            {/* Notes */}
+            <section className="space-y-2">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <StickyNote className="h-3.5 w-3.5" strokeWidth={1.5} />
+                Référence et notes
+              </p>
+              <input type="text" value={objet} onChange={e => setObjet(e.target.value)}
+                placeholder="Référence (ex: Mission aéroport)" className={inputCls} />
+              <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Informations supplémentaires..."
+                className="w-full px-4 py-2 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 resize-none" />
+            </section>
+          </>
+        )}
+
+        {/* ── LIBRE MODE ───────────────────────────────────────── */}
+        {invoiceMode === "libre" && (
+          <>
+            {/* Lignes */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Receipt className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  Détail des Prestations
+                </p>
+              </div>
+              <div className="space-y-3">
+                {items.map((item) => (
+                  <div key={item.id} className="p-3 bg-[#242424] border border-onyx-border/30 rounded-xl relative group">
+                    <input type="text" placeholder="Désignation (ex: Supplément attente, etc.)"
+                      value={item.designation}
+                      onChange={e => updateItem(item.id, "designation", e.target.value)}
+                      className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none mb-3" />
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input type="number" placeholder="0.00" min="0" step="0.01"
+                          value={item.amountHT}
+                          onChange={e => updateItem(item.id, "amountHT", e.target.value)}
+                          className="w-full px-3 py-2 pr-10 rounded-lg bg-black text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border focus:border-gold border border-onyx-border/50" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">EUR HT</span>
+                      </div>
+                      {!isMicroInvoice && (
+                        <select value={item.tvaRate}
+                          onChange={e => updateItem(item.id, "tvaRate", Number(e.target.value))}
+                          className="px-3 py-2 rounded-lg bg-black text-sm text-foreground border border-onyx-border/50 focus:outline-none focus:border-gold">
+                          <option value={20}>20% (Standard)</option>
+                          <option value={10}>10% (Transport)</option>
+                          <option value={5.5}>5.5% (Autre)</option>
+                        </select>
+                      )}
+                    </div>
+                    {items.length > 1 && (
+                      <button type="button" onClick={() => removeItem(item.id)}
+                        className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={addItem}
+                className="mt-3 w-full py-2 rounded-xl text-xs font-semibold text-muted-foreground border border-dashed border-onyx-border hover:text-foreground hover:border-onyx-border/80 transition-all flex items-center justify-center gap-2">
+                <PlusCircle className="h-4 w-4" />
+                Ajouter une ligne
+              </button>
+            </section>
+
+            {/* Remise */}
+            <section className="space-y-2">
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Remise commerciale</label>
+              <div className="flex gap-2">
+                <input type="number" inputMode="decimal" value={discountValue || ""} placeholder="0"
+                  onChange={e => setDiscountValue(Number(e.target.value) || 0)}
+                  className="flex-1 px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50" style={{ fontSize: "16px" }} />
+                <div className="flex">
+                  <button type="button" onClick={() => setDiscountType("percent")}
+                    className={cn("px-3 py-2 rounded-l-xl text-xs font-semibold", discountType === "percent" ? "bg-gold text-black" : "bg-[#242424] text-muted-foreground border border-onyx-border/30")}>%</button>
+                  <button type="button" onClick={() => setDiscountType("amount")}
+                    className={cn("px-3 py-2 rounded-r-xl text-xs font-semibold", discountType === "amount" ? "bg-gold text-black" : "bg-[#242424] text-muted-foreground border border-onyx-border/30")}>€</button>
+                </div>
+              </div>
+            </section>
+
+            {/* Notes */}
+            <section className="space-y-2">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <StickyNote className="h-3.5 w-3.5" strokeWidth={1.5} />
+                Référence et notes
+              </p>
+              <input type="text" value={objet} onChange={e => setObjet(e.target.value)}
+                placeholder="Référence (ex: Prestation ponctuelle)" className={inputCls} />
+              <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Informations supplémentaires pour le client..."
+                className="w-full px-4 py-2 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 resize-none" />
+            </section>
+
+            {/* Live preview */}
+            {subtotalHT > 0 && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+                className="p-4 rounded-2xl bg-onyx-card border border-gold/20 space-y-1.5">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-2.5">Total Aperçu</p>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Base HT</span>
+                  <span className="text-foreground">{fmt(subtotalHT)} &euro;</span>
+                </div>
+                {discountAmount > 0 && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-red-400">Remise</span>
+                    <span className="text-red-400">-{fmt(discountAmount)} &euro;</span>
+                  </div>
+                )}
+                <div className="h-px bg-onyx-border/30 my-1" />
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Total HT</span>
+                  <span className="text-foreground font-medium">{fmt(totalHT)} &euro;</span>
+                </div>
+                {!isMicroInvoice && tva10 > 0 && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">TVA (10%)</span>
+                    <span className="text-foreground">{fmt(tva10)} &euro;</span>
+                  </div>
+                )}
+                {!isMicroInvoice && tva20 > 0 && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">TVA (20%)</span>
+                    <span className="text-foreground">{fmt(tva20)} &euro;</span>
+                  </div>
+                )}
+                {!isMicroInvoice && tva55 > 0 && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">TVA (5,5%)</span>
+                    <span className="text-foreground">{fmt(tva55)} &euro;</span>
+                  </div>
+                )}
+                <div className="h-px bg-onyx-border/30 my-1" />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">TOTAL TTC</span>
+                  {discountAmount > 0 ? (
+                    <div className="text-right">
+                      <span className="text-muted-foreground line-through text-xs mr-2">{fmt(originalTTC)} &euro;</span>
+                      <span className="text-lg font-bold text-gold">{fmt(totalTTC)} &euro;</span>
+                    </div>
+                  ) : (
+                    <span className="text-lg font-bold text-gold">{fmt(totalTTC)} &euro;</span>
+                  )}
+                </div>
+                {isMicroInvoice && (
+                  <p className="text-[10px] text-muted-foreground italic pt-1">TVA non applicable, art. 293 B du CGI</p>
+                )}
+              </motion.div>
+            )}
+          </>
         )}
       </form>
 
@@ -828,10 +1068,88 @@ function FactureLibreForm({
             Générer la Facture
           </span>
           <span className="text-xs font-medium text-primary-foreground/80">
-            {items.length} ligne(s) • Conforme Factur-X
+            {invoiceMode === "trajet" ? "Trajet réalisé • Conforme Factur-X" : `${items.length} ligne(s) • Conforme Factur-X`}
           </span>
         </button>
       </div>
+
+      {/* Modal — Voir tous les clients */}
+      <AnimatePresence>
+        {showClientModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[99999] bg-black/70 flex items-end justify-center"
+            onClick={() => setShowClientModal(false)}
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 320 }}
+              className="w-full max-w-md bg-[#1a1a1a] rounded-t-3xl overflow-hidden max-h-[85vh] flex flex-col"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 px-5 pt-4 pb-3 border-b border-onyx-border/30 flex-shrink-0">
+                <button onClick={() => setShowClientModal(false)}
+                  className="w-8 h-8 rounded-xl bg-onyx-card/60 border border-onyx-border/20 flex items-center justify-center">
+                  <X className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-foreground">Sélectionner un client</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {(clients ?? []).length} client{(clients ?? []).length !== 1 ? "s" : ""} enregistré{(clients ?? []).length !== 1 ? "s" : ""}
+                  </p>
+                </div>
+              </div>
+              <div className="px-5 pt-3 pb-2 flex-shrink-0">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input type="text" value={modalSearch} onChange={e => setModalSearch(e.target.value)}
+                    placeholder="Nom, société, téléphone..." autoFocus
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
+                    style={{ fontSize: "16px" }} />
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto divide-y divide-onyx-border/20">
+                {modalFilteredClients.length === 0 ? (
+                  <p className="px-5 py-4 text-[11px] text-muted-foreground italic">Aucun résultat</p>
+                ) : modalFilteredClients.map((c: Client) => (
+                  <button key={c.id} type="button"
+                    onClick={() => { setClientId(c.id); setClientSearch(""); setShowClientModal(false) }}
+                    className="w-full flex items-center gap-3 px-5 py-3 hover:bg-white/5 text-left"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-gold/10 flex items-center justify-center text-gold text-xs font-bold flex-shrink-0">
+                      {c.type === "particulier"
+                        ? `${c.prenom?.[0] ?? ""}${c.nom?.[0] ?? ""}`.toUpperCase()
+                        : (c.raisonSociale?.[0] ?? "").toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {c.type === "particulier" ? `${c.prenom ?? ""} ${c.nom ?? ""}`.trim() : (c.raisonSociale ?? "")}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground truncate">{c.phone ?? ""}</p>
+                    </div>
+                    {clientId === c.id && <Check className="h-3.5 w-3.5 text-gold shrink-0" strokeWidth={2} />}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <QuickAddClientModal
+        open={showQuickAddClient}
+        onClose={() => setShowQuickAddClient(false)}
+        clients={clients ?? []}
+        onClientCreated={(newClientId) => {
+          setClientId(newClientId)
+          setClientSearch("")
+          setShowQuickAddClient(false)
+        }}
+      />
     </motion.div>
   )
 }

@@ -961,16 +961,17 @@ function InvoiceCard({
 
 function GenerateInvoiceModal({
   bc,
+  enterprise,
   onConfirm,
   onClose,
 }: {
   bc: BCDocument
-  onConfirm: (tvaRate: number) => void
+  enterprise: EnterpriseProfile
+  onConfirm: () => void
   onClose: () => void
 }) {
-  const [tvaRate, setTvaRate] = useState(10)
-  const tva = (bc.amount * tvaRate) / 100
-  const ttc = bc.amount + tva
+  const isFranchise = enterprise.vatMode === "franchise"
+  const fmt = (n: number) => new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(n)
 
   return (
     <motion.div
@@ -1008,36 +1009,10 @@ function GenerateInvoiceModal({
               <span className="text-sm font-medium text-foreground">{bc.client}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Montant HT</span>
+              <span className="text-xs text-muted-foreground">{isFranchise ? "Montant TTC" : "Montant HT"}</span>
               <span className="text-sm font-semibold text-gold">
-                {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.amount)} &euro;
+                {fmt(isFranchise ? bc.amount : (bc.amountHT ?? bc.amount))} &euro;
               </span>
-            </div>
-          </div>
-
-          {/* TVA Rate Selector */}
-          <div>
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-              Taux de TVA
-            </p>
-            <div className="flex gap-2">
-              {[10, 20].map((rate) => (
-                <button
-                  key={rate}
-                  onClick={() => setTvaRate(rate)}
-                  className={cn(
-                    "flex-1 py-3 rounded-xl text-sm font-medium border transition-all",
-                    tvaRate === rate
-                      ? "bg-gold/15 border-gold/40 text-gold"
-                      : "bg-onyx-card border-onyx-border/50 text-muted-foreground hover:border-onyx-border",
-                  )}
-                >
-                  {rate}%
-                  <span className="text-[10px] block mt-0.5 opacity-70">
-                    {rate === 10 ? "Transport" : "Standard"}
-                  </span>
-                </button>
-              ))}
             </div>
           </div>
 
@@ -1046,27 +1021,47 @@ function GenerateInvoiceModal({
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-3">
               Aperçu facture
             </p>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Montant HT</span>
-                <span className="text-sm text-foreground tabular-nums">
-                  {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(bc.amount)} &euro;
-                </span>
+            {isFranchise ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">Montant TTC</span>
+                  <span className="text-lg font-bold text-gold tabular-nums">{fmt(bc.amount)} &euro;</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground italic pt-1">
+                  TVA non applicable, art. 293 B du CGI
+                </p>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">TVA ({tvaRate}%)</span>
-                <span className="text-sm text-foreground tabular-nums">
-                  {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(tva)} &euro;
-                </span>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Montant HT</span>
+                  <span className="text-sm text-foreground tabular-nums">{fmt(bc.amountHT ?? bc.amount)} &euro;</span>
+                </div>
+                {(bc.tva10Amount ?? 0) > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">TVA 10% Transport</span>
+                    <span className="text-sm text-foreground tabular-nums">{fmt(bc.tva10Amount!)} &euro;</span>
+                  </div>
+                )}
+                {(bc.tva20Amount ?? 0) > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">TVA 20% Standard</span>
+                    <span className="text-sm text-foreground tabular-nums">{fmt(bc.tva20Amount!)} &euro;</span>
+                  </div>
+                )}
+                {(bc.tva55Amount ?? 0) > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">TVA 5,5%</span>
+                    <span className="text-sm text-foreground tabular-nums">{fmt(bc.tva55Amount!)} &euro;</span>
+                  </div>
+                )}
+                <div className="h-px bg-onyx-border/30 my-1" />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">Total TTC</span>
+                  <span className="text-lg font-bold text-gold tabular-nums">{fmt(bc.amount)} &euro;</span>
+                </div>
               </div>
-              <div className="h-px bg-onyx-border/30 my-1" />
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-foreground">Total TTC</span>
-                <span className="text-lg font-bold text-gold tabular-nums">
-                  {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(ttc)} &euro;
-                </span>
-              </div>
-            </div>
+            )}
           </div>
 
           <p className="text-[10px] text-muted-foreground text-center">
@@ -1075,7 +1070,7 @@ function GenerateInvoiceModal({
 
           {/* CTA */}
           <button
-            onClick={() => onConfirm(tvaRate)}
+            onClick={onConfirm}
             className="w-full py-3.5 rounded-2xl bg-gold text-primary-foreground font-bold hover:bg-gold-light active:scale-[0.98] transition-all gold-glow-sm flex flex-col items-center gap-0.5"
           >
             <span className="flex items-center gap-2 text-sm">
@@ -1265,7 +1260,7 @@ export function DocumentsTab() {
     }
   }
 
-  async function handleGenerateInvoice(bc: BCDocument, tvaRate: number) {
+  async function handleGenerateInvoice(bc: BCDocument) {
     if (!isUnlimited) {
       if (tokens <= 0) {
         setShowNoTokens(true)
@@ -1535,7 +1530,8 @@ export function DocumentsTab() {
         {invoicingBC && (
           <GenerateInvoiceModal
             bc={invoicingBC}
-            onConfirm={(rate) => handleGenerateInvoice(invoicingBC, rate)}
+            enterprise={enterprise}
+            onConfirm={() => handleGenerateInvoice(invoicingBC)}
             onClose={() => setInvoicingBC(null)}
           />
         )}
