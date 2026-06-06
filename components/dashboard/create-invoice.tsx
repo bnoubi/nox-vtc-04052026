@@ -413,9 +413,12 @@ function FactureLibreForm({
   const { clients, invoices, enterprise, drivers, vehicles, addInvoice } = useNox()
   const supabase = createClient()
   const clientRef = useRef<HTMLDivElement>(null)
-  const defaultFranchise = enterprise?.vatMode === "franchise"
-  const [isMicroInvoice, setIsMicroInvoice] = useState<boolean>(defaultFranchise)
+  const [isMicroInvoice, setIsMicroInvoice] = useState<boolean>(false)
   const autoTvaRate = isMicroInvoice ? 0 : 10
+
+  useEffect(() => {
+    setIsMicroInvoice(enterprise?.vatMode === "franchise")
+  }, [enterprise?.vatMode])
 
   // ── Mode toggle ────────────────────────────────────────────
   const [invoiceMode, setInvoiceMode] = useState<InvoiceMode>("libre")
@@ -701,16 +704,18 @@ function FactureLibreForm({
           ))}
         </div>
 
-        {/* Franchise TVA checkbox */}
-        <label className="flex items-center gap-2.5 cursor-pointer py-1">
-          <Checkbox
-            id="micro-invoice"
-            checked={isMicroInvoice}
-            onCheckedChange={(v) => setIsMicroInvoice(v === true)}
-            className="border-white/40 data-[state=checked]:bg-gold data-[state=checked]:border-gold data-[state=checked]:text-black"
-          />
-          <span className="text-[12px] text-foreground/80 select-none">TVA non applicable (art. 293B CGI)</span>
-        </label>
+        {/* Franchise TVA checkbox — affiché uniquement pour les abonnés en franchise */}
+        {enterprise?.vatMode === "franchise" && (
+          <label className="flex items-center gap-2.5 cursor-pointer py-1">
+            <Checkbox
+              id="micro-invoice"
+              checked={isMicroInvoice}
+              onCheckedChange={(v) => setIsMicroInvoice(v === true)}
+              className="border-white/40 data-[state=checked]:bg-gold data-[state=checked]:border-gold data-[state=checked]:text-black"
+            />
+            <span className="text-[12px] text-foreground/80 select-none">TVA non applicable (art. 293B CGI)</span>
+          </label>
+        )}
 
         {/* Client — pattern BC ─────────────────────────────── */}
         <section className="space-y-2">
