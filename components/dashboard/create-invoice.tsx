@@ -29,7 +29,6 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
-import { DateTimePickerSheet } from "./date-time-picker-sheet"
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -473,7 +472,6 @@ function FactureLibreForm({
   const [trajetArrivee, setTrajetArrivee] = useState("")
   const [trajetDate, setTrajetDate] = useState("")
   const [trajetTime, setTrajetTime] = useState("")
-  const [showDateTimePicker, setShowDateTimePicker] = useState(false)
   const [trajetDistance, setTrajetDistance] = useState("")
   const [trajetPassagers, setTrajetPassagers] = useState(1)
   const [trajetBagages, setTrajetBagages] = useState(0)
@@ -486,8 +484,9 @@ function FactureLibreForm({
   // ── Common fields ──────────────────────────────────────────
   const [serviceDate, setServiceDate] = useState("")
   const [serviceDateError, setServiceDateError] = useState("")
-  const [showLibreDatePicker, setShowLibreDatePicker] = useState(false)
   const libreDateRef = useRef<HTMLInputElement>(null)
+  const trajetDateInputRef = useRef<HTMLInputElement>(null)
+  const trajetTimeInputRef = useRef<HTMLInputElement>(null)
   const [formErrors, setFormErrors] = useState<Record<string, boolean>>({})
 
   // ── Libre mode fields ──────────────────────────────────────
@@ -983,17 +982,39 @@ function FactureLibreForm({
                 </div>
               </div>
 
-              {/* Date + Heure via DateTimePickerSheet */}
+              {/* Date + Heure — inputs natifs invisibles */}
               <div className="space-y-1">
                 <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Date</label>
+                <input
+                  ref={trajetDateInputRef}
+                  type="date"
+                  value={trajetDate}
+                  max={new Date().toISOString().split("T")[0]}
+                  onChange={e => {
+                    setTrajetDate(e.target.value)
+                    setTimeout(() => trajetTimeInputRef.current?.showPicker?.() ?? trajetTimeInputRef.current?.click(), 80)
+                  }}
+                  className="sr-only"
+                  style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
+                />
+                <input
+                  ref={trajetTimeInputRef}
+                  type="time"
+                  value={trajetTime}
+                  onChange={e => setTrajetTime(e.target.value)}
+                  className="sr-only"
+                  style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
+                />
                 <button
                   type="button"
-                  onClick={() => setShowDateTimePicker(true)}
+                  onClick={() => trajetDateInputRef.current?.showPicker?.() ?? trajetDateInputRef.current?.click()}
                   className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 hover:border-gold/50 transition-colors text-left"
                 >
                   <Calendar className="h-4 w-4 text-gold/70 flex-shrink-0" strokeWidth={1.5} />
                   <span className={cn("flex-1 text-sm", trajetDate ? "text-foreground" : "text-muted-foreground/50")}>
-                    {trajetDate ? `${formatDateFr(trajetDate)} à ${trajetTime || "—"}` : "Choisir la date et l'heure"}
+                    {trajetDate
+                      ? `${new Date(trajetDate + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}${trajetTime ? " à " + trajetTime : ""}`
+                      : "Choisir la date et l'heure"}
                   </span>
                   {trajetDate && <span className="text-[11px] text-gold font-medium">Modifier</span>}
                 </button>
@@ -1099,6 +1120,30 @@ function FactureLibreForm({
                 Date de prestation{" "}
                 <span className="text-muted-foreground/50 normal-case font-normal">(optionnel)</span>
               </label>
+              <input
+                ref={libreDateRef}
+                type="date"
+                value={serviceDate}
+                max={new Date().toISOString().split("T")[0]}
+                onChange={e => {
+                  const v = e.target.value
+                  setServiceDate(v)
+                  if (v) {
+                    const chosen = new Date(v)
+                    const today = new Date(); today.setHours(23, 59, 59, 999)
+                    if (chosen > today) {
+                      setServiceDateError("La date ne peut pas être dans le futur")
+                      setServiceDate("")
+                    } else {
+                      setServiceDateError("")
+                    }
+                  } else {
+                    setServiceDateError("")
+                  }
+                }}
+                className="sr-only"
+                style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
+              />
               <button
                 type="button"
                 onClick={() => libreDateRef.current?.showPicker?.() ?? libreDateRef.current?.click()}
@@ -1106,27 +1151,20 @@ function FactureLibreForm({
               >
                 <Calendar className="h-4 w-4 text-gold/70 flex-shrink-0" strokeWidth={1.5} />
                 <span className={cn("flex-1 text-sm", serviceDate ? "text-foreground" : "text-muted-foreground/50")}>
-                  {serviceDate ? formatDateFr(serviceDate) : "Choisir une date"}
+                  {serviceDate
+                    ? new Date(serviceDate + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+                    : "Choisir une date"}
                 </span>
                 {serviceDate && (
-                  <span
-                    role="button"
+                  <button
+                    type="button"
                     onClick={e => { e.stopPropagation(); setServiceDate(""); setServiceDateError("") }}
-                    className="w-5 h-5 rounded-full bg-onyx-border/50 flex items-center justify-center cursor-pointer"
+                    className="w-5 h-5 rounded-full bg-onyx-border/50 flex items-center justify-center flex-shrink-0"
                   >
                     <X className="h-3 w-3 text-muted-foreground" />
-                  </span>
+                  </button>
                 )}
               </button>
-              <input
-                ref={libreDateRef}
-                type="date"
-                value={serviceDate}
-                max={new Date().toISOString().split("T")[0]}
-                onChange={e => handleServiceDateChange(e.target.value)}
-                className="sr-only"
-                tabIndex={-1}
-              />
               {serviceDateError && (
                 <p className="text-[10px] text-red-400 leading-tight">{serviceDateError}</p>
               )}
@@ -1380,24 +1418,6 @@ function FactureLibreForm({
         }}
       />
 
-      <DateTimePickerSheet
-        open={showDateTimePicker}
-        initialDate={trajetDate}
-        initialTime={trajetTime}
-        pastOnly
-        onClose={() => setShowDateTimePicker(false)}
-        onConfirm={(date, time) => {
-          const chosen = new Date(date)
-          const today = new Date(); today.setHours(23, 59, 59, 999)
-          if (chosen > today) {
-            toast.error("La date ne peut pas être dans le futur")
-            setTrajetDate(""); setTrajetTime("")
-          } else {
-            setTrajetDate(date); setTrajetTime(time)
-          }
-          setShowDateTimePicker(false)
-        }}
-      />
     </motion.div>
   )
 }
