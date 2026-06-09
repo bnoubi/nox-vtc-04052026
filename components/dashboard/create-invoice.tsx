@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 import { DateTimePickerSheet } from "./date-time-picker-sheet"
+import { TokenCostModal } from "./token-cost-modal"
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -463,6 +464,10 @@ function FactureLibreForm({
   const [showDateTimePicker, setShowDateTimePicker] = useState(false)
   const [showServiceDatePicker, setShowServiceDatePicker] = useState(false)
 
+  // ── Token modal ────────────────────────────────────────────
+  const [showTokenModal, setShowTokenModal] = useState(false)
+  const [lastInvoiceNumber, setLastInvoiceNumber] = useState("")
+
   // ── Libre mode fields ──────────────────────────────────────
   const [items, setItems] = useState([{ id: `item-${Date.now()}`, designation: "", amountHT: "", tvaRate: autoTvaRate }])
   const [discountValue, setDiscountValue] = useState<number>(0)
@@ -745,7 +750,12 @@ function FactureLibreForm({
 
     const success = await addInvoice(newInvoice, true)
     if (success) {
-      onSuccess()
+      if (plan === "SOLO") {
+        setLastInvoiceNumber(invoiceNumber)
+        setShowTokenModal(true)
+      } else {
+        onSuccess()
+      }
     }
   }
 
@@ -1428,6 +1438,14 @@ function FactureLibreForm({
           }
           setShowServiceDatePicker(false)
         }}
+      />
+
+      <TokenCostModal
+        open={showTokenModal}
+        onClose={() => { setShowTokenModal(false); onSuccess() }}
+        documentType="facture"
+        documentNumber={lastInvoiceNumber}
+        tokensRemaining={tokens}
       />
 
     </motion.div>

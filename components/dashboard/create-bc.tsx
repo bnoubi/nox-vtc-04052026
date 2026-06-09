@@ -23,6 +23,7 @@ import { DateTimePickerSheet } from "./date-time-picker-sheet"
 import { QuickAddClientModal } from "./quick-add-client-modal"
 import { LimitAlertModal } from "./limit-alert-modal"
 import { SubscriptionDrawer } from "./subscription-drawer"
+import { TokenCostModal } from "./token-cost-modal"
 
 // ============================================================================
 // TYPES & HELPERS
@@ -227,6 +228,7 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNaviga
   // BUG 2 — brNumber et creationDate en state pour permettre le reset
   const [brNumber, setBRNumber] = useState("")
   const [creationDate, setCreationDate] = useState(() => new Date())
+  const [showBCTokenModal, setShowBCTokenModal] = useState(false)
 
   // Selections — pré-remplissage depuis prefillBC si fourni (FEATURE 2 duplication)
   const [selectedDriverId, setSelectedDriverId] = useState<string>(() => {
@@ -869,7 +871,12 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNaviga
     const bcResult = await addBC(newBC)
     if (bcResult) setBRNumber(bcResult.numero)
     setTab("apercu")
-    toast.success("Bon de réservation généré et enregistré")
+
+    if (plan === "SOLO") {
+      setShowBCTokenModal(true)
+    } else {
+      toast.success("Bon de réservation généré et enregistré")
+    }
 
     if (plan === "SOLO" && userId && bcResult?.id) {
       const { data: consumeResult, error: consumeError } = await supabase.rpc("consume_token_for_bc", {
@@ -2581,6 +2588,14 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNaviga
         initialTime={modeHoraire === 'depart' ? tripTime : heureArriveesouhaitee}
         onClose={() => setShowDateTimePicker(false)}
         onConfirm={handlePickerConfirm}
+      />
+
+      <TokenCostModal
+        open={showBCTokenModal}
+        onClose={() => setShowBCTokenModal(false)}
+        documentType="bc"
+        documentNumber={brNumber}
+        tokensRemaining={tokens}
       />
     </motion.div>
   )
