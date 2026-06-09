@@ -239,7 +239,7 @@ function FromBCScreen({
     }
 
     setTimeout(async () => {
-      const success = await addInvoice(newInvoice)
+      const success = await addInvoice(newInvoice, false)
       setConverting(null)
       if (success) {
         onSuccess()
@@ -416,7 +416,7 @@ function FactureLibreForm({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const { clients, invoices, enterprise, drivers, vehicles, addInvoice, tariffSettings, legalProfile } = useNox()
+  const { clients, invoices, enterprise, drivers, vehicles, addInvoice, tariffSettings, legalProfile, plan, tokens } = useNox()
   const supabase = createClient()
   const clientRef = useRef<HTMLDivElement>(null)
   const [isMicroInvoice, setIsMicroInvoice] = useState<boolean>(enterprise?.vatMode === "franchise")
@@ -619,6 +619,11 @@ function FactureLibreForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
+    if (plan === "SOLO" && tokens <= 0) {
+      toast.error("Jetons insuffisants. Rechargez votre compte.")
+      return
+    }
+
     const clientName = clientDisplayName || "Inconnu"
 
     if (invoiceMode === "trajet") {
@@ -738,7 +743,7 @@ function FactureLibreForm({
       }
     }
 
-    const success = await addInvoice(newInvoice)
+    const success = await addInvoice(newInvoice, true)
     if (success) {
       onSuccess()
     }

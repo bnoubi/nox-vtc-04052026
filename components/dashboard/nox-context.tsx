@@ -108,7 +108,7 @@ interface NoxContextType {
   updateBC: (id: string, data: Partial<BCDocument>) => void
   saveDraftBC: (data: Partial<BCDocument>) => Promise<string | null>
   deleteBC: (id: string) => Promise<void>
-  addInvoice: (invoice: InvoiceDocument) => Promise<boolean>
+  addInvoice: (invoice: InvoiceDocument, consumeToken?: boolean) => Promise<boolean>
   updateInvoice: (id: string, data: Partial<InvoiceDocument>) => void
   deleteInvoice: (id: string) => void
   tariffGrids: TariffGrid[]
@@ -1228,8 +1228,12 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const addInvoice = async (invoice: InvoiceDocument): Promise<boolean> => {
+  const addInvoice = async (invoice: InvoiceDocument, consumeToken: boolean = false): Promise<boolean> => {
     if (!userId) return false
+    if (consumeToken && plan === "SOLO" && tokens <= 0) {
+      toast.error("Jetons insuffisants. Rechargez votre compte pour générer une facture.")
+      return false
+    }
     try {
       const { count } = await supabase
         .from("invoices")
@@ -1284,16 +1288,11 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         notes: invoice.notes || null,
         trajet: invoice.trajet || null,
       }
-      console.log("=== addInvoice START ===")
-      console.log("PAYLOAD:", JSON.stringify(payload, null, 2))
       const { data, error } = await supabase
         .from("invoices")
         .insert([payload])
         .select()
         .single()
-      console.log("=== addInvoice RESULT ===")
-      console.log("ERROR:", JSON.stringify(error, null, 2))
-      console.log("DATA:", JSON.stringify(data, null, 2))
       if (error) {
         console.error("addInvoice error:", error)
         toast.error(`[${error.code}] ${error.message}`, { duration: 10000 })
@@ -1301,6 +1300,23 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       }
       if (data) {
         setInvoices(prev => [{ ...invoice, id: data.id, number: data.numero }, ...prev])
+      }
+      if (consumeToken && plan === "SOLO") {
+        const newBalance = tokens - 1
+        setTokens(newBalance)
+        const { error: wErr } = await supabase
+          .from("wallets")
+          .update({ balance: newBalance })
+          .eq("user_id", userId)
+        if (wErr) setTokens(p => p + 1)
+        await supabase
+          .from("token_transactions")
+          .insert({
+            user_id: userId,
+            type: "debit",
+            amount: 1,
+            description: `Facture ${data?.numero ?? invoice.number}`,
+          })
       }
       return true
     } catch (e) {
