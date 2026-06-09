@@ -24,9 +24,15 @@ interface Notification {
 }
 
 export function DashboardHeader() {
-  const { plan, tokens, userProfile } = useNox()
+  const { plan, tokens, userProfile, subscriptionStatus, trialEndsAt } = useNox()
   const { registerWalletOpener } = useNav()
   const isTeam = plan === "TEAM"
+  const isTrial = subscriptionStatus === "trial"
+  const trialDaysLeft = trialEndsAt
+    ? Math.max(0, Math.ceil(
+        (new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      ))
+    : 0
   const [walletOpen, setWalletOpen] = useState(false)
   const [displayName, setDisplayName] = useState("")
   const [initials, setInitials] = useState("—")
@@ -208,21 +214,28 @@ export function DashboardHeader() {
         </div>
 
         {/* Plan Badge */}
-        <div className={cn(
-          "px-3 py-1.5 rounded-xl border",
-          isTeam
-            ? "bg-gradient-to-r from-gold/25 via-gold/15 to-gold/25 border-gold/50 gold-badge-glow"
-            : plan === "DUO"
-              ? "bg-gradient-to-r from-gold/20 via-gold/10 to-gold/20 border-gold/40"
-              : "bg-gradient-to-r from-[#D4AF37]/12 via-transparent to-[#D4AF37]/12 border-[#D4AF37]/35 shadow-[0_0_10px_rgba(212,175,55,0.08)]"
-        )}>
-          <span className={cn(
-            "text-[10px] font-bold tracking-[0.15em]",
-            isTeam ? "gold-gradient-text" : plan === "DUO" ? "text-gold" : "text-[#D4AF37]"
+        {isTrial ? (
+          <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gold/15 border border-gold/30">
+            <span className="text-[11px] font-bold text-gold">Essai Premium</span>
+            <span className="text-[10px] text-gold/60">{trialDaysLeft}j</span>
+          </div>
+        ) : (
+          <div className={cn(
+            "px-3 py-1.5 rounded-xl border",
+            isTeam
+              ? "bg-gradient-to-r from-gold/25 via-gold/15 to-gold/25 border-gold/50 gold-badge-glow"
+              : plan === "DUO"
+                ? "bg-gradient-to-r from-gold/20 via-gold/10 to-gold/20 border-gold/40"
+                : "bg-gradient-to-r from-[#D4AF37]/12 via-transparent to-[#D4AF37]/12 border-[#D4AF37]/35 shadow-[0_0_10px_rgba(212,175,55,0.08)]"
           )}>
-            {PLAN_LABEL[plan] ?? plan}
-          </span>
-        </div>
+            <span className={cn(
+              "text-[10px] font-bold tracking-[0.15em]",
+              isTeam ? "gold-gradient-text" : plan === "DUO" ? "text-gold" : "text-[#D4AF37]"
+            )}>
+              {PLAN_LABEL[plan] ?? plan}
+            </span>
+          </div>
+        )}
 
         {/* Wallet Pill */}
         {plan === "SOLO" ? (

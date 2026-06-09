@@ -78,6 +78,8 @@ interface NoxContextType {
   userId: string | null
   plan: Plan
   tokens: number
+  subscriptionStatus: string
+  trialEndsAt: string | null
   onboardingStatus: string
   driverCount: number
   vehicleCount: number
@@ -231,6 +233,8 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   const [applyHolidays, setApplyHolidays] = useState(true)
   const [plan, setPlan] = useState<Plan>("SOLO")
   const [tokens, setTokens] = useState(0)
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string>("active")
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null)
   const [onboardingStatus, setOnboardingStatus] = useState("not_started")
   const [tripRequests, setTripRequests] = useState<TripRequest[]>([])
 
@@ -257,12 +261,14 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data: sub } = await supabase
           .from("subscriptions")
-          .select("plan")
+          .select("plan, status, trial_ends_at")
           .eq("user_id", uid)
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle()
         if (sub?.plan) setPlan(sub.plan as Plan)
+        if (sub?.status) setSubscriptionStatus(sub.status)
+        if (sub?.trial_ends_at) setTrialEndsAt(sub.trial_ends_at)
       } catch (err) {}
 
       // Solde de jetons depuis wallets (source de vérité absolue)
@@ -1597,7 +1603,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   return (
     <NoxContext.Provider value={{
       enterprise, userProfile, refreshUserProfile, refreshInvoices, drivers, vehicles, clients, bcs, invoices, tarifBase, forfaits, supplements,
-      userId, plan, tokens, onboardingStatus, driverCount, vehicleCount,
+      userId, plan, tokens, subscriptionStatus, trialEndsAt, onboardingStatus, driverCount, vehicleCount,
       upgrade, addTokens, spendToken, refreshTokens,
       updateEnterprise, addDriver, updateDriver, deleteDriver, addVehicle, updateVehicle, deleteVehicle,
       addClient, updateClient, deleteClient, addBC, updateBC, saveDraftBC, deleteBC, addInvoice, updateInvoice, deleteInvoice,
