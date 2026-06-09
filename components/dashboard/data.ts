@@ -233,6 +233,7 @@ export interface InvoiceDocument {
   supplementsList?: (string | { label: string; montant: number; tva_rate?: number })[]
   notes?: string
   cgvText?: string
+  serviceDate?: string
 }
 
 // ─── Mock data supprimée ───

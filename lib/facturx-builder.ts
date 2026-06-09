@@ -63,7 +63,8 @@ export async function buildFacturXFromInvoice(
   invoice: InvoiceDocument,
   enterprise: EnterpriseProfile
 ): Promise<Blob> {
-  const isFranchise = (enterprise.vatMode ?? "franchise") === "franchise"
+  const isFranchise = invoice.tvaMode === "franchise" ||
+    (!invoice.tvaMode && (enterprise.vatMode ?? "franchise") === "franchise")
   const totalTTC = invoice.amount ?? 0
   const rawHT = invoice.amountHT != null ? invoice.amountHT : (isFranchise ? totalTTC : totalTTC / 1.1)
   const totalHT = isNaN(rawHT) || rawHT <= 0 ? (isFranchise ? totalTTC : totalTTC / 1.1) : rawHT

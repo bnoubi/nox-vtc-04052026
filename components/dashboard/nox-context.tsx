@@ -108,7 +108,7 @@ interface NoxContextType {
   updateBC: (id: string, data: Partial<BCDocument>) => void
   saveDraftBC: (data: Partial<BCDocument>) => Promise<string | null>
   deleteBC: (id: string) => Promise<void>
-  addInvoice: (invoice: InvoiceDocument) => void
+  addInvoice: (invoice: InvoiceDocument) => Promise<boolean>
   updateInvoice: (id: string, data: Partial<InvoiceDocument>) => void
   deleteInvoice: (id: string) => void
   tariffGrids: TariffGrid[]
@@ -1228,8 +1228,8 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const addInvoice = async (invoice: InvoiceDocument) => {
-    if (!userId) return
+  const addInvoice = async (invoice: InvoiceDocument): Promise<boolean> => {
+    if (!userId) return false
     try {
       const { count } = await supabase
         .from("invoices")
@@ -1254,29 +1254,21 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         // Client
         client_id: invoice.clientId || null,
         client_nom: invoice.client || null,
-        client_telephone: invoice.clientPhone || null,
         client_type: invoice.clientType || null,
         client_siren: invoice.clientSiren || null,
         client_address: invoice.clientAddress || null,
-        // Passager
-        passager_nom: invoice.passagerNom || null,
-        passager_telephone: invoice.passagerTelephone || null,
         // Chauffeur
         driver_id: invoice.driverId || null,
         driver_nom: invoice.driverName || null,
-        driver_carte_vtc: invoice.driverCarteVTC || null,
-        driver_phone: invoice.driverPhone || null,
         // Véhicule
         vehicle_id: invoice.vehicleId || null,
         vehicle_nom: invoice.vehicleName || null,
         vehicle_immatriculation: invoice.vehiclePlate || null,
-        vehicle_type_energie: invoice.vehicleTypeEnergie || null,
         // Montants
         items: invoice.items || null,
         montant_ht: invoice.amountHT ?? 0,
         montant_ttc: invoice.amount ?? 0,
         tva: invoice.tva ?? 0,
-        tva_rate: invoice.tvaRate ?? null,
         tva_mode: invoice.tvaMode || null,
         base_ht: invoice.baseHT ?? null,
         supplements_ht: invoice.supplementsHT ?? null,
@@ -1290,24 +1282,29 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         original_ttc: invoice.originalTTC ?? null,
         // Divers
         notes: invoice.notes || null,
-        cgv_text: invoice.cgvText || null,
         trajet: invoice.trajet || null,
-        supplements_list: invoice.supplementsList || null,
       }
+      console.log("=== addInvoice START ===")
+      console.log("PAYLOAD:", JSON.stringify(payload, null, 2))
       const { data, error } = await supabase
         .from("invoices")
         .insert([payload])
         .select()
         .single()
+      console.log("=== addInvoice RESULT ===")
+      console.log("ERROR:", JSON.stringify(error, null, 2))
+      console.log("DATA:", JSON.stringify(data, null, 2))
       if (error) {
         console.error("addInvoice error:", error)
-        toast.error("Erreur lors de l'enregistrement de la facture. Veuillez réessayer.")
-        return
+        toast.error(`[${error.code}] ${error.message}`, { duration: 10000 })
+        return false
       }
       if (data) {
         setInvoices(prev => [{ ...invoice, id: data.id, number: data.numero }, ...prev])
       }
+      return true
     } catch (e) {
+      return false
     }
   }
 

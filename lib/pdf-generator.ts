@@ -450,6 +450,11 @@ async function _buildPDFDoc(
   doc.setFont("helvetica", "normal")
   doc.setTextColor(dark)
 
+  const isLibreInvoice = isInvoice && Array.isArray(d.items) && d.items.length > 0 &&
+    !(d.items.length === 1 && (d.items[0].designation === "Transport de personnes" || d.items[0].label === "Transport de personnes"))
+  const isFranchise = d.tvaMode === "franchise" ||
+    (!d.tva10Amount && !d.tva20Amount && !d.tva55Amount && (d.tva === 0 || !d.tva))
+
   if (d.items && d.items.length > 0 && !isInvoice) {
     d.items.forEach((item: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
       const descStr = doc.splitTextToSize(item.designation || "Prestation de transport avec chauffeur", 120) as string[]
@@ -457,6 +462,47 @@ async function _buildPDFDoc(
       doc.text(formatPrice(item.amountHT), 185, currentY, { align: "right" })
       currentY += descStr.length * 5 + 3
     })
+  } else if (isLibreInvoice) {
+    // Prestation libre : itère sur les lignes métier
+    d.items.forEach((item: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+      const label: string = item.designation || item.label || "Prestation"
+      const ht: number = item.amountHT ?? item.prix_ht ?? 0
+      const rate: number = item.tvaRate ?? item.tva_rate ?? 0
+      const descStr = doc.splitTextToSize(label, 130) as string[]
+      doc.text(descStr, 25, currentY)
+      doc.text(fmtMontant(ht), 185, currentY, { align: "right" })
+      currentY += descStr.length * 5 + 2
+      if (!isFranchise && rate > 0) {
+        doc.setFontSize(8)
+        doc.setTextColor(gray)
+        const tvaAmt = ht * (rate / 100)
+        doc.text(`TVA ${rate}% : ${fmtMontant(tvaAmt)}`, 27, currentY)
+        currentY += 4.5
+        doc.setFontSize(9)
+        doc.setTextColor(dark)
+      }
+    })
+    if ((d.discountValue ?? 0) > 0) {
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(200, 50, 50)
+      let discLabel = "  Remise"
+      if (d.discountType === "percent") discLabel += ` (${d.discountValue}%)`
+      doc.text(discLabel, 25, currentY)
+      const base = d.originalHT || d.amountHT || 0
+      const absDiscount = d.discountType === "percent" ? base * (d.discountValue / 100) : d.discountValue
+      doc.text("-" + fmtMontant(absDiscount), 185, currentY, { align: "right" })
+      currentY += 7
+      doc.setTextColor(dark)
+    }
+    if (d.notes) {
+      doc.setFont("helvetica", "italic")
+      doc.setTextColor(gray)
+      const notesStr = doc.splitTextToSize(d.notes as string, 140) as string[]
+      doc.text(notesStr, 25, currentY)
+      currentY += notesStr.length * 5 + 2
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(dark)
+    }
   } else if (isInvoice) {
     const bcRefStr = d.bcRef ? ` (Réf. ${d.bcRef})` : ""
     const descStr = doc.splitTextToSize(`Transport de personnes VTC${bcRefStr}`, 120) as string[]
@@ -596,8 +642,6 @@ async function _buildPDFDoc(
   // 5. TOTAUX
   if (currentY + 50 > 278) { doc.addPage(); currentY = 20 }
 
-  const isFranchise = !d.tva10Amount && !d.tva20Amount && !d.tva5_5Amount && (d.tva === 0 || !d.tva)
-
   doc.setDrawColor(200)
   doc.setLineWidth(0.3)
   doc.line(130, currentY, 190, currentY)
@@ -650,9 +694,17 @@ async function _buildPDFDoc(
         currentY += 5.5
       }
       if (d.tva55Amount && d.tva55Amount > 0) {
-        doc.text("TVA 5,5% (art. 279 du CGI)", 140, currentY)
+        doc.text("TVA 5,5%", 140, currentY)
         doc.text(fmtMontant(d.tva55Amount), 185, currentY, { align: "right" })
-        currentY += 7
+        currentY += 4.5
+        doc.setFontSize(8)
+        doc.setTextColor(gray)
+        doc.setFont("helvetica", "italic")
+        doc.text("(art. 279 du CGI)", 142, currentY)
+        doc.setFont("helvetica", "normal")
+        doc.setTextColor(dark)
+        doc.setFontSize(9)
+        currentY += 5.5
       }
       // Fallback taux unique
       if (!d.tva10Amount && !d.tva20Amount && !d.tva55Amount && d.tva) {

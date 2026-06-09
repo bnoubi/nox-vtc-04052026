@@ -29,6 +29,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
+import { DateTimePickerSheet } from "./date-time-picker-sheet"
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -51,36 +52,6 @@ interface CreateInvoiceProps {
 // Note: Mock data removed, now using bcs from useNox()
 
 // ── Success Toast ─────────────────────────────────────────────
-
-function SuccessToast({ show, onDone }: { show: boolean; onDone: () => void }) {
-  useEffect(() => {
-    if (show) {
-      const t = setTimeout(onDone, 2500)
-      return () => clearTimeout(t)
-    }
-  }, [show, onDone])
-
-  return (
-    <AnimatePresence>
-      {show && (
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 40 }}
-          transition={{ duration: 0.3 }}
-          className="fixed bottom-36 left-1/2 -translate-x-1/2 z-[90] flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-onyx-card border border-gold/30 gold-glow-sm shadow-2xl shadow-black/60"
-        >
-          <div className="w-7 h-7 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
-            <Check className="h-3.5 w-3.5 text-emerald-400" strokeWidth={2} />
-          </div>
-          <span className="text-sm font-medium text-foreground whitespace-nowrap">
-            Facture générée avec succès
-          </span>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
-}
 
 // ── Bottom Sheet: Choose method ───────────────────────────────
 
@@ -115,7 +86,7 @@ function ChooseInvoiceSheet({
         </div>
 
         <div className="px-5 pt-4 pb-2">
-          <h2 className="text-base font-bold text-foreground">Nouvelle Facture</h2>
+          <h2 className="text-base font-bold text-foreground">Facture libre</h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
             Choisissez le type de facturation
           </p>
@@ -156,7 +127,7 @@ function ChooseInvoiceSheet({
             <ArrowRight className="h-4 w-4 text-muted-foreground/40 shrink-0 group-hover:text-gold/50 group-hover:translate-x-0.5 transition-all" strokeWidth={1.5} />
           </button>
 
-          {/* Option 3: Nouvelle Facture */}
+          {/* Option 3: Facture libre */}
           <button
             onClick={onLibre}
             className="flex items-center gap-3.5 w-full p-4 rounded-2xl bg-onyx-card border border-onyx-border/50 hover:border-gold/30 hover:bg-gold/5 active:scale-[0.98] transition-all group"
@@ -165,7 +136,7 @@ function ChooseInvoiceSheet({
               <PlusCircle className="h-5 w-5 text-muted-foreground group-hover:text-gold transition-colors" strokeWidth={1.5} />
             </div>
             <div className="text-left flex-1">
-              <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">Nouvelle Facture</p>
+              <p className="text-sm font-semibold text-foreground group-hover:text-gold transition-colors">Facture libre</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Trajet réalisé ou prestation libre
               </p>
@@ -267,10 +238,12 @@ function FromBCScreen({
       cgvText:           bc.cgvText,
     }
 
-    setTimeout(() => {
-      addInvoice(newInvoice)
+    setTimeout(async () => {
+      const success = await addInvoice(newInvoice)
       setConverting(null)
-      onSuccess()
+      if (success) {
+        onSuccess()
+      }
     }, 400)
   }
 
@@ -443,18 +416,18 @@ function FactureLibreForm({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const { clients, invoices, enterprise, drivers, vehicles, addInvoice, tariffSettings } = useNox()
+  const { clients, invoices, enterprise, drivers, vehicles, addInvoice, tariffSettings, legalProfile } = useNox()
   const supabase = createClient()
   const clientRef = useRef<HTMLDivElement>(null)
-  const [isMicroInvoice, setIsMicroInvoice] = useState<boolean>(false)
-  const autoTvaRate = isMicroInvoice ? 0 : 10
+  const [isMicroInvoice, setIsMicroInvoice] = useState<boolean>(enterprise?.vatMode === "franchise")
+  const autoTvaRate = 10
 
   useEffect(() => {
     setIsMicroInvoice(enterprise?.vatMode === "franchise")
   }, [enterprise?.vatMode])
 
   // ── Mode toggle ────────────────────────────────────────────
-  const [invoiceMode, setInvoiceMode] = useState<InvoiceMode>("libre")
+  const [invoiceMode, setInvoiceMode] = useState<InvoiceMode>("trajet")
 
   // ── Client search (pattern BC) ─────────────────────────────
   const [clientSearch, setClientSearch] = useState("")
@@ -484,10 +457,11 @@ function FactureLibreForm({
   // ── Common fields ──────────────────────────────────────────
   const [serviceDate, setServiceDate] = useState("")
   const [serviceDateError, setServiceDateError] = useState("")
-  const libreDateRef = useRef<HTMLInputElement>(null)
-  const trajetDateInputRef = useRef<HTMLInputElement>(null)
-  const trajetTimeInputRef = useRef<HTMLInputElement>(null)
   const [formErrors, setFormErrors] = useState<Record<string, boolean>>({})
+
+  // ── Date pickers ──────────────────────────────────────────
+  const [showDateTimePicker, setShowDateTimePicker] = useState(false)
+  const [showServiceDatePicker, setShowServiceDatePicker] = useState(false)
 
   // ── Libre mode fields ──────────────────────────────────────
   const [items, setItems] = useState([{ id: `item-${Date.now()}`, designation: "", amountHT: "", tvaRate: autoTvaRate }])
@@ -703,6 +677,7 @@ function FactureLibreForm({
         amount: Math.round(trajetTTC * 100) / 100,
         amountHT: Math.round(trajetHT * 100) / 100,
         tva: Math.round(trajetTva * 100) / 100,
+        tvaMode: isMicroInvoice ? "franchise" : "10%",
         tvaRate: isMicroInvoice ? 0 : autoTvaRate,
         tva10Amount: (!isMicroInvoice && autoTvaRate === 10) ? Math.round(trajetTva * 100) / 100 : undefined,
         date: fmtDate(today),
@@ -763,8 +738,10 @@ function FactureLibreForm({
       }
     }
 
-    addInvoice(newInvoice)
-    onSuccess()
+    const success = await addInvoice(newInvoice)
+    if (success) {
+      onSuccess()
+    }
   }
 
   const inputCls = "w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
@@ -783,7 +760,7 @@ function FactureLibreForm({
           <ChevronLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
         </button>
         <div className="flex-1">
-          <h1 className="text-base font-bold text-foreground">Nouvelle Facture</h1>
+          <h1 className="text-base font-bold text-foreground">Facture libre</h1>
           <p className="text-[10px] text-muted-foreground">Trajet réalisé ou prestation libre</p>
         </div>
         <button onClick={onClose} className="w-8 h-8 rounded-lg bg-onyx-card border border-onyx-border/50 flex items-center justify-center hover:border-gold/30 transition-colors">
@@ -982,39 +959,27 @@ function FactureLibreForm({
                 </div>
               </div>
 
-              {/* Date + Heure — inputs natifs invisibles */}
+              {/* Date + Heure */}
               <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Date</label>
-                <input
-                  ref={trajetDateInputRef}
-                  type="date"
-                  value={trajetDate}
-                  max={new Date().toISOString().split("T")[0]}
-                  onChange={e => {
-                    setTrajetDate(e.target.value)
-                    setTimeout(() => trajetTimeInputRef.current?.showPicker?.() ?? trajetTimeInputRef.current?.click(), 80)
-                  }}
-                  className="sr-only"
-                  style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
-                />
-                <input
-                  ref={trajetTimeInputRef}
-                  type="time"
-                  value={trajetTime}
-                  onChange={e => setTrajetTime(e.target.value)}
-                  className="sr-only"
-                  style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
-                />
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Date et heure
+                </label>
                 <button
                   type="button"
-                  onClick={() => trajetDateInputRef.current?.showPicker?.() ?? trajetDateInputRef.current?.click()}
+                  onClick={() => setShowDateTimePicker(true)}
                   className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 hover:border-gold/50 transition-colors text-left"
                 >
                   <Calendar className="h-4 w-4 text-gold/70 flex-shrink-0" strokeWidth={1.5} />
                   <span className={cn("flex-1 text-sm", trajetDate ? "text-foreground" : "text-muted-foreground/50")}>
-                    {trajetDate
-                      ? `${new Date(trajetDate + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}${trajetTime ? " à " + trajetTime : ""}`
-                      : "Choisir la date et l'heure"}
+                    {trajetDate ? (() => {
+                      const today = new Date(); today.setHours(0, 0, 0, 0)
+                      const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1)
+                      const d = new Date(trajetDate + "T00:00:00")
+                      const t = trajetTime ? " · " + trajetTime : ""
+                      if (d.getTime() === today.getTime()) return "Aujourd'hui" + t
+                      if (d.getTime() === yesterday.getTime()) return "Hier" + t
+                      return new Date(trajetDate + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) + t
+                    })() : "Choisir la date et l'heure"}
                   </span>
                   {trajetDate && <span className="text-[11px] text-gold font-medium">Modifier</span>}
                 </button>
@@ -1086,25 +1051,34 @@ function FactureLibreForm({
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">EUR HT</span>
               </div>
               {trajetHT > 0 && (
-                <div className="p-3 rounded-xl bg-onyx-card border border-gold/20 space-y-1.5">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Montant HT</span>
-                    <span>{fmt(trajetHT)} €</span>
-                  </div>
+                <div className="p-4 rounded-xl bg-[#242424] border border-gold/20 space-y-2">
                   {!isMicroInvoice && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">TVA {autoTvaRate}% Transport</span>
-                      <span>{fmt(trajetTva)} €</span>
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="text-muted-foreground">Total HT</span>
+                      <span className="text-foreground">{fmt(trajetHT)}</span>
                     </div>
                   )}
-                  <div className="h-px bg-onyx-border/30" />
-                  <div className="flex justify-between text-sm font-bold">
-                    <span>Total TTC</span>
-                    <span className="text-gold">{fmt(trajetTTC)} €</span>
-                  </div>
-                  {isMicroInvoice && (
-                    <p className="text-[10px] text-muted-foreground italic">TVA non applicable, art. 293 B du CGI</p>
+                  {!isMicroInvoice && trajetTva > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">TVA (10%)</span>
+                      <span className="text-foreground font-medium">{fmt(trajetTva)} €</span>
+                    </div>
                   )}
+                  {isMicroInvoice && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-amber-600 font-medium text-[11px]">
+                        {legalProfile.vatMention ?? "TVA non applicable, art. 293 B du CGI"}
+                      </span>
+                    </div>
+                  )}
+                  <div className="border-t border-onyx-border/30 pt-2 flex justify-between items-end">
+                    <span className="text-foreground font-bold">
+                      {isMicroInvoice ? "Total" : "Total TTC"}
+                    </span>
+                    <span className="text-gold font-bold text-lg">
+                      {fmt(isMicroInvoice ? trajetHT : trajetTTC)} €
+                    </span>
+                  </div>
                 </div>
               )}
             </section>
@@ -1114,53 +1088,32 @@ function FactureLibreForm({
         {/* ── LIBRE MODE ───────────────────────────────────────── */}
         {invoiceMode === "libre" && (
           <>
-            {/* Date de prestation — en haut du mode libre */}
+            {/* Date de prestation */}
             <section className="space-y-1">
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                 Date de prestation{" "}
                 <span className="text-muted-foreground/50 normal-case font-normal">(optionnel)</span>
               </label>
-              <input
-                ref={libreDateRef}
-                type="date"
-                value={serviceDate}
-                max={new Date().toISOString().split("T")[0]}
-                onChange={e => {
-                  const v = e.target.value
-                  setServiceDate(v)
-                  if (v) {
-                    const chosen = new Date(v)
-                    const today = new Date(); today.setHours(23, 59, 59, 999)
-                    if (chosen > today) {
-                      setServiceDateError("La date ne peut pas être dans le futur")
-                      setServiceDate("")
-                    } else {
-                      setServiceDateError("")
-                    }
-                  } else {
-                    setServiceDateError("")
-                  }
-                }}
-                className="sr-only"
-                style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
-              />
               <button
                 type="button"
-                onClick={() => libreDateRef.current?.showPicker?.() ?? libreDateRef.current?.click()}
+                onClick={() => setShowServiceDatePicker(true)}
                 className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-[#242424] border border-onyx-border/30 hover:border-gold/50 transition-colors text-left"
               >
                 <Calendar className="h-4 w-4 text-gold/70 flex-shrink-0" strokeWidth={1.5} />
                 <span className={cn("flex-1 text-sm", serviceDate ? "text-foreground" : "text-muted-foreground/50")}>
-                  {serviceDate
-                    ? new Date(serviceDate + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
-                    : "Choisir une date"}
+                  {serviceDate ? (() => {
+                    const today = new Date(); today.setHours(0, 0, 0, 0)
+                    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1)
+                    const d = new Date(serviceDate + "T00:00:00")
+                    if (d.getTime() === today.getTime()) return "Aujourd'hui"
+                    if (d.getTime() === yesterday.getTime()) return "Hier"
+                    return new Date(serviceDate + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
+                  })() : "Choisir une date"}
                 </span>
                 {serviceDate && (
-                  <button
-                    type="button"
+                  <button type="button"
                     onClick={e => { e.stopPropagation(); setServiceDate(""); setServiceDateError("") }}
-                    className="w-5 h-5 rounded-full bg-onyx-border/50 flex items-center justify-center flex-shrink-0"
-                  >
+                    className="w-5 h-5 rounded-full bg-onyx-border/50 flex items-center justify-center flex-shrink-0">
                     <X className="h-3 w-3 text-muted-foreground" />
                   </button>
                 )}
@@ -1274,20 +1227,32 @@ function FactureLibreForm({
                   </div>
                 )}
                 <div className="h-px bg-onyx-border/30 my-1" />
+                {isMicroInvoice && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-amber-600 font-medium text-[11px]">
+                      {legalProfile.vatMention ?? "TVA non applicable, art. 293 B du CGI"}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-foreground">TOTAL TTC</span>
+                  <span className="text-xs font-semibold text-foreground">
+                    {isMicroInvoice ? "Total" : "Total TTC"}
+                  </span>
                   {discountAmount > 0 ? (
                     <div className="text-right">
-                      <span className="text-muted-foreground line-through text-xs mr-2">{fmt(originalTTC)} &euro;</span>
-                      <span className="text-lg font-bold text-gold">{fmt(totalTTC)} &euro;</span>
+                      <span className="text-muted-foreground line-through text-xs mr-2">
+                        {fmt(isMicroInvoice ? subtotalHT : originalTTC)} &euro;
+                      </span>
+                      <span className="text-lg font-bold text-gold">
+                        {fmt(isMicroInvoice ? totalHT : totalTTC)} &euro;
+                      </span>
                     </div>
                   ) : (
-                    <span className="text-lg font-bold text-gold">{fmt(totalTTC)} &euro;</span>
+                    <span className="text-lg font-bold text-gold">
+                      {fmt(isMicroInvoice ? totalHT : totalTTC)} &euro;
+                    </span>
                   )}
                 </div>
-                {isMicroInvoice && (
-                  <p className="text-[10px] text-muted-foreground italic pt-1">TVA non applicable, art. 293 B du CGI</p>
-                )}
               </motion.div>
             )}
           </>
@@ -1300,18 +1265,16 @@ function FactureLibreForm({
             Référence et notes
           </p>
 
-          {/* Checkbox TVA franchise */}
-          {enterprise?.vatMode === "franchise" && (
-            <label className="flex items-center gap-2.5 cursor-pointer py-1">
-              <Checkbox
-                id="micro-invoice"
-                checked={isMicroInvoice}
-                onCheckedChange={(v) => setIsMicroInvoice(v === true)}
-                className="border-white/40 data-[state=checked]:bg-gold data-[state=checked]:border-gold data-[state=checked]:text-black"
-              />
-              <span className="text-[12px] text-foreground/80 select-none">TVA non applicable (art. 293B CGI)</span>
-            </label>
-          )}
+          {/* Checkbox TVA franchise — visible pour tous */}
+          <label className="flex items-center gap-2.5 cursor-pointer py-1">
+            <Checkbox
+              id="micro-invoice"
+              checked={isMicroInvoice}
+              onCheckedChange={(v) => setIsMicroInvoice(v === true)}
+              className="border-white/40 data-[state=checked]:bg-gold data-[state=checked]:border-gold data-[state=checked]:text-black"
+            />
+            <span className="text-[12px] text-foreground/80 select-none">TVA non applicable (art. 293B CGI)</span>
+          </label>
 
           <textarea
             rows={3}
@@ -1418,6 +1381,50 @@ function FactureLibreForm({
         }}
       />
 
+      <DateTimePickerSheet
+        open={showDateTimePicker}
+        initialDate={trajetDate}
+        initialTime={trajetTime}
+        pastOnly
+        onClose={() => setShowDateTimePicker(false)}
+        onConfirm={(date: string, time: string) => {
+          if (date) {
+            const chosen = new Date(date + "T00:00:00")
+            const today = new Date(); today.setHours(23, 59, 59, 999)
+            if (chosen > today) {
+              toast.error("Pour un trajet futur, utilisez le Bon de Réservation")
+              setShowDateTimePicker(false)
+              return
+            }
+          }
+          setTrajetDate(date)
+          setTrajetTime(time)
+          setShowDateTimePicker(false)
+        }}
+      />
+
+      <DateTimePickerSheet
+        open={showServiceDatePicker}
+        initialDate={serviceDate}
+        initialTime=""
+        pastOnly
+        onClose={() => setShowServiceDatePicker(false)}
+        onConfirm={(date: string) => {
+          if (date) {
+            const chosen = new Date(date + "T00:00:00")
+            const today = new Date(); today.setHours(23, 59, 59, 999)
+            if (chosen > today) {
+              setServiceDateError("La date ne peut pas être dans le futur")
+              setShowServiceDatePicker(false)
+              return
+            }
+            setServiceDate(date)
+            setServiceDateError("")
+          }
+          setShowServiceDatePicker(false)
+        }}
+      />
+
     </motion.div>
   )
 }
@@ -1426,7 +1433,6 @@ function FactureLibreForm({
 
 export function CreateInvoiceFlow({ open, onClose }: CreateInvoiceProps) {
   const [step, setStep] = useState<InvoiceStep>("choose")
-  const [showToast, setShowToast] = useState(false)
 
   function handleClose() {
     setStep("choose")
@@ -1435,7 +1441,7 @@ export function CreateInvoiceFlow({ open, onClose }: CreateInvoiceProps) {
 
   function handleSuccess() {
     handleClose()
-    setShowToast(true)
+    toast.success("Facture générée avec succès")
   }
 
   return (
@@ -1473,7 +1479,6 @@ export function CreateInvoiceFlow({ open, onClose }: CreateInvoiceProps) {
         }}
       />
 
-      <SuccessToast show={showToast} onDone={() => setShowToast(false)} />
     </>
   )
 }
