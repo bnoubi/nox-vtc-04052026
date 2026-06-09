@@ -1314,7 +1314,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           .insert({
             user_id: userId,
             type: "debit",
-            amount: 1,
+            amount: -1,
             description: `Facture ${data?.numero ?? invoice.number}`,
           })
       }
