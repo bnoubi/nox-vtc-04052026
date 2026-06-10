@@ -628,9 +628,11 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       attempts++
       const { data: sub } = await supabase
         .from('subscriptions')
-        .select('plan')
+        .select('plan, status, trial_ends_at')
         .eq('user_id', userId)
         .single()
+      if (sub?.status) setSubscriptionStatus(sub.status)
+      if (sub?.trial_ends_at) setTrialEndsAt(sub.trial_ends_at)
       if (sub?.plan && sub.plan !== 'SOLO') {
         setPlan(sub.plan as Plan)
         const { data: wallet } = await supabase
