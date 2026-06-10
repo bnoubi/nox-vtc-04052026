@@ -2130,7 +2130,7 @@ function WalletHistoryScreen({ onBack }: { onBack: () => void }) {
             </div>
           ) : (
             txs.map((tx, i) => {
-              const isDebit = tx.type === "consumption"
+              const isDebit = tx.type === "consumption" || tx.type === "debit" || tx.amount < 0
               const label = TX_LABELS[tx.type] ?? tx.type
               return (
                 <div key={tx.id} className={cn("flex items-center gap-3 px-4 py-3.5", i > 0 && "border-t border-onyx-border/20")}>
@@ -2153,7 +2153,7 @@ function WalletHistoryScreen({ onBack }: { onBack: () => void }) {
                   </div>
                   <div className="text-right shrink-0">
                     <p className={cn("text-sm font-bold tabular-nums", isDebit ? "text-red-400" : "text-emerald-400")}>
-                      {isDebit ? "−" : "+"}{Math.abs(tx.amount)}
+                      {tx.amount >= 0 ? "+" : ""}{tx.amount}
                     </p>
                     {tx.balance_after != null && (
                       <p className="text-[10px] text-muted-foreground tabular-nums">→ {tx.balance_after}</p>

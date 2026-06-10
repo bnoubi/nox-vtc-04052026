@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from "framer-motion"
-import { Coins } from "lucide-react"
+import { Coins, Receipt } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface TokenCostModalProps {
@@ -71,11 +71,18 @@ export function TokenCostModal({ open, onClose, documentType, documentNumber, to
                 </p>
               )}
 
+              <div className="mx-5 mb-4 flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-gold/5 border border-gold/20">
+                <Receipt className="h-4 w-4 text-gold shrink-0" strokeWidth={1.5} />
+                <p className="text-[12px] text-muted-foreground leading-snug">
+                  Document disponible dans <span className="text-gold font-medium">Réservations & Factures</span>
+                </p>
+              </div>
+
               <button
                 onClick={onClose}
                 className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#D4AF37]/20 via-[#D4AF37]/10 to-[#D4AF37]/20 border border-gold/40 text-sm font-bold text-gold hover:border-gold/60 active:scale-[0.98] transition-all mt-1"
               >
-                Parfait !
+                Compris !
               </button>
             </div>
           </motion.div>

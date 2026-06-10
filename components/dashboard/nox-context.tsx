@@ -260,15 +260,22 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       // Plan depuis subscriptions (source de vérité absolue)
       try {
         const { data: sub } = await supabase
-          .from("subscriptions")
-          .select("plan, status, trial_ends_at")
-          .eq("user_id", uid)
-          .order("created_at", { ascending: false })
+          .from('subscriptions')
+          .select('plan, status, trial_ends_at')
+          .eq('user_id', uid)
+          .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle()
+        console.log("DEBUG TRIAL RAW:", sub)
         if (sub?.plan) setPlan(sub.plan as Plan)
         if (sub?.status) setSubscriptionStatus(sub.status)
         if (sub?.trial_ends_at) setTrialEndsAt(sub.trial_ends_at)
+        const { data: subCheck, error: subErr } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', uid)
+          .maybeSingle()
+        console.log("DEBUG FULL SUB:", subCheck, "ERR:", subErr)
       } catch (err) {}
 
       // Solde de jetons depuis wallets (source de vérité absolue)
@@ -630,7 +637,9 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         .from('subscriptions')
         .select('plan, status, trial_ends_at')
         .eq('user_id', userId)
-        .single()
+        .order('trial_ends_at', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle()
       if (sub?.status) setSubscriptionStatus(sub.status)
       if (sub?.trial_ends_at) setTrialEndsAt(sub.trial_ends_at)
       if (sub?.plan && sub.plan !== 'SOLO') {

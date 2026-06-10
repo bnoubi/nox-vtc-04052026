@@ -101,7 +101,7 @@ export function TokenCard() {
             </div>
           ) : (
             txs.map((tx, i) => {
-              const isDebit = tx.type === "consumption"
+              const isDebit = tx.type === "consumption" || tx.type === "debit" || tx.amount < 0
               return (
                 <div key={tx.id} className={cn("flex items-center justify-between py-2", i < txs.length - 1 && "border-b border-onyx-border/20")}>
                   <div className="flex items-center gap-2 min-w-0">
@@ -110,7 +110,7 @@ export function TokenCard() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-2">
                     <p className={cn("text-xs font-bold tabular-nums", isDebit ? "text-red-400" : "text-emerald-400")}>
-                      {isDebit ? "−" : "+"}{Math.abs(tx.amount)}
+                      {tx.amount >= 0 ? "+" : ""}{tx.amount}
                     </p>
                     <p className="text-[10px] text-muted-foreground/60 whitespace-nowrap">{relativeDate(tx.created_at)}</p>
                   </div>
