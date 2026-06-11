@@ -63,6 +63,7 @@ import { createClient } from "@/lib/supabase/client"
 import type { Driver, Vehicle, Client, BCDocument, InvoiceDocument, BCStatus, InvoiceStatus } from "./data"
 import { AccountSecurityScreen } from "./account-security/AccountSecurityScreen"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
+import { usePromo } from "@/lib/hooks/usePromo"
 import { SupportTicketModal } from "./support-ticket-modal"
 import { SupportHistory } from "./support-history"
 
@@ -1071,6 +1072,7 @@ function BankingScreen({ onBack }: { onBack: () => void }) {
 
 function SubscriptionScreen({ onBack }: { onBack: () => void }) {
   const { plan, upgrade, tokens } = useNox()
+  const { promo } = usePromo()
   const isTeam = plan === "TEAM"
   const isDuo = plan === "DUO"
   const [showConfetti, setShowConfetti] = useState(false)
@@ -1203,9 +1205,24 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                     )}
                   </div>
                   <div className="text-right">
-                    <span className={cn("text-sm font-bold", (isPlanTeam || isPlanDuo) && isCurrent ? "text-gold" : "text-foreground")}>{p.price}</span>
-                    {"priceSuffix" in p && p.priceSuffix && (
-                      <span className="text-[10px] font-normal text-muted-foreground">{p.priceSuffix}</span>
+                    {(isPlanDuo || isPlanTeam) && promo.active ? (
+                      <>
+                        <div className="flex items-center gap-1 justify-end">
+                          <span className="text-[10px] text-muted-foreground line-through">{p.price}</span>
+                          <span className={cn("text-sm font-bold", (isPlanTeam || isPlanDuo) && isCurrent ? "text-gold" : "text-foreground")}>
+                            {(parseFloat(p.price) * (1 - promo.percent / 100)).toFixed(2)}€
+                          </span>
+                          <span className="px-1 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[9px] font-bold">-{promo.percent}%</span>
+                        </div>
+                        <span className="text-[9px] text-muted-foreground">1er mois · puis {p.price}/mois</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className={cn("text-sm font-bold", (isPlanTeam || isPlanDuo) && isCurrent ? "text-gold" : "text-foreground")}>{p.price}</span>
+                        {"priceSuffix" in p && p.priceSuffix && (
+                          <span className="text-[10px] font-normal text-muted-foreground">{p.priceSuffix}</span>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

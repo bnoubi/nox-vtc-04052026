@@ -4,9 +4,9 @@ import { createServerClient } from '@supabase/ssr'
 import Stripe from 'stripe'
 
 const TOKEN_AMOUNTS: Record<string, number> = {
-  [process.env.STRIPE_PRICE_PACK_DECOUVERTE ?? '']: 5,
-  [process.env.STRIPE_PRICE_PACK_PRIVILEGE   ?? '']: 15,
-  [process.env.STRIPE_PRICE_PACK_PRESTIGE    ?? '']: 25,
+  [process.env.STRIPE_PRICE_PACK_DECOUVERTE ?? '']: 10,
+  [process.env.STRIPE_PRICE_PACK_PRIVILEGE   ?? '']: 30,
+  [process.env.STRIPE_PRICE_PACK_PRESTIGE    ?? '']: 50,
 }
 
 function resolvePlan(priceId: string): string {

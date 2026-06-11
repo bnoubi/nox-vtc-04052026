@@ -1,67 +1,93 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod'
-import { stripe } from '@/lib/stripe/client'
+import Stripe from 'stripe'
+import { createAdminClient } from '@/lib/supabase/admin'
 
-type ItemConfig = { priceId: string; mode: 'payment' | 'subscription' }
-
-function resolveItem(itemType: string): ItemConfig | null {
-  const map: Record<string, () => ItemConfig | null> = {
-    pack_decouverte: () => process.env.STRIPE_PRICE_PACK_DECOUVERTE
-      ? { priceId: process.env.STRIPE_PRICE_PACK_DECOUVERTE, mode: 'payment' } : null,
-    pack_privilege:  () => process.env.STRIPE_PRICE_PACK_PRIVILEGE
-      ? { priceId: process.env.STRIPE_PRICE_PACK_PRIVILEGE,  mode: 'payment' } : null,
-    pack_prestige:   () => process.env.STRIPE_PRICE_PACK_PRESTIGE
-      ? { priceId: process.env.STRIPE_PRICE_PACK_PRESTIGE,   mode: 'payment' } : null,
-    plan_duo:        () => process.env.STRIPE_PRICE_DUO
-      ? { priceId: process.env.STRIPE_PRICE_DUO,             mode: 'subscription' } : null,
-    plan_team:       () => process.env.STRIPE_PRICE_TEAM
-      ? { priceId: process.env.STRIPE_PRICE_TEAM,            mode: 'subscription' } : null,
-  }
-  return map[itemType]?.() ?? null
-}
-
-const schema = z.object({
-  itemType:   z.enum(['pack_decouverte', 'pack_privilege', 'pack_prestige', 'plan_duo', 'plan_team']),
-  userId:     z.string().uuid(),
-  successUrl: z.string().url(),
-  cancelUrl:  z.string().url(),
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2024-04-10',
 })
 
-export async function POST(req: NextRequest) {
-  let body: unknown
+export async function POST(request: NextRequest) {
   try {
-    body = await req.json()
-  } catch {
-    return NextResponse.json({ error: 'Corps de requête invalide' }, { status: 400 })
-  }
+    const body = await request.json()
+    const { itemType, userId, userEmail, successUrl: clientSuccessUrl, cancelUrl: clientCancelUrl } = body
 
-  const parsed = schema.safeParse(body)
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'Paramètres invalides' }, { status: 400 })
-  }
+    if (!userId || !itemType) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
 
-  const { itemType, userId, successUrl, cancelUrl } = parsed.data
-  const item = resolveItem(itemType)
+    // Lire la config promo depuis app_config
+    const adminClient = createAdminClient()
+    const { data: promoConfig } = await adminClient
+      .from('app_config')
+      .select('key, value')
+      .in('key', ['promo_active', 'promo_coupon_id'])
 
-  if (!item) {
-    return NextResponse.json({ error: 'Prix non configuré' }, { status: 503 })
-  }
+    const promoActive = promoConfig?.find(c => c.key === 'promo_active')?.value === 'true'
+    const promoCouponId = promoConfig?.find(c => c.key === 'promo_coupon_id')?.value
 
-  try {
-    const session = await stripe.checkout.sessions.create({
-      mode: item.mode,
-      line_items: [{ price: item.priceId, quantity: 1 }],
+    let mode: 'subscription' | 'payment' = 'subscription'
+    let priceId: string | undefined
+
+    switch (itemType) {
+      case 'plan_duo':
+        priceId = process.env.STRIPE_PRICE_DUO
+        mode = 'subscription'
+        break
+      case 'plan_team':
+        priceId = process.env.STRIPE_PRICE_TEAM
+        mode = 'subscription'
+        break
+      case 'pack_decouverte':
+        priceId = process.env.STRIPE_PRICE_PACK_DECOUVERTE
+        mode = 'payment'
+        break
+      case 'pack_privilege':
+        priceId = process.env.STRIPE_PRICE_PACK_PRIVILEGE
+        mode = 'payment'
+        break
+      case 'pack_prestige':
+        priceId = process.env.STRIPE_PRICE_PACK_PRESTIGE
+        mode = 'payment'
+        break
+      default:
+        return NextResponse.json({ error: 'Invalid item type' }, { status: 400 })
+    }
+
+    if (!priceId) {
+      return NextResponse.json({ error: 'Price ID not configured' }, { status: 500 })
+    }
+
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://app.noxvtc.fr'
+    const successUrl = clientSuccessUrl ?? `${siteUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}&item=${itemType}`
+    const cancelUrl = clientCancelUrl ?? `${siteUrl}/`
+
+    const sessionParams: Stripe.Checkout.SessionCreateParams = {
+      mode,
+      line_items: [{ price: priceId, quantity: 1 }],
       success_url: successUrl,
-      cancel_url:  cancelUrl,
-      metadata: { userId, priceId: item.priceId, type: item.mode === 'payment' ? 'token_pack' : 'subscription' },
-      ...(item.mode === 'subscription' && {
-        subscription_data: { metadata: { userId, priceId: item.priceId } },
+      cancel_url: cancelUrl,
+      client_reference_id: userId,
+      customer_email: userEmail,
+      metadata: {
+        userId,
+        itemType,
+        priceId,
+        type: mode === 'payment' ? 'token_pack' : 'subscription',
+      },
+      ...(mode === 'subscription' && {
+        subscription_data: { metadata: { userId, priceId } },
       }),
-    })
+    }
 
+    // Appliquer le coupon promo uniquement sur les abonnements si promo active
+    if (promoActive && promoCouponId && mode === 'subscription') {
+      sessionParams.discounts = [{ coupon: promoCouponId }]
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams)
     return NextResponse.json({ url: session.url })
-  } catch (err) {
-    console.error('[stripe/checkout] error:', err)
-    return NextResponse.json({ error: 'Erreur lors de la création de la session' }, { status: 500 })
+  } catch (error) {
+    console.error('[stripe/checkout] error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

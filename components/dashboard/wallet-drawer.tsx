@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils"
 import { useNox } from "./nox-context"
 
 const PACKS = [
-  { id: "decouverte", name: "Découverte", tokens: 5,  price: 5,  unit: "1,00", badge: null },
-  { id: "privilege",  name: "Privilège",  tokens: 15, price: 10, unit: "0,66", badge: "Le plus populaire" },
-  { id: "prestige",   name: "Prestige",   tokens: 25, price: 15, unit: "0,60", badge: "Meilleure offre" },
+  { id: "decouverte", name: "Découverte", tokens: 10, price: 5,  unit: "0,50", badge: null },
+  { id: "privilege",  name: "Privilège",  tokens: 30, price: 10, unit: "0,33", badge: "Le plus populaire" },
+  { id: "prestige",   name: "Prestige",   tokens: 50, price: 15, unit: "0,30", badge: "Meilleure offre" },
 ] as const
 
 type PayState = "idle" | "loading"

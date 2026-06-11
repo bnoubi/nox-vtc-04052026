@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { X, ShieldCheck, Loader2, CheckCircle2, Crown, Coins } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useNox } from "./nox-context"
+import { usePromo } from "@/lib/hooks/usePromo"
 import type { Plan } from "./data"
 
 type PayState = "idle" | "loading"
@@ -42,11 +43,16 @@ interface SubscriptionDrawerProps {
   onClose: () => void
 }
 
+const ORIGINAL_PRICES: Record<"DUO" | "TEAM", number> = { DUO: 4.99, TEAM: 9.99 }
+
 export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDrawerProps) {
   const { userId, tokens } = useNox()
+  const { promo } = usePromo()
   const [payState, setPayState] = useState<PayState>("idle")
 
   const planInfo = targetPlan ? PLAN_DETAILS[targetPlan] : null
+  const originalPrice = targetPlan ? ORIGINAL_PRICES[targetPlan] : 0
+  const promoPrice = promo.active ? (originalPrice * (1 - promo.percent / 100)).toFixed(2) : null
 
   async function handlePay() {
     if (payState !== "idle" || !targetPlan || !userId) return
@@ -156,8 +162,22 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-[#D4AF37]">{planInfo.price}&#8364;</p>
-                    <p className="text-[10px] text-[#A1A1AA]">/mois</p>
+                    {promo.active && (
+                      <p className="text-[11px] text-[#A1A1AA] line-through">{planInfo.price}€</p>
+                    )}
+                    <div className="flex items-center gap-1.5 justify-end">
+                      <p className="text-2xl font-bold text-[#D4AF37]">
+                        {promo.active ? `${promoPrice}€` : `${planInfo.price}€`}
+                      </p>
+                      {promo.active && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-bold">
+                          -{promo.percent}%
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-[#A1A1AA]">
+                      {promo.active ? "Premier mois — puis " + planInfo.price + "€/mois" : "/mois"}
+                    </p>
                   </div>
                 </div>
 
