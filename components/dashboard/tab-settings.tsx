@@ -1103,12 +1103,16 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
     }, 300)
   }
 
+  function fmtPrice(n: number) {
+    return n.toFixed(2).replace('.', ',') + '€'
+  }
+
   const planCards = [
     {
       id: "SOLO" as const,
       name: "Starter",
       subtitle: "L\u2019offre Ind\u00e9pendant",
-      price: "Gratuit",
+      price: null as number | null,
       capacity: "Max 1 Chauffeur / Max 1 V\u00e9hicule",
       features: ["Signature Entreprise incluse", "Paiement \u00e0 l\u2019usage (jetons)"],
     },
@@ -1116,7 +1120,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
       id: "DUO" as const,
       name: "Pro",
       subtitle: "L\u2019offre Bin\u00f4me",
-      price: "4,99\u20ac",
+      price: 4.99 as number | null,
       priceSuffix: "/mois",
       capacity: "Max 2 Chauffeurs / Max 2 V\u00e9hicules",
       features: ["Signature Entreprise incluse", "Documents ILLIMIT\u00c9S"],
@@ -1125,7 +1129,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
       id: "TEAM" as const,
       name: "Premium",
       subtitle: "L\u2019offre Flotte",
-      price: "9,99\u20ac",
+      price: 9.99 as number | null,
       priceSuffix: "/mois",
       capacity: "Max 10 Chauffeurs / Max 10 V\u00e9hicules",
       features: ["Signature Entreprise incluse", "Documents ILLIMIT\u00c9S", "API & Int\u00e9grations", "Statistiques avanc\u00e9es"],
@@ -1205,20 +1209,22 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                     )}
                   </div>
                   <div className="text-right">
-                    {(isPlanDuo || isPlanTeam) && promo.active ? (
+                    {(isPlanDuo || isPlanTeam) && plan === "SOLO" && promo.active && p.price !== null ? (
                       <>
                         <div className="flex items-center gap-1 justify-end">
-                          <span className="text-[10px] text-muted-foreground line-through">{p.price}</span>
+                          <span className="text-[10px] text-muted-foreground line-through">{fmtPrice(p.price)}</span>
                           <span className={cn("text-sm font-bold", (isPlanTeam || isPlanDuo) && isCurrent ? "text-gold" : "text-foreground")}>
-                            {(parseFloat(p.price) * (1 - promo.percent / 100)).toFixed(2)}€
+                            {fmtPrice(p.price * (1 - promo.percent / 100))}
                           </span>
                           <span className="px-1 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[9px] font-bold">-{promo.percent}%</span>
                         </div>
-                        <span className="text-[9px] text-muted-foreground">1er mois · puis {p.price}/mois</span>
+                        <span className="text-[9px] text-muted-foreground">1er mois · puis {fmtPrice(p.price)}/mois</span>
                       </>
                     ) : (
                       <>
-                        <span className={cn("text-sm font-bold", (isPlanTeam || isPlanDuo) && isCurrent ? "text-gold" : "text-foreground")}>{p.price}</span>
+                        <span className={cn("text-sm font-bold", (isPlanTeam || isPlanDuo) && isCurrent ? "text-gold" : "text-foreground")}>
+                          {p.price !== null ? fmtPrice(p.price) : "Gratuit"}
+                        </span>
                         {"priceSuffix" in p && p.priceSuffix && (
                           <span className="text-[10px] font-normal text-muted-foreground">{p.priceSuffix}</span>
                         )}
@@ -1361,6 +1367,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
 
 function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => void }) {
   const { plan, upgrade } = useNox()
+  const { promo } = usePromo()
   const limitLabel = type === "driver" ? "chauffeurs" : "vehicules"
   const currentLimit = plan === "SOLO" ? SOLO_LIMIT : DUO_LIMIT
   return (
@@ -1395,12 +1402,26 @@ function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => voi
           <button onClick={() => upgrade("DUO")} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25 active:scale-[0.97] transition-all">
             <Crown className="h-4 w-4" strokeWidth={1.5} />
             <span className="text-[11px] font-bold">Pro</span>
-            <span className="text-[10px] text-gold/70 font-medium">4,99&#8364;/mois</span>
+            {plan === "SOLO" && promo.active ? (
+              <>
+                <span className="text-[9px] text-gold/50 line-through">4,99€/mois</span>
+                <span className="text-[10px] text-gold font-bold">{(4.99 * (1 - promo.percent / 100)).toFixed(2).replace('.', ',')}€</span>
+              </>
+            ) : (
+              <span className="text-[10px] text-gold/70 font-medium">4,99€/mois</span>
+            )}
           </button>
           <button onClick={() => upgrade("TEAM")} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold text-primary-foreground hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
             <Crown className="h-4 w-4" strokeWidth={1.5} />
             <span className="text-[11px] font-bold">Premium</span>
-            <span className="text-[10px] text-primary-foreground/70 font-medium">9,99&#8364;/mois</span>
+            {plan === "SOLO" && promo.active ? (
+              <>
+                <span className="text-[9px] text-primary-foreground/40 line-through">9,99€/mois</span>
+                <span className="text-[10px] text-primary-foreground font-bold">{(9.99 * (1 - promo.percent / 100)).toFixed(2).replace('.', ',')}€</span>
+              </>
+            ) : (
+              <span className="text-[10px] text-primary-foreground/70 font-medium">9,99€/mois</span>
+            )}
           </button>
         </div>
       </div>
