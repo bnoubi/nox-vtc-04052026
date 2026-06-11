@@ -52,7 +52,7 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
 
   const planInfo = targetPlan ? PLAN_DETAILS[targetPlan] : null
   const originalPrice = targetPlan ? ORIGINAL_PRICES[targetPlan] : 0
-  const promoPrice = promo.active ? (originalPrice * (1 - promo.percent / 100)).toFixed(2) : null
+  const promoPrice = promo.active ? (originalPrice * (1 - promo.percent / 100)).toFixed(2).replace('.', ',') : null
 
   async function handlePay() {
     if (payState !== "idle" || !targetPlan || !userId) return
