@@ -1104,7 +1104,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
   }
 
   function fmtPrice(n: number) {
-    return n.toFixed(2).replace('.', ',') + '€'
+    return (Math.floor(n * 100) / 100).toFixed(2).replace('.', ',') + '€'
   }
 
   const planCards = [
@@ -1405,7 +1405,7 @@ function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => voi
             {plan === "SOLO" && promo.active ? (
               <>
                 <span className="text-[9px] text-gold/50 line-through">4,99€/mois</span>
-                <span className="text-[10px] text-gold font-bold">{(4.99 * (1 - promo.percent / 100)).toFixed(2).replace('.', ',')}€</span>
+                <span className="text-[10px] text-gold font-bold">{(Math.floor(4.99 * (1 - promo.percent / 100) * 100) / 100).toFixed(2).replace('.', ',')}€</span>
               </>
             ) : (
               <span className="text-[10px] text-gold/70 font-medium">4,99€/mois</span>
@@ -1417,7 +1417,7 @@ function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => voi
             {plan === "SOLO" && promo.active ? (
               <>
                 <span className="text-[9px] text-primary-foreground/40 line-through">9,99€/mois</span>
-                <span className="text-[10px] text-primary-foreground font-bold">{(9.99 * (1 - promo.percent / 100)).toFixed(2).replace('.', ',')}€</span>
+                <span className="text-[10px] text-primary-foreground font-bold">{(Math.floor(9.99 * (1 - promo.percent / 100) * 100) / 100).toFixed(2).replace('.', ',')}€</span>
               </>
             ) : (
               <span className="text-[10px] text-primary-foreground/70 font-medium">9,99€/mois</span>
