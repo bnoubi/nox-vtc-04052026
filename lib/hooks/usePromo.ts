@@ -18,10 +18,12 @@ export function usePromo() {
   useEffect(() => {
     const fetchPromo = async () => {
       const supabase = createClient()
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('app_config')
         .select('key, value')
         .in('key', ['promo_active', 'promo_percent', 'promo_coupon_id'])
+
+      if (error) console.error("usePromo error:", error)
 
       if (data) {
         setPromo({

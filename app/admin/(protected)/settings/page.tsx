@@ -18,7 +18,8 @@ export default function SettingsPage() {
       .from("app_config")
       .select("key, value")
       .in("key", ["promo_active", "promo_percent", "promo_coupon_id"])
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) console.error("settings app_config error:", error)
         if (data) {
           setPromoActive(data.find(c => c.key === "promo_active")?.value === "true")
           setPromoPercent(parseInt(data.find(c => c.key === "promo_percent")?.value ?? "50"))
@@ -33,10 +34,14 @@ export default function SettingsPage() {
     setToggling(true)
     const newValue = !promoActive
     setPromoActive(newValue)
-    await supabase
+    const { error } = await supabase
       .from("app_config")
       .update({ value: newValue.toString() })
       .eq("key", "promo_active")
+    if (error) {
+      console.error("Erreur toggle promo:", error)
+      setPromoActive(!newValue)
+    }
     setToggling(false)
   }
 
