@@ -12,8 +12,8 @@ const ITEM_CONFIG: Record<string, { amount: number; description: string }> = {
   pack_decouverte: { amount: 0.99,  description: 'Pack Découverte — 5 jetons' },
   pack_privilege:  { amount: 9.99,  description: 'Pack Privilège — 15 jetons' },
   pack_prestige:   { amount: 14.99, description: 'Pack Prestige — 25 jetons' },
-  plan_duo:        { amount: 9.99,  description: 'Offre DUO — abonnement mensuel' },
-  plan_team:       { amount: 14.99, description: 'Offre TEAM — abonnement mensuel' },
+  plan_duo:        { amount: 4.99,  description: 'Offre Pro — abonnement mensuel' },
+  plan_team:       { amount: 9.99,  description: 'Offre Premium — abonnement mensuel' },
 }
 
 const schema = z.object({
