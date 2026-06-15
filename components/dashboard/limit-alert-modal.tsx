@@ -2,6 +2,14 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Shield, Crown } from "lucide-react"
+import { getPlan } from "@/lib/config/prices"
+
+function fmtPrice(n: number) {
+  return n.toFixed(2).replace('.', ',') + '€/mois'
+}
+
+const PRO_PRICE_LABEL = fmtPrice(getPlan('plan_duo')?.price ?? 4.99)
+const PREMIUM_PRICE_LABEL = fmtPrice(getPlan('plan_team')?.price ?? 9.99)
 
 interface LimitAlertModalProps {
   open: boolean
@@ -76,7 +84,7 @@ export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer, c
                 >
                   <Crown className="h-3.5 w-3.5 text-[#D4AF37]" strokeWidth={2} />
                   <span className="text-xs font-bold text-[#D4AF37] tracking-wider uppercase">Pro</span>
-                  <span className="text-[10px] text-[#D4AF37]/70">9,99€/mois</span>
+                  <span className="text-[10px] text-[#D4AF37]/70">{PRO_PRICE_LABEL}</span>
                 </button>
                 <button
                   onClick={() => { onClose(); onUpgradePremium() }}
@@ -84,7 +92,7 @@ export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer, c
                 >
                   <Crown className="h-3.5 w-3.5 text-[#1A1A1A]" strokeWidth={2} />
                   <span className="text-xs font-bold text-[#1A1A1A] tracking-wider uppercase">Premium</span>
-                  <span className="text-[10px] text-[#1A1A1A]/70">14,99€/mois</span>
+                  <span className="text-[10px] text-[#1A1A1A]/70">{PREMIUM_PRICE_LABEL}</span>
                 </button>
               </div>
             ) : (

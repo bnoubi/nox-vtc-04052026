@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getTokenPack, getPlan } from '@/lib/config/prices'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-04-10',
@@ -25,36 +26,18 @@ export async function POST(request: NextRequest) {
     const promoActive = promoConfig?.find(c => c.key === 'promo_active')?.value === 'true'
     const promoCouponId = promoConfig?.find(c => c.key === 'promo_coupon_id')?.value
 
-    let mode: 'subscription' | 'payment' = 'subscription'
-    let priceId: string | undefined
-
-    switch (itemType) {
-      case 'plan_duo':
-        priceId = process.env.STRIPE_PRICE_DUO
-        mode = 'subscription'
-        break
-      case 'plan_team':
-        priceId = process.env.STRIPE_PRICE_TEAM
-        mode = 'subscription'
-        break
-      case 'pack_decouverte':
-        priceId = process.env.STRIPE_PRICE_PACK_DECOUVERTE
-        mode = 'payment'
-        break
-      case 'pack_privilege':
-        priceId = process.env.STRIPE_PRICE_PACK_PRIVILEGE
-        mode = 'payment'
-        break
-      case 'pack_prestige':
-        priceId = process.env.STRIPE_PRICE_PACK_PRESTIGE
-        mode = 'payment'
-        break
-      default:
-        return NextResponse.json({ error: 'Invalid item type' }, { status: 400 })
+    const pack = getTokenPack(itemType)
+    const plan = getPlan(itemType)
+    if (!pack && !plan) {
+      return NextResponse.json({ error: 'Invalid item type' }, { status: 400 })
     }
 
+    const mode: 'subscription' | 'payment' = plan ? 'subscription' : 'payment'
+    const envKey = (pack ?? plan)!.stripeEnvKey
+    const priceId = process.env[envKey]
+
     if (!priceId) {
-      return NextResponse.json({ error: 'Price ID not configured' }, { status: 500 })
+      return NextResponse.json({ error: `Price ID not configured (${envKey})` }, { status: 500 })
     }
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://app.noxvtc.fr'

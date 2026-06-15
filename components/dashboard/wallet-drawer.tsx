@@ -6,18 +6,15 @@ import { X, Coins, ShieldCheck, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { useNox } from "./nox-context"
+import { TOKEN_PACKS } from "@/lib/config/prices"
 
-const PACKS = [
-  { id: "decouverte", name: "Découverte", tokens: 10, price: 5,  unit: "0,50", badge: null },
-  { id: "privilege",  name: "Privilège",  tokens: 30, price: 10, unit: "0,33", badge: "Le plus populaire" },
-  { id: "prestige",   name: "Prestige",   tokens: 50, price: 15, unit: "0,30", badge: "Meilleure offre" },
-] as const
+const PACKS = TOKEN_PACKS
 
 type PayState = "idle" | "loading"
 
 export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { userId, tokens } = useNox()
-  const [selected, setSelected] = useState<string>("privilege")
+  const [selected, setSelected] = useState<string>("pack_privilege")
   const [payState, setPayState] = useState<PayState>("idle")
   const [paypalState, setPaypalState] = useState<PayState>("idle")
 
@@ -36,7 +33,7 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          itemType: `pack_${pack.id}`,
+          itemType: pack.id,
           userId,
           successUrl,
           cancelUrl:  `${origin}/`,
@@ -55,13 +52,12 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
     const pack = PACKS.find((p) => p.id === selected)
     if (!pack) return
 
-    const itemType = `pack_${pack.id}`
     setPaypalState("loading")
     try {
       const res = await fetch("/api/paypal/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemType, userId }),
+        body: JSON.stringify({ itemType: pack.id, userId }),
       })
       const data = await res.json() as { approvalUrl?: string; error?: string }
       if (!res.ok || !data.approvalUrl) throw new Error(data.error ?? "Erreur inconnue")

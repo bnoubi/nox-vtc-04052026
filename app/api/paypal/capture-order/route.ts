@@ -2,12 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { capturePayPalOrder } from '@/lib/paypal/client'
 import { createServerClient } from '@supabase/ssr'
-
-const TOKEN_AMOUNTS: Record<string, number> = {
-  pack_decouverte: 5,
-  pack_privilege:  15,
-  pack_prestige:   25,
-}
+import { getTokenPack } from '@/lib/config/prices'
 
 const schema = z.object({
   orderID:  z.string().min(1),
@@ -38,7 +33,8 @@ async function processCapture(orderID: string, itemType: string, userId: string)
   const isPack = itemType.startsWith('pack_')
 
   if (isPack) {
-    const tokens = TOKEN_AMOUNTS[itemType]
+    const pack = getTokenPack(itemType)
+    const tokens = pack?.tokens ?? 0
 
     const { data: wallet } = await db
       .from('wallets')

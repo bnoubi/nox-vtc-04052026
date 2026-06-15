@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getPayPalAccessToken } from '@/lib/paypal/client'
+import { getItem } from '@/lib/config/prices'
 
 const BASE_URL = process.env.PAYPAL_MODE === 'live'
   ? 'https://api-m.paypal.com'
   : 'https://api-m.sandbox.paypal.com'
 
 const APP_BASE = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.noxvtc.fr'
-
-const ITEM_CONFIG: Record<string, { amount: number; description: string }> = {
-  pack_decouverte: { amount: 0.99,  description: 'Pack Découverte — 5 jetons' },
-  pack_privilege:  { amount: 9.99,  description: 'Pack Privilège — 15 jetons' },
-  pack_prestige:   { amount: 14.99, description: 'Pack Prestige — 25 jetons' },
-  plan_duo:        { amount: 4.99,  description: 'Offre Pro — abonnement mensuel' },
-  plan_team:       { amount: 9.99,  description: 'Offre Premium — abonnement mensuel' },
-}
 
 const schema = z.object({
   itemType: z.enum(['pack_decouverte', 'pack_privilege', 'pack_prestige', 'plan_duo', 'plan_team']),
@@ -35,9 +28,11 @@ export async function POST(req: NextRequest) {
   }
 
   const { itemType, userId } = parsed.data
-  const config = ITEM_CONFIG[itemType]
+  const item = getItem(itemType)
+  if (!item) {
+    return NextResponse.json({ error: 'Item inconnu' }, { status: 400 })
+  }
 
-  console.log("[PayPal] return_url:", `${APP_BASE}/api/paypal/capture-order`)
   const returnUrl = `${APP_BASE}/api/paypal/capture-order?userId=${userId}&itemType=${itemType}`
   const cancelUrl = `${APP_BASE}/?cancelled=1`
 
@@ -49,8 +44,8 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         intent: 'CAPTURE',
         purchase_units: [{
-          amount: { currency_code: 'EUR', value: config.amount.toFixed(2) },
-          description: config.description,
+          amount: { currency_code: 'EUR', value: item.price.toFixed(2) },
+          description: item.description,
         }],
         application_context: {
           return_url:  returnUrl,
@@ -61,11 +56,18 @@ export async function POST(req: NextRequest) {
       }),
     })
 
-    if (!res.ok) throw new Error(`PayPal create order failed: ${res.status}`)
-    const data = await res.json() as { id: string; links: Array<{ rel: string; href: string }> }
+    const responseText = await res.text()
+    if (!res.ok) {
+      console.error('[paypal/create-order] PayPal API error:', responseText)
+      return NextResponse.json({ error: 'Erreur lors de la création de la commande' }, { status: 500 })
+    }
 
+    const data = JSON.parse(responseText) as { id: string; links: Array<{ rel: string; href: string }> }
     const approvalLink = data.links.find(l => l.rel === 'approve')
-    if (!approvalLink) throw new Error('No approval URL from PayPal')
+    if (!approvalLink) {
+      console.error('[paypal/create-order] No approval URL in response:', responseText)
+      return NextResponse.json({ error: 'Réponse PayPal invalide' }, { status: 500 })
+    }
 
     return NextResponse.json({ orderID: data.id, approvalUrl: approvalLink.href })
   } catch (err) {
