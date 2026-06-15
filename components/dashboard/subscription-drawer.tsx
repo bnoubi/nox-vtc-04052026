@@ -81,6 +81,25 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
     }
   }
 
+  async function handlePayPal() {
+    if (payState !== "idle" || !targetPlan || !userId) return
+
+    setPayState("loading")
+    try {
+      const itemType = targetPlan === "DUO" ? "plan_duo" : "plan_team"
+      const res = await fetch("/api/paypal/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemType, userId }),
+      })
+      const data = await res.json() as { approvalUrl?: string; error?: string }
+      if (!res.ok || !data.approvalUrl) throw new Error(data.error ?? "Erreur inconnue")
+      window.location.href = data.approvalUrl
+    } catch {
+      setPayState("idle")
+    }
+  }
+
   function handleClose() {
     if (payState === "loading") return
     setPayState("idle")
@@ -227,7 +246,7 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
 
               {/* PayPal Button */}
               <button
-                onClick={handlePay}
+                onClick={handlePayPal}
                 disabled={payState !== "idle"}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#FFC439] hover:bg-[#F0B72A] active:scale-[0.98] transition-all mb-3 disabled:opacity-60"
               >
