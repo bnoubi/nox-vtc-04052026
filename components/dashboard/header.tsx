@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import Image from "next/image"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Coins, Bell, CheckCircle2, XCircle } from "lucide-react"
 import { useNox } from "./nox-context"
@@ -46,7 +45,7 @@ export function DashboardHeader() {
     if (userProfile?.prenom || userProfile?.nom) {
       const first = userProfile.prenom || ""
       const last = userProfile.nom || ""
-      setDisplayName(`${first} ${last}`.trim())
+      setDisplayName((first || last).slice(0, 12))
       setInitials(`${first[0] || ""}${last[0] || ""}`.toUpperCase() || "—")
       return
     }
@@ -56,18 +55,21 @@ export function DashboardHeader() {
       const fullName: string = user.user_metadata?.full_name || user.user_metadata?.name || ""
       const firstName: string = user.user_metadata?.given_name || ""
       const lastName: string = user.user_metadata?.family_name || ""
-      if (fullName) {
-        setDisplayName(fullName)
+      if (firstName) {
+        setDisplayName(firstName.slice(0, 12))
+        setInitials(`${firstName[0] || ""}${lastName?.[0] || ""}`.toUpperCase() || "—")
+      } else if (fullName) {
         const parts = fullName.trim().split(" ")
+        setDisplayName(parts[0].slice(0, 12))
         setInitials(parts.length >= 2
           ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
           : fullName.substring(0, 2).toUpperCase())
-      } else if (firstName || lastName) {
-        setDisplayName(`${firstName} ${lastName}`.trim())
-        setInitials(`${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase() || "—")
+      } else if (lastName) {
+        setDisplayName(lastName.slice(0, 12))
+        setInitials(lastName.substring(0, 2).toUpperCase())
       } else if (user.email) {
         const prefix = user.email.split("@")[0]
-        setDisplayName(prefix)
+        setDisplayName(prefix.slice(0, 12))
         setInitials(prefix.substring(0, 2).toUpperCase())
       }
     }
@@ -127,23 +129,18 @@ export function DashboardHeader() {
   useEffect(() => { registerWalletOpener(openWallet) }, [registerWalletOpener, openWallet])
 
   return (
-    <header className="flex items-center justify-between px-4 py-4">
+    <header className="flex items-center justify-between px-4 py-2">
       {/* Brand + Avatar + Name */}
-      <div className="flex items-center gap-3">
-        <div className="relative h-10 w-10 rounded-xl overflow-hidden flex-shrink-0">
-          <Image src="/assets/icon.png" alt="NOX VTC" width={40} height={40} className="w-full h-full object-cover" />
-        </div>
-        <Avatar className={cn("h-11 w-11 border", isTeam ? "border-gold/50" : "border-gold/30")}>
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="font-serif text-sm flex-shrink-0" style={{ color: "#C9A84C" }}>N</span>
+        <Avatar className={cn("h-8 w-8 border flex-shrink-0", isTeam ? "border-gold/50" : "border-gold/30")}>
           <AvatarImage src="/placeholder-avatar.jpg" alt="User" />
-          <AvatarFallback className="bg-onyx-card text-foreground text-sm font-medium">{initials}</AvatarFallback>
+          <AvatarFallback className="bg-onyx-card text-foreground text-xs font-medium">{initials}</AvatarFallback>
         </Avatar>
-        <div className="flex flex-col">
-          <span className="text-xs text-muted-foreground">Bonjour</span>
-          <span className="text-sm font-semibold text-foreground">{displayName || "Mon compte"}</span>
-        </div>
+        <span className="text-sm font-semibold text-foreground truncate">{displayName || "Mon compte"}</span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-shrink-0">
         {/* Cloche notifications */}
         <div className="relative">
           <button

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { X, AlertTriangle, CheckCircle2, Clock, ShieldCheck, User, Car, Building2 } from "lucide-react"
+import { X, AlertTriangle, CheckCircle2, Clock, ShieldCheck, User, Car, Building2, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { type MotorType, PLAN_LIMITS } from "./data"
 import { useNox } from "./nox-context"
@@ -216,14 +216,6 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
   const scoreColor = getScoreColor(score)
   const scoreMessage = getScoreMessage(score)
 
-  // SVG circle parameters
-  const size = 180
-  const strokeWidth = 8
-  const radius = (size - strokeWidth) / 2
-  const circumference = 2 * Math.PI * radius
-  const progressScore = score
-  const strokeDashoffset = circumference - (progressScore / 100) * circumference
-
     function handleIssueClick(issue: DocumentIssue) {
     if (onNavigateToEntity && issue.entityType !== "enterprise") {
       setShowDetails(false)
@@ -233,90 +225,49 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
 
   return (
     <section className="px-4 w-full">
-      <div className="relative flex flex-col items-center justify-center py-6 mx-auto max-w-md">
-        {/* Circular Progress Ring */}
+      <div className="mx-auto max-w-md">
+        {/* Compact horizontal score bar */}
         <button
           onClick={() => setShowDetails(true)}
-          className="relative group cursor-pointer active:scale-[0.98] transition-transform"
+          className="group w-full flex items-center gap-3 px-3 bg-[#1a1a1a] rounded-[12px] active:scale-[0.99] transition-transform"
+          style={{
+            height: 52,
+            border: `1px solid ${scoreColor}`,
+          }}
           aria-label="Voir les détails de conformité"
         >
-          <svg
-            width={size}
-            height={size}
-            className="transform -rotate-90"
-          >
-            {/* Background circle */}
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={radius}
-              fill="none"
-              stroke="#1A1A1A"
-              strokeWidth={strokeWidth}
-            />
-            {/* Progress circle */}
-            <motion.circle
-              cx={size / 2}
-              cy={size / 2}
-              r={radius}
-              fill="none"
-              stroke={scoreColor}
-              strokeWidth={strokeWidth}
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              initial={{ strokeDashoffset: circumference }}
-              animate={{ strokeDashoffset }}
-              transition={{ duration: 1.2, ease: "easeOut" }}
+          <ShieldCheck className="h-5 w-5 flex-shrink-0" style={{ color: scoreColor }} strokeWidth={1.5} />
+          <span className="text-xs text-muted-foreground flex-shrink-0">Score NoX</span>
+
+          <div className="flex-1 h-2 rounded-full bg-[#0f0f0f] overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${score}%` }}
+              transition={{ duration: 1.0, ease: "easeOut" }}
+              className="h-full rounded-full"
               style={{
-                filter: `drop-shadow(0 0 8px ${scoreColor}40)`,
+                backgroundColor: scoreColor,
+                boxShadow: `0 0 8px ${scoreColor}40`,
               }}
             />
-          </svg>
-
-          {/* Center content */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <motion.span
-              className="text-4xl font-bold font-heading"
-              style={{ color: scoreColor }}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-            >
-              {`${score}%`}
-            </motion.span>
-            <span className="text-[10px] font-bold tracking-[0.2em] text-muted-foreground uppercase mt-1">
-              SCORE NOX
-            </span>
           </div>
 
-          {/* Hover effect */}
-          <div className="absolute inset-0 rounded-full border-2 border-transparent group-hover:border-gold/20 transition-colors" />
+          <span className="text-sm font-bold flex-shrink-0" style={{ color: scoreColor }}>
+            {score}%
+          </span>
+          <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" strokeWidth={2} />
         </button>
 
-        {/* Status message */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
+        {/* Contextual message */}
+        <motion.p
+          initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.5 }}
-          className="mt-4 flex items-center gap-2"
+          transition={{ duration: 0.4, delay: 0.3 }}
+          className="text-[11px] font-medium mt-2 px-1"
+          style={{ color: scoreColor }}
         >
-          <ShieldCheck className="h-5 w-5" style={{ color: scoreColor }} strokeWidth={1.5} />
-          <p className="text-xs font-medium" style={{ color: scoreColor }}>
-            {scoreMessage}
-          </p>
-        </motion.div>
-
-        {/* Issues indicator */}
-        {issues.length > 0 && (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.7 }}
-            className="text-[10px] text-muted-foreground mt-2"
-          >
-            Appuyez pour voir les détails
-          </motion.p>
-        )}
+          {scoreMessage}
+        </motion.p>
       </div>
 
       {/* Details Drawer */}
