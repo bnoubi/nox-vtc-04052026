@@ -130,9 +130,8 @@ export function DashboardHeader() {
 
   return (
     <header className="flex items-center justify-between px-4 py-2">
-      {/* Brand + Avatar + Name */}
+      {/* Avatar + Name */}
       <div className="flex items-center gap-2 min-w-0">
-        <span className="font-serif text-sm flex-shrink-0" style={{ color: "#C9A84C" }}>N</span>
         <Avatar className={cn("h-8 w-8 border flex-shrink-0", isTeam ? "border-gold/50" : "border-gold/30")}>
           <AvatarImage src="/placeholder-avatar.jpg" alt="User" />
           <AvatarFallback className="bg-onyx-card text-foreground text-xs font-medium">{initials}</AvatarFallback>

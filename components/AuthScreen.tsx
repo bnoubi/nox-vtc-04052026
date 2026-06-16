@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Mail, Lock, Eye, EyeOff, ArrowLeft } from "lucide-react"
-import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Turnstile } from "@marsidev/react-turnstile"
@@ -124,16 +123,18 @@ export function AuthScreen() {
           className="mb-6 sm:mb-10 flex flex-col items-center"
         >
           <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-20 blur-3xl bg-[#D4AF37]/15 w-40 h-40 rounded-full" />
-          <div className="relative w-full max-w-[160px] sm:max-w-[220px]">
-            <Image
-              src="/assets/logo.png"
-              alt="Logo NOX"
-              width={220}
-              height={110}
-              priority
-              className="w-full h-auto drop-shadow-[0_0_25px_rgba(212,175,55,0.35)]"
-            />
-          </div>
+          <span
+            className="relative font-serif text-7xl leading-none"
+            style={{ color: "#C9A84C" }}
+          >
+            N
+          </span>
+          <span
+            className="relative mt-2 text-sm tracking-widest"
+            style={{ color: "#8B6914" }}
+          >
+            NoX VTC
+          </span>
           {isResetMode && (
             <p className="mt-4 text-[13px] text-[#D4AF37] font-semibold tracking-[0.1em] uppercase">
               Réinitialiser mon mot de passe
