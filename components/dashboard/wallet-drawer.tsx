@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, Coins, ShieldCheck, Loader2 } from "lucide-react"
+import { X, Coins, ShieldCheck, Loader2, Lock } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { useNox } from "./nox-context"
@@ -116,7 +116,7 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
             </div>
 
             {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto overscroll-contain px-5 pb-10">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 pb-28">
 
               {/* Pack Cards */}
               <div className="space-y-3 mb-6">
@@ -227,52 +227,58 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
               <button
                 onClick={handlePay}
                 disabled={payState !== "idle"}
-                className="w-full py-3 rounded-xl bg-[#1A1A1A] border border-[#D4AF37]/25 hover:border-[#D4AF37]/50 active:scale-[0.98] transition-all mb-4 disabled:opacity-60"
+                className="w-full py-4 px-4 rounded-xl bg-[#1A1A1A] border border-[#D4AF37]/25 hover:border-[#D4AF37]/50 active:scale-[0.98] transition-all mb-4 disabled:opacity-60"
               >
                 {payState === "loading" ? (
                   <div className="flex items-center justify-center">
                     <Loader2 className="h-5 w-5 text-[#D4AF37] animate-spin" />
                   </div>
                 ) : (
-                  <>
-                    <div className="flex items-center justify-center gap-3 mb-1.5">
+                  <div className="flex flex-col items-center justify-center gap-2.5">
+                    <span className="text-sm font-bold text-[#F5F5F5]">Payer par carte bancaire</span>
+
+                    {/* Logos cartes — SVG inline monochromes thème dark */}
+                    <div className="flex items-center justify-center gap-5 h-8">
                       {/* Visa */}
-                      <svg viewBox="0 0 48 32" className="h-6 w-auto">
-                        <rect width="48" height="32" rx="4" fill="#fff"/>
-                        <path d="M19.5 21h-3l1.9-11.5h3L19.5 21zm12.8-11.2c-.6-.2-1.5-.5-2.7-.5-3 0-5.1 1.6-5.1 3.8 0 1.7 1.5 2.6 2.6 3.1 1.1.6 1.5.9 1.5 1.4 0 .8-.9 1.1-1.7 1.1-1.1 0-1.8-.2-2.7-.6l-.4-.2-.4 2.5c.7.3 1.9.6 3.2.6 3.2 0 5.3-1.6 5.3-3.9 0-1.3-.8-2.3-2.5-3.1-1-.5-1.7-.9-1.7-1.4 0-.5.5-1 1.7-1 1 0 1.7.2 2.2.4l.3.1.4-2.3zM37.8 9.5h-2.3c-.7 0-1.3.2-1.6 1L29.8 21h3.2l.6-1.8h3.9l.4 1.8H41l-2.6-11.5h-.6zM34.3 17l1.2-3.3.2-.6.3 1.5.7 3.3h-2.4v.1zM16.3 9.5L13.4 17l-.3-1.6c-.5-1.8-2.2-3.8-4.1-4.8l2.7 10.3h3.2l4.8-11.4h-3.4z" fill="#1A1F71"/>
-                        <path d="M10.4 9.5H5.1l-.1.3c3.8 1 6.3 3.3 7.3 6.1l-1.1-5.4c-.2-.8-.7-1-1.4-1h.6z" fill="#F9A533"/>
+                      <svg viewBox="0 0 80 24" className="h-5 w-auto" aria-label="Visa">
+                        <text x="40" y="19" textAnchor="middle" fontFamily="Arial Black, Arial, sans-serif" fontSize="20" fontWeight="900" fontStyle="italic" fill="#E5E5E5" letterSpacing="-0.5">VISA</text>
                       </svg>
+
                       {/* Mastercard */}
-                      <svg viewBox="0 0 48 32" className="h-6 w-auto">
-                        <rect width="48" height="32" rx="4" fill="#fff"/>
-                        <circle cx="19" cy="16" r="8" fill="#EB001B"/>
-                        <circle cx="29" cy="16" r="8" fill="#F79E1B"/>
-                        <path d="M24 10.3a8 8 0 010 11.4 8 8 0 000-11.4z" fill="#FF5F00"/>
+                      <svg viewBox="0 0 40 24" className="h-6 w-auto" aria-label="Mastercard">
+                        <circle cx="16" cy="12" r="8" fill="none" stroke="#E5E5E5" strokeWidth="1.4"/>
+                        <circle cx="24" cy="12" r="8" fill="none" stroke="#E5E5E5" strokeWidth="1.4"/>
                       </svg>
+
                       {/* Amex */}
-                      <svg viewBox="0 0 48 32" className="h-6 w-auto">
-                        <rect width="48" height="32" rx="4" fill="#016FD0"/>
-                        <path d="M6 16.5l1.7-4h2.2l1 2.3 1-2.3h2.2l1.7 4-1.7 4H12l-1-2.3-1 2.3H7.8l-1.7-4zm8.5 0l1.7-4h2.5L20 16.5l-1.3 4h-2.5l-1.7-4zm8.2 0l1.7-4h2.5l1.3 4-1.3 4h-2.5l-1.7-4zm8.3 0l1.7-4h2.5l1.3 4-1.3 4h-2.5l-1.7-4z" fill="#fff" opacity=".3"/>
-                        <text x="24" y="18.5" textAnchor="middle" fill="#fff" fontSize="7" fontWeight="bold" fontFamily="sans-serif">AMEX</text>
+                      <svg viewBox="0 0 64 24" className="h-5 w-auto" aria-label="American Express">
+                        <rect x="0.75" y="0.75" width="62.5" height="22.5" rx="3" fill="none" stroke="#E5E5E5" strokeWidth="1.2"/>
+                        <text x="32" y="16.5" textAnchor="middle" fontFamily="Arial Black, Arial, sans-serif" fontSize="10" fontWeight="900" fill="#E5E5E5" letterSpacing="0.5">AMEX</text>
                       </svg>
+
                       {/* Apple Pay */}
-                      <div className="flex items-center gap-0.5 bg-black rounded px-1.5 py-0.5 border border-white/20">
-                        <svg viewBox="0 0 17 20" className="h-3.5 w-auto" fill="#fff">
-                          <path d="M13.1 10.4c0-2 1.6-3 1.7-3.1-.9-1.4-2.4-1.5-2.9-1.6-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7C4.9 6.7 3.5 7.6 2.7 9c-1.7 3-.4 7.4 1.2 9.8.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8s1.9.8 3.1.8c1.3 0 2.1-1.2 2.9-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.2-.9-2.2-3.6zM11 5.1c.7-.8 1.1-2 1-3.1-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.9-1 3 1 .1 2.1-.5 2.8-1.4z"/>
-                        </svg>
-                        <span className="text-[8px] font-semibold text-white">Pay</span>
-                      </div>
+                      <svg viewBox="0 0 72 24" className="h-5 w-auto" aria-label="Apple Pay">
+                        <g fill="#E5E5E5">
+                          <path d="M14 7.5c-.6.7-1.5 1.3-2.4 1.2-.1-.9.4-1.9 1-2.5.6-.7 1.5-1.2 2.3-1.3.1.9-.3 1.9-.9 2.6zm.9.9c-1.3-.1-2.4.7-3.1.7-.7 0-1.6-.7-2.7-.7-1.4 0-2.7.8-3.4 2-1.4 2.5-.4 6.2 1.1 8.2.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7s1.6.7 2.7.7c1.1 0 1.8-1 2.5-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2.1-.8-2.1-3.1 0-2 1.6-3 1.7-3-1-1.4-2.4-1.5-3.1-1.6z"/>
+                          <text x="24" y="17" fontFamily="Arial, sans-serif" fontSize="11" fontWeight="500">Pay</text>
+                        </g>
+                      </svg>
+
                       {/* Google Pay */}
-                      <div className="flex items-center gap-0.5 bg-white rounded px-1.5 py-0.5 border border-black/10">
-                        <svg viewBox="0 0 24 24" className="h-3.5 w-auto" fill="none">
-                          <path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.345-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0c-6.635 0-12 5.365-12 12s5.365 12 12 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z" fill="#4285F4"/>
-                          <path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574" fill="none"/>
-                        </svg>
-                        <span className="text-[8px] font-semibold text-[#3C4043]">Pay</span>
-                      </div>
+                      <svg viewBox="0 0 72 24" className="h-5 w-auto" aria-label="Google Pay">
+                        <g fill="#E5E5E5">
+                          <path d="M11.5 11v2.6h3.8c-.1.9-.5 1.7-1.2 2.2-.6.5-1.5.8-2.6.8-2 0-3.8-1.4-4.4-3.3-.2-.6-.2-1.2 0-1.8.6-1.9 2.4-3.3 4.4-3.3 1.1 0 2.1.4 2.9 1.1l2-2c-1.3-1.2-3-1.9-4.9-1.9-2.7 0-5.1 1.6-6.2 3.9-.9 1.9-.9 4.1 0 6 1.1 2.3 3.5 3.9 6.2 3.9 1.9 0 3.5-.6 4.6-1.7 1.3-1.2 2-3 2-5.1 0-.5-.1-1-.1-1.4h-6.5z"/>
+                          <text x="24" y="17" fontFamily="Arial, sans-serif" fontSize="11" fontWeight="500">Pay</text>
+                        </g>
+                      </svg>
                     </div>
-                    <span className="text-xs font-bold text-[#F5F5F5]">Payer par carte bancaire</span>
-                  </>
+
+                    {/* Badge paiement sécurisé */}
+                    <div className="flex items-center justify-center gap-1.5 mt-0.5">
+                      <Lock className="h-3 w-3 text-[#A1A1AA]" strokeWidth={2} />
+                      <span className="text-xs text-[#A1A1AA]">Paiement s&#233;curis&#233;</span>
+                    </div>
+                  </div>
                 )}
               </button>
 
