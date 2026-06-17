@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Mail } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { Turnstile } from "@marsidev/react-turnstile"
 
 type Status =
   | { kind: "idle" }
@@ -17,10 +18,11 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<Status>({ kind: "idle" })
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [turnstileKey, setTurnstileKey] = useState(0)
 
   const router = useRouter()
   const supabase = createClient()
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -39,26 +41,31 @@ export default function RegisterPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        setError("Une erreur est survenue. Veuillez réessayer.")
+        setError(data?.error || JSON.stringify(data) || "Erreur inconnue")
         return
       }
 
-      // CAS 3 : compte déjà finalisé
+      // CAS 3 : compte déjà finalisé (pas d'appel OTP → token Turnstile pas consommé)
       if (data.exists && data.onboarding_status === "completed") {
         setStatus({ kind: "already_completed" })
         return
       }
 
-      const emailRedirectTo = `${siteUrl}/auth/callback?type=onboarding`
-
       // CAS 2 : compte existant en cours d'onboarding
       if (data.exists) {
-        const { error: otpErr } = await supabase.auth.signInWithOtp({
+        const { error } = await supabase.auth.signInWithOtp({
           email,
-          options: { shouldCreateUser: false, emailRedirectTo },
+          options: {
+            shouldCreateUser: false,
+            emailRedirectTo: `${window.location.origin}/auth/callback?type=onboarding`,
+            captchaToken: captchaToken || undefined
+          }
         })
-        if (otpErr) {
-          setError("Impossible d'envoyer le lien. Réessayez dans quelques minutes.")
+        // Reset du token Turnstile (usage unique)
+        setCaptchaToken(null)
+        setTurnstileKey(prev => prev + 1)
+        if (error) {
+          setError(error?.message || JSON.stringify(error) || "Erreur inconnue")
           return
         }
         setStatus({ kind: "sent_resume", email })
@@ -66,22 +73,24 @@ export default function RegisterPage() {
       }
 
       // CAS 1 : nouveau compte
-      const { error: otpErr } = await supabase.auth.signInWithOtp({
+      const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { shouldCreateUser: true, emailRedirectTo },
-      })
-      if (otpErr) {
-        const msg = otpErr.message.toLowerCase()
-        if (msg.includes("rate") || msg.includes("too many")) {
-          setError("Trop de tentatives. Réessayez dans quelques minutes.")
-        } else {
-          setError("Impossible d'envoyer le lien. Réessayez.")
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: `${window.location.origin}/auth/callback?type=onboarding`,
+          captchaToken: captchaToken || undefined
         }
+      })
+      // Reset du token Turnstile (usage unique)
+      setCaptchaToken(null)
+      setTurnstileKey(prev => prev + 1)
+      if (error) {
+        setError(error?.message || JSON.stringify(error) || "Erreur inconnue")
         return
       }
       setStatus({ kind: "sent_new", email })
-    } catch {
-      setError("Erreur réseau. Vérifiez votre connexion.")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : (JSON.stringify(e) || "Erreur inconnue"))
     } finally {
       setIsLoading(false)
     }
@@ -133,6 +142,18 @@ export default function RegisterPage() {
                 />
               </div>
 
+              {/* Turnstile Widget */}
+              <div className="flex justify-center mt-2 mb-2">
+                <Turnstile
+                  key={`turnstile-register-${turnstileKey}`}
+                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
+                  onSuccess={(token) => setCaptchaToken(token)}
+                  onExpire={() => { setCaptchaToken(null); setTurnstileKey(prev => prev + 1) }}
+                  onError={() => setCaptchaToken(null)}
+                  options={{ theme: 'dark', refreshExpired: 'auto' }}
+                />
+              </div>
+
               {error && (
                 <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-center text-[12px] text-red-400">
                   {error}
@@ -141,7 +162,7 @@ export default function RegisterPage() {
 
               <button
                 type="submit"
-                disabled={isLoading || !email}
+                disabled={isLoading || !email || !captchaToken}
                 className="w-full h-14 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? "Envoi en cours..." : "Recevoir mon lien d'accès"}
