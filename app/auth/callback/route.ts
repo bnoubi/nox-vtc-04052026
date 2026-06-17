@@ -5,10 +5,17 @@ import type { EmailOtpType, Session } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
+  console.log('[callback] url complète:', requestUrl.toString())
+  console.log('[callback] searchParams:', Object.fromEntries(requestUrl.searchParams))
+
   const code = requestUrl.searchParams.get('code')
   const tokenHash = requestUrl.searchParams.get('token_hash') || requestUrl.searchParams.get('token')
   const type = requestUrl.searchParams.get('type')
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.noxvtc.fr'
+
+  console.log('[callback] code présent:', !!code)
+  console.log('[callback] token_hash présent:', !!tokenHash)
+  console.log('[callback] type param:', type)
 
   const supabase = await createClient()
 
@@ -20,12 +27,10 @@ export async function GET(request: NextRequest) {
     const result = await supabase.auth.exchangeCodeForSession(code)
     session = result.data.session
     exchangeError = result.error
-    console.log('[Auth Callback] PKCE exchange — session:', !!session, 'err:', result.error?.message ?? 'NULL')
+    console.log('[callback] PKCE exchange — err:', result.error?.message ?? 'NULL')
   }
   // Cas 2 : Implicit/OTP flow (?token_hash=XXX&type=magiclink) — legacy
   else if (tokenHash) {
-    // Mapper le `type` URL vers EmailOtpType Supabase. Notre custom type=onboarding
-    // est rétro-mappé vers 'magiclink' (default OTP email).
     const otpType: EmailOtpType =
       type === 'recovery' ? 'recovery'
       : type === 'signup' ? 'signup'
@@ -37,14 +42,19 @@ export async function GET(request: NextRequest) {
     const result = await supabase.auth.verifyOtp({ type: otpType, token_hash: tokenHash })
     session = result.data.session
     exchangeError = result.error
-    console.log('[Auth Callback] OTP verify — type:', otpType, 'session:', !!session, 'err:', result.error?.message ?? 'NULL')
+    console.log('[callback] OTP verify — type:', otpType, 'err:', result.error?.message ?? 'NULL')
   } else {
-    console.warn('[Auth Callback] Aucun code ni token_hash dans l\'URL')
+    console.warn('[callback] Aucun code ni token_hash dans l\'URL')
   }
 
+  console.log('[callback] session établie:', !!session)
+  console.log('[callback] user:', session?.user?.id)
+
   if (exchangeError) {
-    console.error('[Auth Callback] Erreur échange:', exchangeError.message)
-    return NextResponse.redirect(new URL('/login?error=auth', siteUrl))
+    console.error('[callback] Erreur échange:', exchangeError.message)
+    const redirectUrl = new URL('/login?error=auth', siteUrl).toString()
+    console.log('[callback] redirect vers:', redirectUrl)
+    return NextResponse.redirect(redirectUrl)
   }
 
   if (session?.user) {
@@ -58,7 +68,7 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     if (!existingSub) {
-      console.log('[Auth Callback] creating trial for:', session.user.id)
+      console.log('[callback] creating trial for:', session.user.id)
       await adminClient
         .from('wallets')
         .upsert({ user_id: session.user.id, balance: 0 }, { onConflict: 'user_id', ignoreDuplicates: true })
@@ -76,34 +86,50 @@ export async function GET(request: NextRequest) {
 
     // Recovery password → page reset
     if (type === 'recovery') {
-      return NextResponse.redirect(new URL('/reset-password', siteUrl))
+      const redirectUrl = new URL('/reset-password', siteUrl).toString()
+      console.log('[callback] redirect vers:', redirectUrl)
+      return NextResponse.redirect(redirectUrl)
     }
 
     // Confirmation signup password legacy → page de succès
     if (type === 'signup') {
       await supabase.auth.signOut()
-      return NextResponse.redirect(new URL('/auth/confirmed', siteUrl))
+      const redirectUrl = new URL('/auth/confirmed', siteUrl).toString()
+      console.log('[callback] redirect vers:', redirectUrl)
+      return NextResponse.redirect(redirectUrl)
     }
 
     // Reprise onboarding ou dashboard selon onboarding_status
-    const { data: account } = await adminClient
+    const { data: account, error: accountErr } = await adminClient
       .from('user_accounts')
       .select('onboarding_status, onboarding_step')
       .eq('id', session.user.id)
       .maybeSingle()
 
+    console.log('[callback] onboarding_status:', account?.onboarding_status)
+    console.log('[callback] onboarding_step (db):', account?.onboarding_step)
+    if (accountErr) console.error('[callback] user_accounts lookup err:', accountErr.message)
+
     const status = account?.onboarding_status ?? 'not_started'
     if (status !== 'completed') {
       const stepParam = account?.onboarding_step ?? 0
-      return NextResponse.redirect(new URL(`/?resume_step=${stepParam}`, siteUrl))
+      const redirectUrl = new URL(`/?resume_step=${stepParam}`, siteUrl).toString()
+      console.log('[callback] redirect vers:', redirectUrl)
+      return NextResponse.redirect(redirectUrl)
     }
 
-    return NextResponse.redirect(new URL('/', siteUrl))
+    const redirectUrl = new URL('/', siteUrl).toString()
+    console.log('[callback] redirect vers:', redirectUrl)
+    return NextResponse.redirect(redirectUrl)
   }
 
-  // Pas de session établie sans erreur explicite — fallback recovery / dashboard
+  // Pas de session établie sans erreur explicite — fallback
   if (type === 'recovery') {
-    return NextResponse.redirect(new URL('/reset-password', siteUrl))
+    const redirectUrl = new URL('/reset-password', siteUrl).toString()
+    console.log('[callback] redirect vers (fallback recovery):', redirectUrl)
+    return NextResponse.redirect(redirectUrl)
   }
-  return NextResponse.redirect(new URL('/', siteUrl))
+  const redirectUrl = new URL('/', siteUrl).toString()
+  console.log('[callback] redirect vers (fallback no-session):', redirectUrl)
+  return NextResponse.redirect(redirectUrl)
 }
