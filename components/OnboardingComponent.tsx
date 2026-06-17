@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Building2, ArrowRight, ShieldCheck, User, Save, CheckCircle2, Eye, EyeOff, Search, Car, UserCheck, Mail, Lock } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { Building2, ArrowRight, ShieldCheck, User, Save, CheckCircle2, Eye, EyeOff, Search, Car, UserCheck, Lock } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 
@@ -49,25 +48,20 @@ const PRIMARY_BTN = "w-full h-12 rounded-xl bg-gold text-primary-foreground font
 const SECONDARY_BTN = "w-full h-12 text-sm text-muted-foreground hover:text-foreground transition-colors"
 
 export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: () => void, resumeStep?: number }) {
-  const router = useRouter()
+  // resumeStep > 0 = reprise directe sur l'étape sauvegardée. resumeStep=0 ou undefined
+  // = parcours normal : slides intro (-1) puis step 1 (entreprise). Le step 0 (email/mdp)
+  // n'existe plus : l'utilisateur arrive déjà authentifié via magic link ou Google OAuth.
   const [step, setStep] = useState<number>(resumeStep && resumeStep > 0 ? resumeStep : -1)
   const [slideIndex, setSlideIndex] = useState(0)
   const [loading, setLoading] = useState(false)
   const [loadingData, setLoadingData] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [alreadyAuth, setAlreadyAuth] = useState(false)
   const [isGoogleUser, setIsGoogleUser] = useState(false)
 
   // Step 7 (mot de passe — uniquement pour utilisateurs magic link)
   const [pwd, setPwd] = useState("")
   const [pwdConfirm, setPwdConfirm] = useState("")
   const [showPwdField, setShowPwdField] = useState(false)
-
-  // Step 0
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [showPwd, setShowPwd] = useState(false)
 
   // Step 1
   const [search, setSearch] = useState("")
@@ -108,10 +102,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
     ;(async () => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        setAlreadyAuth(true)
-        setIsGoogleUser(user.app_metadata?.provider === "google")
-      }
+      if (user) setIsGoogleUser(user.app_metadata?.provider === "google")
     })()
   }, [])
 
@@ -160,35 +151,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   }, [search, step])
 
   function startFlow() {
-    void goToStep(alreadyAuth ? 1 : 0)
-  }
-
-  async function handleSignup(e: React.FormEvent) {
-    e.preventDefault()
-    setSaveError(null)
-    if (!/^\S+@\S+\.\S+$/.test(email)) { setSaveError("Email invalide."); return }
-    if (password.length < 8) { setSaveError("Mot de passe trop court (8 caractères minimum)."); return }
-    if (password !== confirmPassword) { setSaveError("Les mots de passe ne correspondent pas."); return }
-    setLoading(true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase.auth.signUp({ email, password })
-      if (error) {
-        const msg = error.message.toLowerCase()
-        if (msg.includes("already") || msg.includes("registered") || msg.includes("user already")) {
-          setSaveError("Un compte existe déjà avec cet email. Connectez-vous.")
-        } else {
-          setSaveError(error.message)
-        }
-        return
-      }
-      await goToStep(1)
-    } catch (e) {
-      console.error("[Onboarding] signUp:", e)
-      setSaveError("Erreur réseau. Réessayez.")
-    } finally {
-      setLoading(false)
-    }
+    void goToStep(1)
   }
 
   async function handleSelectCompany(c: CompanyResult) {
@@ -423,9 +386,9 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
     <main className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-6 relative overflow-hidden py-24">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gold/5 rounded-full blur-[120px] pointer-events-none" />
 
-      {step >= 0 && (
+      {step >= 1 && (
         <div className="absolute top-6 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
-          {(isGoogleUser ? [0,1,2,3,4,5,6] : [0,1,2,3,4,5,6,7]).map(i => (
+          {(isGoogleUser ? [1,2,3,4,5,6] : [1,2,3,4,5,6,7]).map(i => (
             <span key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === step ? "bg-gold w-6" : i < step ? "bg-gold/40 w-1.5" : "bg-onyx-border w-1.5"}`} />
           ))}
         </div>
@@ -530,87 +493,6 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
               ))}
             </div>
           </motion.div>
-        )}
-
-        {step === 0 && (
-          <motion.form
-            key="step-0"
-            onSubmit={handleSignup}
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className={card}
-          >
-            <div className="w-16 h-16 rounded-2xl bg-gold/10 border border-gold/20 flex items-center justify-center mb-6">
-              <ShieldCheck className="h-8 w-8 text-gold" strokeWidth={1.5} />
-            </div>
-            <h1 className="text-2xl font-bold font-heading mb-2">Créez votre compte</h1>
-            <p className="text-sm text-muted-foreground mb-8">Commencez avec votre email et un mot de passe sécurisé.</p>
-
-            <div className="space-y-4 mb-6">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-white/70 ml-1">Email</label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="vous@exemple.com"
-                    autoComplete="email"
-                    required
-                    className={`${INPUT_CLS} pl-11`}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-white/70 ml-1">Mot de passe</label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-                  <input
-                    type={showPwd ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="8 caractères minimum"
-                    autoComplete="new-password"
-                    required
-                    className={`${INPUT_CLS} pl-11 pr-11`}
-                  />
-                  <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-4 top-1/2 -translate-y-1/2 p-1">
-                    {showPwd ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-white/70 ml-1">Confirmation</label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-                  <input
-                    type={showPwd ? "text" : "password"}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirmez votre mot de passe"
-                    autoComplete="new-password"
-                    required
-                    className={`${INPUT_CLS} pl-11`}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
-
-            <button type="submit" disabled={loading || !email || !password || !confirmPassword} className={PRIMARY_BTN}>
-              {loading ? <span className="animate-pulse">Création...</span> : <>Créer mon compte<ArrowRight className="h-4 w-4" strokeWidth={2} /></>}
-            </button>
-
-            <button type="button" onClick={() => router.push("/login")} className="w-full mt-4 text-xs text-muted-foreground hover:text-foreground transition-colors">
-              Déjà un compte ? <span className="text-gold">Se connecter</span>
-            </button>
-          </motion.form>
         )}
 
         {step === 1 && (
