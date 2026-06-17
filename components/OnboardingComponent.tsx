@@ -48,14 +48,20 @@ const INPUT_CLS = "w-full px-4 py-3 rounded-xl bg-secondary/40 border border-ony
 const PRIMARY_BTN = "w-full h-12 rounded-xl bg-gold text-primary-foreground font-semibold flex items-center justify-center gap-2 hover:bg-gold-light active:scale-[0.98] transition-all disabled:opacity-50"
 const SECONDARY_BTN = "w-full h-12 text-sm text-muted-foreground hover:text-foreground transition-colors"
 
-export function OnboardingComponent({ onComplete }: { onComplete: () => void }) {
+export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: () => void, resumeStep?: number }) {
   const router = useRouter()
-  const [step, setStep] = useState<number>(-1)
+  const [step, setStep] = useState<number>(resumeStep && resumeStep > 0 ? resumeStep : -1)
   const [slideIndex, setSlideIndex] = useState(0)
   const [loading, setLoading] = useState(false)
   const [loadingData, setLoadingData] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [alreadyAuth, setAlreadyAuth] = useState(false)
+  const [isGoogleUser, setIsGoogleUser] = useState(false)
+
+  // Step 7 (mot de passe — uniquement pour utilisateurs magic link)
+  const [pwd, setPwd] = useState("")
+  const [pwdConfirm, setPwdConfirm] = useState("")
+  const [showPwdField, setShowPwdField] = useState(false)
 
   // Step 0
   const [email, setEmail] = useState("")
@@ -102,9 +108,31 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
     ;(async () => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) setAlreadyAuth(true)
+      if (user) {
+        setAlreadyAuth(true)
+        setIsGoogleUser(user.app_metadata?.provider === "google")
+      }
     })()
   }, [])
+
+  async function saveStep(n: number) {
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      await supabase.from("user_accounts").update({
+        onboarding_step: n,
+        onboarding_status: "in_progress",
+      }).eq("id", user.id)
+    } catch (e) {
+      console.error("[Onboarding] saveStep:", e)
+    }
+  }
+
+  async function goToStep(n: number) {
+    await saveStep(n)
+    setStep(n)
+  }
 
   useEffect(() => {
     if (step === 3) loadProfil()
@@ -132,7 +160,7 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
   }, [search, step])
 
   function startFlow() {
-    setStep(alreadyAuth ? 1 : 0)
+    void goToStep(alreadyAuth ? 1 : 0)
   }
 
   async function handleSignup(e: React.FormEvent) {
@@ -154,7 +182,7 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
         }
         return
       }
-      setStep(1)
+      await goToStep(1)
     } catch (e) {
       console.error("[Onboarding] signUp:", e)
       setSaveError("Erreur réseau. Réessayez.")
@@ -190,7 +218,7 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
       setComplementAdresse(c.siege?.complement_adresse || "")
       setSearchResults([])
       setSearch("")
-      setStep(2)
+      await goToStep(2)
     } catch (e) {
       console.error("[Onboarding] Sélection entreprise:", e)
       setSaveError("Erreur lors de la vérification. Réessayez.")
@@ -222,7 +250,7 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
           is_micro_entrepreneur: vatInfo.is_micro_entrepreneur,
         }, { onConflict: 'user_id' })
       if (error) throw error
-      setStep(3)
+      await goToStep(3)
     } catch (e) {
       console.error("[Onboarding] Entreprise:", e)
       setSaveError("Erreur lors de l'enregistrement. Réessayez.")
@@ -252,7 +280,7 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("no user")
       await supabase.from("user_accounts").update({ prenom: prenom || null, nom: nom || null, phone: phone || null }).eq("id", user.id)
-      setStep(4)
+      await goToStep(4)
     } catch (e) {
       console.error("[Onboarding] Profil:", e)
       setSaveError("Erreur d'enregistrement.")
@@ -287,7 +315,7 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
         date_registre_vtc: dateExpirationRegistre || null,
       }, { onConflict: 'user_id' })
       if (error) throw error
-      setStep(5)
+      await goToStep(5)
     } catch (e) {
       console.error("[Onboarding] Réglementaire:", e)
       setSaveError("Erreur d'enregistrement.")
@@ -310,7 +338,7 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
         modele: vModele || null,
       })
       if (error) throw error
-      setStep(6)
+      await goToStep(6)
     } catch (e) {
       console.error("[Onboarding] Véhicule:", e)
       setSaveError("Erreur lors de l'ajout du véhicule.")
@@ -334,10 +362,40 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
         email: dEmail || null,
       })
       if (error) throw error
-      await finishOnboarding()
+      await afterDriverStep()
     } catch (e) {
       console.error("[Onboarding] Chauffeur:", e)
       setSaveError("Erreur lors de l'ajout du chauffeur.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function afterDriverStep() {
+    // Utilisateurs Google OAuth : skip création de mot de passe
+    if (isGoogleUser) {
+      await finishOnboarding()
+    } else {
+      await goToStep(7)
+    }
+  }
+
+  async function handleSavePassword() {
+    setSaveError(null)
+    if (pwd.length < 8) { setSaveError("Mot de passe trop court (8 caractères minimum)."); return }
+    if (pwd !== pwdConfirm) { setSaveError("Les mots de passe ne correspondent pas."); return }
+    setLoading(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.auth.updateUser({ password: pwd })
+      if (error) {
+        setSaveError(error.message)
+        return
+      }
+      await finishOnboarding()
+    } catch (e) {
+      console.error("[Onboarding] updatePassword:", e)
+      setSaveError("Erreur lors de l'enregistrement du mot de passe.")
     } finally {
       setLoading(false)
     }
@@ -367,7 +425,7 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
 
       {step >= 0 && (
         <div className="absolute top-6 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
-          {[0,1,2,3,4,5,6].map(i => (
+          {(isGoogleUser ? [0,1,2,3,4,5,6] : [0,1,2,3,4,5,6,7]).map(i => (
             <span key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === step ? "bg-gold w-6" : i < step ? "bg-gold/40 w-1.5" : "bg-onyx-border w-1.5"}`} />
           ))}
         </div>
@@ -811,7 +869,7 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
             <button onClick={handleAddVehicle} disabled={loading || !vImmat || !vCategory || !vMarque || !vModele} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Ajout...</span> : <><Save className="h-4 w-4" strokeWidth={2} />Ajouter mon véhicule</>}
             </button>
-            <button type="button" onClick={() => setStep(6)} disabled={loading} className={SECONDARY_BTN}>Plus tard</button>
+            <button type="button" onClick={() => void goToStep(6)} disabled={loading} className={SECONDARY_BTN}>Plus tard</button>
           </motion.div>
         )}
 
@@ -861,7 +919,70 @@ export function OnboardingComponent({ onComplete }: { onComplete: () => void }) 
             <button onClick={handleAddDriver} disabled={loading || !dPrenom || !dNom} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Ajout...</span> : <><CheckCircle2 className="h-4 w-4" strokeWidth={2} />Ajouter et terminer</>}
             </button>
-            <button type="button" onClick={finishOnboarding} disabled={loading} className={SECONDARY_BTN}>Plus tard</button>
+            <button type="button" onClick={afterDriverStep} disabled={loading} className={SECONDARY_BTN}>Plus tard</button>
+          </motion.div>
+        )}
+
+        {step === 7 && (
+          <motion.div
+            key="step-7"
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className={card}
+          >
+            <div className="w-16 h-16 rounded-2xl bg-gold/10 border border-gold/20 flex items-center justify-center mb-6">
+              <Lock className="h-8 w-8 text-gold" strokeWidth={1.5} />
+            </div>
+            <h1 className="text-2xl font-bold font-heading mb-2">Sécurisez votre compte</h1>
+            <p className="text-sm text-muted-foreground mb-6">Créez un mot de passe pour vos prochaines connexions</p>
+
+            <div className={`${tip} mb-6`}>
+              🔐 Ce mot de passe vous permettra de vous connecter directement.
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-white/70 ml-1">Mot de passe</label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                  <input
+                    type={showPwdField ? "text" : "password"}
+                    value={pwd}
+                    onChange={(e) => setPwd(e.target.value)}
+                    placeholder="8 caractères minimum"
+                    autoComplete="new-password"
+                    className={`${INPUT_CLS} pl-11 pr-11`}
+                  />
+                  <button type="button" onClick={() => setShowPwdField(!showPwdField)} className="absolute right-4 top-1/2 -translate-y-1/2 p-1">
+                    {showPwdField ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-white/70 ml-1">Confirmation</label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                  <input
+                    type={showPwdField ? "text" : "password"}
+                    value={pwdConfirm}
+                    onChange={(e) => setPwdConfirm(e.target.value)}
+                    placeholder="Confirmez votre mot de passe"
+                    autoComplete="new-password"
+                    className={`${INPUT_CLS} pl-11`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
+            <button onClick={handleSavePassword} disabled={loading || pwd.length < 8 || pwd !== pwdConfirm} className={PRIMARY_BTN}>
+              {loading ? <span className="animate-pulse">Enregistrement...</span> : <><CheckCircle2 className="h-4 w-4" strokeWidth={2} />Finaliser mon inscription</>}
+            </button>
+            <button type="button" onClick={finishOnboarding} disabled={loading} className={SECONDARY_BTN}>
+              Passer cette étape
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

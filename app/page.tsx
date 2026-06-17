@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { Suspense, useState, useEffect } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { BottomNav, type TabId } from "@/components/dashboard/bottom-nav"
 import { SecurityBadge } from "@/components/dashboard/security-badge"
 import { DashboardTab } from "@/components/dashboard/tab-dashboard"
@@ -30,12 +30,22 @@ type AppStep = "welcome" | "onboarding" | "dashboard"
 
 const WELCOME_SESSION_KEY = "nox_welcome_shown"
 
-export default function AppPage() {
+export default function Page() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-background" />}>
+      <AppPage />
+    </Suspense>
+  )
+}
+
+function AppPage() {
   const [activeTab, setActiveTab] = useState<TabId>("dashboard")
   const [mounted, setMounted] = useState(false)
   const [step, setStep] = useState<AppStep>("dashboard")
   const [onboardingStatus, setOnboardingStatus] = useState<string | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const resumeStep = parseInt(searchParams.get("resume_step") || "0", 10)
 
   useEffect(() => {
     async function checkSession() {
@@ -60,6 +70,9 @@ export default function AppPage() {
 
       if (status === "completed") {
         setStep("dashboard")
+      } else if (resumeStep > 0) {
+        // Reprise d'onboarding : skip directement vers l'étape sauvegardée
+        setStep("onboarding")
       } else {
         const welcomeShown = sessionStorage.getItem(WELCOME_SESSION_KEY)
         if (!welcomeShown) {
@@ -105,7 +118,7 @@ export default function AppPage() {
 
   // Step 2: Onboarding (Initialization)
   if (step === "onboarding") {
-    return <OnboardingComponent onComplete={handleOnboardingComplete} />
+    return <OnboardingComponent onComplete={handleOnboardingComplete} resumeStep={resumeStep} />
   }
 
   async function handleLogout() {

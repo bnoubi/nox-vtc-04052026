@@ -15,7 +15,6 @@ export async function GET(request: NextRequest) {
     console.log('[Auth Callback] Session établie:', !!session, 'type:', type)
     console.log('[Auth Callback] session user:', session?.user?.id ?? 'NULL')
     console.log('[Auth Callback] error:', error?.message ?? 'NULL')
-    console.log('[Auth Callback] type:', type)
 
     if (error) {
       console.error('[Auth Callback] Erreur échange de code:', error.message)
@@ -53,9 +52,22 @@ export async function GET(request: NextRequest) {
 
         console.log('[Auth Callback] Trial TEAM créé pour:', session.user.id)
       }
+
+      // Reprise onboarding : si non terminé, rediriger vers / avec resume_step
+      const { data: account } = await adminClient
+        .from('user_accounts')
+        .select('onboarding_status, onboarding_step')
+        .eq('id', session.user.id)
+        .maybeSingle()
+
+      const status = account?.onboarding_status ?? 'not_started'
+      if (status !== 'completed') {
+        const stepParam = account?.onboarding_step ?? 0
+        return NextResponse.redirect(new URL(`/?resume_step=${stepParam}`, siteUrl))
+      }
     }
 
-    // Confirmation d'inscription : sign-out puis page de succès
+    // Confirmation d'inscription password (legacy) : sign-out puis page de succès
     if (type === 'signup') {
       await supabase.auth.signOut()
       return NextResponse.redirect(new URL('/auth/confirmed', siteUrl))
