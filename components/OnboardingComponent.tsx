@@ -121,20 +121,11 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   }
 
   async function goToStep(n: number) {
-    console.log("[goToStep] début, n=", n)
     await saveStep(n)
-    console.log("[goToStep] saveStep terminé, appel setStep(", n, ")")
     setStep(n)
   }
 
   useEffect(() => {
-    if (step === 1) {
-      ;(async () => {
-        const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        console.log("[step1] rendu, step=", step, "user=", !!user)
-      })()
-    }
     if (step === 3) loadProfil()
     if (step === 4) loadReglementaire()
   }, [step])
@@ -160,7 +151,6 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   }, [search, step])
 
   function startFlow() {
-    console.log("[startFlow] appelé, passage à step 1")
     void goToStep(1)
   }
 
@@ -404,13 +394,14 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
         </div>
       )}
 
-      <AnimatePresence mode="wait">
+      <AnimatePresence>
         {step === -1 && (
           <motion.div
             key="slides"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
             className="fixed inset-0 z-30 bg-[#0a0a0a] flex flex-col"
           >
             {slideIndex < 2 && (
@@ -485,7 +476,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                   </div>
                   <h1 className="text-2xl font-bold font-heading mb-3 text-white">Pilotez votre activité sereinement</h1>
                   <p className="text-sm text-white/70 leading-relaxed mb-8">Votre Score NoX vous guide pour rester en conformité et développer votre activité en toute confiance.</p>
-                  <button onClick={() => { console.log("[Commencer] click détecté"); startFlow() }} className="px-8 h-12 rounded-xl bg-gold text-primary-foreground font-semibold hover:bg-gold-light active:scale-[0.98] transition-all">
+                  <button onClick={startFlow} className="px-8 h-12 rounded-xl bg-gold text-primary-foreground font-semibold hover:bg-gold-light active:scale-[0.98] transition-all">
                     Commencer
                   </button>
                 </div>
@@ -504,7 +495,9 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             </div>
           </motion.div>
         )}
+      </AnimatePresence>
 
+      <AnimatePresence mode="wait">
         {step === 1 && (
           <motion.div
             key="step-1"
@@ -513,6 +506,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
             className={card}
+            style={{ position: 'relative', zIndex: 10 }}
           >
             <div className="w-16 h-16 rounded-2xl bg-gold/10 border border-gold/20 flex items-center justify-center mb-6">
               <Building2 className="h-8 w-8 text-gold" strokeWidth={1.5} />
