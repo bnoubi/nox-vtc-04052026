@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Building2, ArrowRight, ShieldCheck, User, Save, CheckCircle2, Eye, EyeOff, Search, Car, UserCheck, Lock } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
@@ -68,6 +69,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   // resumeStep > 0 = reprise directe sur l'étape sauvegardée. resumeStep=0 ou undefined
   // = parcours normal : slides intro (-1) puis step 1 (entreprise). Le step 0 (email/mdp)
   // n'existe plus : l'utilisateur arrive déjà authentifié via magic link ou Google OAuth.
+  const router = useRouter()
   const [step, setStep] = useState<number>(resumeStep && resumeStep > 0 ? resumeStep : -1)
   const [slideIndex, setSlideIndex] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -155,20 +157,31 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       setSearching(true)
       try {
         const url = `https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(q)}&per_page=5`
-        const res = await fetch(url)
+        const res = await fetch(url, { headers: { "Accept": "application/json" } })
         const data = await res.json()
         setSearchResults(data?.results || [])
-      } catch {
+      } catch (e) {
+        console.error("[Onboarding] Recherche entreprise:", e)
         setSearchResults([])
       } finally {
         setSearching(false)
       }
-    }, 300)
+    }, 600)
     return () => clearTimeout(t)
   }, [search, step])
 
   function startFlow() {
     void goToStep(1)
+  }
+
+  async function handleLogout() {
+    try {
+      const supabase = createClient()
+      await supabase.auth.signOut()
+    } catch (e) {
+      console.error("[Onboarding] signOut:", e)
+    }
+    router.push("/login")
   }
 
   async function handleSelectCompany(c: CompanyResult) {
@@ -399,6 +412,16 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   const cardLg = "w-full max-w-lg bg-[#1a1a1a] backdrop-blur-xl border border-[#333] rounded-3xl p-8 relative z-10"
   const tip = "p-3 rounded-xl bg-gold/10 border border-gold/20 text-xs text-gold leading-relaxed"
 
+  const logoutBtn = (
+    <button
+      type="button"
+      onClick={() => void handleLogout()}
+      className="w-full mt-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+    >
+      Se déconnecter
+    </button>
+  )
+
   return (
     <main className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-6 relative overflow-hidden py-24">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gold/5 rounded-full blur-[120px] pointer-events-none" />
@@ -500,7 +523,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
               )}
             </motion.div>
 
-            <div className="flex justify-center gap-2 pb-12">
+            <div className="flex justify-center gap-2 pb-4">
               {[0,1,2].map(i => (
                 <button
                   key={i}
@@ -510,6 +533,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                 />
               ))}
             </div>
+            <div className="pb-8 px-8">{logoutBtn}</div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -566,6 +590,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
 
             {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
             <p className="text-[11px] text-muted-foreground text-center">Saisissez au moins 3 caractères pour démarrer la recherche.</p>
+            {logoutBtn}
           </motion.div>
         )}
 
@@ -641,6 +666,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             <button onClick={handleSaveEnterprise} disabled={loading || !nomEntreprise || !adresse} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Enregistrement...</span> : <><Save className="h-4 w-4" strokeWidth={2} />Confirmer et continuer</>}
             </button>
+            {logoutBtn}
           </motion.div>
         )}
 
@@ -677,6 +703,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             <button onClick={handleSaveProfile} disabled={loading || loadingData || !prenom || !nom || !phone} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Enregistrement...</span> : <><Save className="h-4 w-4" strokeWidth={2} />Enregistrer et continuer</>}
             </button>
+            {logoutBtn}
           </motion.div>
         )}
 
@@ -710,6 +737,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             <button onClick={handleSaveReglementaire} disabled={loading || loadingData || !registreVTC} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Enregistrement...</span> : <><ArrowRight className="h-4 w-4" strokeWidth={2} />Continuer</>}
             </button>
+            {logoutBtn}
           </motion.div>
         )}
 
@@ -773,6 +801,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
               {loading ? <span className="animate-pulse">Ajout...</span> : <><Save className="h-4 w-4" strokeWidth={2} />Ajouter mon véhicule</>}
             </button>
             <button type="button" onClick={() => void goToStep(6)} disabled={loading} className={SECONDARY_BTN}>Plus tard</button>
+            {logoutBtn}
           </motion.div>
         )}
 
@@ -823,6 +852,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
               {loading ? <span className="animate-pulse">Ajout...</span> : <><CheckCircle2 className="h-4 w-4" strokeWidth={2} />Ajouter et terminer</>}
             </button>
             <button type="button" onClick={afterDriverStep} disabled={loading} className={SECONDARY_BTN}>Plus tard</button>
+            {logoutBtn}
           </motion.div>
         )}
 
@@ -886,6 +916,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             <button type="button" onClick={finishOnboarding} disabled={loading} className={SECONDARY_BTN}>
               Passer cette étape
             </button>
+            {logoutBtn}
           </motion.div>
         )}
       </AnimatePresence>
