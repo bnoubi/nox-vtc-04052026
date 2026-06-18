@@ -10,7 +10,7 @@ function buildCspHeaders(request: NextRequest): { nonce: string; csp: string } {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' blob: https://maps.googleapis.com https://maps.gstatic.com https://*.supabase.co https://images.unsplash.com",
-    "connect-src 'self' https://*.supabase.co https://challenges.cloudflare.com https://maps.googleapis.com https://places.googleapis.com https://routes.googleapis.com wss://*.supabase.co",
+    "connect-src 'self' https://*.supabase.co https://challenges.cloudflare.com https://maps.googleapis.com https://places.googleapis.com https://routes.googleapis.com https://recherche-entreprises.api.gouv.fr wss://*.supabase.co",
     "frame-src https://challenges.cloudflare.com",
     "object-src 'none'",
     "base-uri 'self'",

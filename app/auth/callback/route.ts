@@ -100,11 +100,37 @@ export async function GET(request: NextRequest) {
     }
 
     // Reprise onboarding ou dashboard selon onboarding_status
-    const { data: account, error: accountErr } = await adminClient
+    let { data: account, error: accountErr } = await adminClient
       .from('user_accounts')
       .select('onboarding_status, onboarding_step')
       .eq('id', session.user.id)
       .maybeSingle()
+
+    // Filet de sécurité : si le trigger handle_new_user_account a silencieusement
+    // échoué (EXCEPTION WHEN OTHERS), on crée la ligne ici puis on re-SELECT.
+    if (!account && !accountErr) {
+      console.warn('[callback] user_accounts row missing, creating it now')
+      const { error: insertErr } = await adminClient
+        .from('user_accounts')
+        .insert({
+          id: session.user.id,
+          email: session.user.email ?? '',
+          plan: 'SOLO',
+          tokens: 0,
+          onboarding_status: 'not_started',
+          onboarding_step: 0,
+        })
+      if (insertErr && insertErr.code !== '23505') {
+        console.error('[callback] user_accounts insert err:', insertErr.message)
+      }
+      const reselect = await adminClient
+        .from('user_accounts')
+        .select('onboarding_status, onboarding_step')
+        .eq('id', session.user.id)
+        .maybeSingle()
+      account = reselect.data
+      accountErr = reselect.error
+    }
 
     console.log('[callback] onboarding_status:', account?.onboarding_status)
     console.log('[callback] onboarding_step (db):', account?.onboarding_step)
