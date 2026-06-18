@@ -4,7 +4,7 @@ import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Mail } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { createBrowserClient } from "@supabase/ssr"
+import { createClient } from "@/lib/supabase/client"
 import { Turnstile } from "@marsidev/react-turnstile"
 
 type Status =
@@ -22,15 +22,7 @@ export default function RegisterPage() {
   const [turnstileKey, setTurnstileKey] = useState(0)
 
   const router = useRouter()
-  // Client dédié au /register en flowType="implicit" (OTP non-PKCE) : évite les
-  // erreurs "code verifier not found" quand le magic link est ouvert dans un autre
-  // browser/device. Le lien arrive en ?token_hash=XXX&type=magiclink et est vérifié
-  // côté serveur via verifyOtp() (cf. app/auth/callback/route.ts).
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { auth: { flowType: "implicit" } }
-  )
+  const supabase = createClient()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
