@@ -15,6 +15,22 @@ function getVatFromStatut(statut: string): { vat_mode: 'franchise' | 'normal'; i
   return { vat_mode: 'normal', is_micro_entrepreneur: false }
 }
 
+const NATURE_JURIDIQUE_LIBELLES: Record<string, string> = {
+  "1000": "EI",
+  "1100": "Micro-Entreprise",
+  "5306": "SNC",
+  "5308": "EIRL",
+  "5410": "EURL",
+  "5499": "SARL",
+  "5710": "SAS",
+  "5720": "SASU",
+  "6540": "SA",
+}
+
+function libelleNatureJuridique(code?: string): string {
+  return NATURE_JURIDIQUE_LIBELLES[(code || "").trim()] || ""
+}
+
 function normalizeStatut(libelle?: string): string {
   const s = (libelle || "").toLowerCase().trim()
   if (!s) return ""
@@ -40,6 +56,7 @@ interface CompanyResult {
     code_postal?: string
     libelle_commune?: string
     complement_adresse?: string
+    activite_principale?: string
   }
 }
 
@@ -158,7 +175,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
     setSaveError(null)
     setLoading(true)
     try {
-      const code = c.activite_principale || ""
+      const code = c.activite_principale || c.siege?.activite_principale || ""
       if (!NAF_VTC.has(code) && !SIREN_WHITELIST.includes(c.siren)) {
         setSaveError("Votre activité principale n'est pas éligible à NoX VTC (code NAF requis : 4932Z ou 4939B)")
         return
@@ -174,7 +191,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       }
       setSiret(c.siren)
       setNomEntreprise(c.nom_raison_sociale || c.nom_complet || "")
-      setStatutJuridique(normalizeStatut(c.libelle_nature_juridique))
+      setStatutJuridique(normalizeStatut(libelleNatureJuridique(c.nature_juridique)))
       setAdresse(c.siege?.adresse || "")
       setCodePostal(c.siege?.code_postal || "")
       setVille(c.siege?.libelle_commune || "")
