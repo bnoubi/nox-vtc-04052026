@@ -121,11 +121,20 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   }
 
   async function goToStep(n: number) {
+    console.log("[goToStep] début, n=", n)
     await saveStep(n)
+    console.log("[goToStep] saveStep terminé, appel setStep(", n, ")")
     setStep(n)
   }
 
   useEffect(() => {
+    if (step === 1) {
+      ;(async () => {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        console.log("[step1] rendu, step=", step, "user=", !!user)
+      })()
+    }
     if (step === 3) loadProfil()
     if (step === 4) loadReglementaire()
   }, [step])
@@ -151,6 +160,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   }, [search, step])
 
   function startFlow() {
+    console.log("[startFlow] appelé, passage à step 1")
     void goToStep(1)
   }
 
@@ -378,8 +388,8 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
     onComplete()
   }
 
-  const card = "w-full max-w-md bg-onyx-card/80 backdrop-blur-xl border border-onyx-border/30 rounded-3xl p-8 relative z-10"
-  const cardLg = "w-full max-w-lg bg-onyx-card/80 backdrop-blur-xl border border-onyx-border/30 rounded-3xl p-8 relative z-10"
+  const card = "w-full max-w-md bg-[#1a1a1a] backdrop-blur-xl border border-[#333] rounded-3xl p-8 relative z-10"
+  const cardLg = "w-full max-w-lg bg-[#1a1a1a] backdrop-blur-xl border border-[#333] rounded-3xl p-8 relative z-10"
   const tip = "p-3 rounded-xl bg-gold/10 border border-gold/20 text-xs text-gold leading-relaxed"
 
   return (
@@ -475,7 +485,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                   </div>
                   <h1 className="text-2xl font-bold font-heading mb-3 text-white">Pilotez votre activité sereinement</h1>
                   <p className="text-sm text-white/70 leading-relaxed mb-8">Votre Score NoX vous guide pour rester en conformité et développer votre activité en toute confiance.</p>
-                  <button onClick={startFlow} className="px-8 h-12 rounded-xl bg-gold text-primary-foreground font-semibold hover:bg-gold-light active:scale-[0.98] transition-all">
+                  <button onClick={() => { console.log("[Commencer] click détecté"); startFlow() }} className="px-8 h-12 rounded-xl bg-gold text-primary-foreground font-semibold hover:bg-gold-light active:scale-[0.98] transition-all">
                     Commencer
                   </button>
                 </div>
