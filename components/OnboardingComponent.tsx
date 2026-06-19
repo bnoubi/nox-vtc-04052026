@@ -428,6 +428,16 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
     </button>
   )
 
+  const prevBtnFor = (n: number, before?: () => void) => (
+    <button
+      type="button"
+      onClick={() => { before?.(); void goToStep(n - 1) }}
+      className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+    >
+      ← Précédent
+    </button>
+  )
+
   return (
     <main className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-6 relative overflow-hidden py-24">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gold/5 rounded-full blur-[120px] pointer-events-none" />
@@ -614,6 +624,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             transition={{ duration: 0.5, ease: "easeOut" }}
             className={cardLg}
           >
+            {prevBtnFor(2, () => { setSearch(""); setSearchResults([]) })}
             <div className="w-16 h-16 rounded-2xl bg-gold/10 border border-gold/20 flex items-center justify-center mb-6">
               <Building2 className="h-8 w-8 text-gold" strokeWidth={1.5} />
             </div>
@@ -690,6 +701,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             transition={{ duration: 0.5, ease: "easeOut" }}
             className={card}
           >
+            {prevBtnFor(3)}
             <div className="w-16 h-16 rounded-2xl bg-gold/10 border border-gold/20 flex items-center justify-center mb-6">
               <User className="h-8 w-8 text-gold" strokeWidth={1.5} />
             </div>
@@ -727,6 +739,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             transition={{ duration: 0.5, ease: "easeOut" }}
             className={card}
           >
+            {prevBtnFor(4)}
             <div className="w-16 h-16 rounded-2xl bg-gold/10 border border-gold/20 flex items-center justify-center mb-6">
               <ShieldCheck className="h-8 w-8 text-gold" strokeWidth={1.5} />
             </div>
@@ -761,6 +774,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             transition={{ duration: 0.5, ease: "easeOut" }}
             className={card}
           >
+            {prevBtnFor(5)}
             <div className="w-16 h-16 rounded-2xl bg-gold/10 border border-gold/20 flex items-center justify-center mb-6">
               <Car className="h-8 w-8 text-gold" strokeWidth={1.5} />
             </div>
@@ -825,6 +839,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             transition={{ duration: 0.5, ease: "easeOut" }}
             className={card}
           >
+            {prevBtnFor(6)}
             <div className="w-16 h-16 rounded-2xl bg-gold/10 border border-gold/20 flex items-center justify-center mb-6">
               <UserCheck className="h-8 w-8 text-gold" strokeWidth={1.5} />
             </div>
@@ -876,6 +891,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             transition={{ duration: 0.5, ease: "easeOut" }}
             className={card}
           >
+            {prevBtnFor(7)}
             <div className="w-16 h-16 rounded-2xl bg-gold/10 border border-gold/20 flex items-center justify-center mb-6">
               <Lock className="h-8 w-8 text-gold" strokeWidth={1.5} />
             </div>
