@@ -9,6 +9,7 @@ import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 
 const SIREN_WHITELIST = ["000000001","000000002","000000003","000000004","000000005","000000006","000000007","000000008","000000009","000000010"]
 const NAF_VTC = new Set(["4932Z", "4939B"])
+const normalizeNAF = (code: string) => code.replace(".", "")
 
 function getVatFromStatut(statut: string): { vat_mode: 'franchise' | 'normal'; is_micro_entrepreneur: boolean } {
   if (statut === 'Micro-Entreprise') return { vat_mode: 'franchise', is_micro_entrepreneur: true }
@@ -193,7 +194,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
     setSaveError(null)
     setLoading(true)
     try {
-      const code = c.activite_principale || c.siege?.activite_principale || ""
+      const code = normalizeNAF(c.activite_principale || c.siege?.activite_principale || "")
       if (!NAF_VTC.has(code) && !SIREN_WHITELIST.includes(c.siren)) {
         setSaveError("Votre activité principale n'est pas éligible à NoX VTC (code NAF requis : 4932Z ou 4939B)")
         return
