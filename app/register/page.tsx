@@ -427,23 +427,13 @@ export default function RegisterPage() {
               >
                 Se connecter
               </button>
-              <div className="pt-4 text-[12px] text-[#888888] text-center">
-                <button
-                  type="button"
-                  onClick={() => setStatus({ kind: "idle" })}
-                  className="hover:text-[#D4AF37] transition-colors"
-                >
-                  Utiliser une autre adresse
-                </button>
-                {" · "}
-                <button
-                  type="button"
-                  onClick={() => router.push("/login")}
-                  className="hover:text-[#D4AF37] transition-colors"
-                >
-                  Se connecter
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setStatus({ kind: "idle" })}
+                className="block mx-auto text-[12px] text-[#888888] hover:text-[#D4AF37] transition-colors pt-4"
+              >
+                Utiliser une autre adresse
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
