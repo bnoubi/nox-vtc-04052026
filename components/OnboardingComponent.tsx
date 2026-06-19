@@ -130,10 +130,11 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      await supabase.from("user_accounts").update({
-        onboarding_step: n,
-        onboarding_status: "in_progress",
-      }).eq("id", user.id)
+      const { error } = await supabase
+        .from("user_accounts")
+        .update({ onboarding_step: n, onboarding_status: "in_progress" })
+        .eq("id", user.id)
+      if (error) console.error("[saveStep] erreur Supabase:", JSON.stringify(error))
     } catch (e) {
       console.error("[Onboarding] saveStep:", e)
     }
@@ -150,6 +151,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   }, [step])
 
   useEffect(() => {
+    console.log("[search] useEffect déclenché, search=", search, "step=", step)
     if (step !== 1) return
     const q = search.trim()
     if (q.length < 3) { setSearchResults([]); return }
@@ -157,11 +159,14 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       setSearching(true)
       try {
         const url = `https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(q)}&per_page=5`
+        console.log("[search] fetch URL:", url)
         const res = await fetch(url, { headers: { "Accept": "application/json" } })
         const data = await res.json()
+        console.log("[search] résultats:", data?.results?.length)
         setSearchResults(data?.results || [])
-      } catch (e) {
-        console.error("[Onboarding] Recherche entreprise:", e)
+      } catch (err) {
+        console.error("[search] erreur:", err)
+        console.error("[Onboarding] Recherche entreprise:", err)
         setSearchResults([])
       } finally {
         setSearching(false)
@@ -556,17 +561,22 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             <p className="text-sm text-muted-foreground mb-6">Recherchez par nom ou numéro SIREN</p>
 
             <div className="relative mb-4">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" strokeWidth={1.5} />
               <input
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  console.log("[search] saisie:", value)
+                  setSearch(value)
+                }}
                 placeholder="Ex: NoX Transports ou 123456789"
                 disabled={loading}
                 className={`${INPUT_CLS} pl-11`}
+                style={{ touchAction: 'manipulation', position: 'relative', zIndex: 50 }}
               />
               {searching && (
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-muted-foreground animate-pulse">…</span>
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-muted-foreground animate-pulse pointer-events-none">…</span>
               )}
             </div>
 
