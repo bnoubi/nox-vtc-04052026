@@ -12,7 +12,7 @@ type Status =
   | { kind: "idle" }
   | { kind: "active_session"; onboarding_step: number; email: string }
   | { kind: "sent_new"; email: string }
-  | { kind: "sent_resume"; email: string; step?: number }
+  | { kind: "sent_resume"; email: string; step?: number; sent: boolean }
   | { kind: "already_completed" }
 
 export default function RegisterPage() {
@@ -69,7 +69,7 @@ export default function RegisterPage() {
         setError(error.message || JSON.stringify(error) || "Erreur inconnue")
         return
       }
-      setStatus({ kind: "sent_resume", email: addr, step })
+      setStatus({ kind: "sent_resume", email: addr, step, sent: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : (JSON.stringify(e) || "Erreur inconnue"))
     } finally {
@@ -104,24 +104,11 @@ export default function RegisterPage() {
         return
       }
 
-      // CAS 2 : compte existant en cours d'onboarding
+      // CAS 2 : compte existant en cours d'onboarding — on n'envoie pas tout de
+      // suite : on bascule sur l'écran "Reprenez où vous en étiez" et c'est le
+      // clic sur le bouton gold qui déclenchera l'envoi (captcha conservé).
       if (data.exists) {
-        const { error } = await supabase.auth.signInWithOtp({
-          email,
-          options: {
-            shouldCreateUser: false,
-            emailRedirectTo: `${window.location.origin}/auth/callback?type=onboarding`,
-            captchaToken: captchaToken || undefined
-          }
-        })
-        // Reset du token Turnstile (usage unique)
-        setCaptchaToken(null)
-        setTurnstileKey(prev => prev + 1)
-        if (error) {
-          setError(error?.message || JSON.stringify(error) || "Erreur inconnue")
-          return
-        }
-        setStatus({ kind: "sent_resume", email, step: data.onboarding_step })
+        setStatus({ kind: "sent_resume", email, step: data.onboarding_step, sent: false })
         return
       }
 
@@ -339,27 +326,44 @@ export default function RegisterPage() {
               </div>
               <h2 className="text-[18px] font-semibold text-[#F5F5F5] mb-3">Reprenez où vous en étiez</h2>
 
-              {typeof status.step === "number" && (
+              {!status.sent ? (
                 <>
+                  <p className="text-[13px] text-[#888888] leading-relaxed mb-5">
+                    Vous avez déjà commencé votre inscription avec <span className="text-[#D4AF37]">{status.email}</span>. Validez le captcha puis cliquez ci-dessous pour recevoir votre lien d'accès.
+                  </p>
+
+                  <div className="flex justify-center mb-4">
+                    <Turnstile
+                      key={`turnstile-sent-resume-${turnstileKey}`}
+                      siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
+                      onSuccess={(token) => setCaptchaToken(token)}
+                      onExpire={() => { setCaptchaToken(null); setTurnstileKey(prev => prev + 1) }}
+                      onError={() => setCaptchaToken(null)}
+                      options={{ theme: 'dark', refreshExpired: 'auto' }}
+                    />
+                  </div>
+
+                  {error && (
+                    <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-center text-[12px] text-red-400 mb-3">
+                      {error}
+                    </div>
+                  )}
+
                   <button
                     type="button"
-                    onClick={() => router.push(`/?resume_step=${status.step}`)}
-                    className="w-full h-12 rounded-xl bg-[#D4AF37] text-[#0A0A0A] font-semibold hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 flex items-center justify-center gap-2 mb-5"
+                    onClick={() => void sendResumeMagicLink(status.email, status.step)}
+                    disabled={isLoading || !captchaToken}
+                    className="w-full h-12 rounded-xl bg-[#D4AF37] text-[#0A0A0A] font-semibold hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 flex items-center justify-center gap-2 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Continuer mon inscription →
+                    {isLoading ? "Envoi en cours..." : "Continuer mon inscription →"}
                   </button>
-
-                  <div className="flex items-center gap-3 mb-5">
-                    <div className="flex-1 h-px bg-[#333]" />
-                    <span className="text-[11px] text-[#666] tracking-widest">OU</span>
-                    <div className="flex-1 h-px bg-[#333]" />
-                  </div>
                 </>
+              ) : (
+                <div className="px-4 py-4 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[13px] text-[#D4AF37] leading-relaxed mb-6">
+                  📧 Un lien vous a été envoyé à <span className="font-semibold">{status.email}</span>. Cliquez dessus pour reprendre votre inscription directement à l'étape où vous vous étiez arrêté.
+                </div>
               )}
 
-              <p className="text-[13px] text-[#888888] leading-relaxed mb-6">
-                Vous avez déjà commencé votre inscription. Nous vous envoyons un lien à <span className="text-[#D4AF37]">{status.email}</span> pour reprendre.
-              </p>
               <button
                 type="button"
                 onClick={() => setStatus({ kind: "idle" })}
