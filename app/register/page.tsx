@@ -209,13 +209,23 @@ export default function RegisterPage() {
                 {isLoading ? "Envoi..." : "Recevoir un lien par email"}
               </button>
 
-              <button
-                type="button"
-                onClick={() => setStatus({ kind: "idle" })}
-                className="block mx-auto text-[12px] text-[#888888] hover:text-[#D4AF37] transition-colors pt-4"
-              >
-                Utiliser une autre adresse
-              </button>
+              <div className="pt-4 text-[12px] text-[#888888] text-center">
+                <button
+                  type="button"
+                  onClick={() => setStatus({ kind: "idle" })}
+                  className="hover:text-[#D4AF37] transition-colors"
+                >
+                  Utiliser une autre adresse
+                </button>
+                {" · "}
+                <button
+                  type="button"
+                  onClick={() => router.push("/login")}
+                  className="hover:text-[#D4AF37] transition-colors"
+                >
+                  Se connecter
+                </button>
+              </div>
             </motion.div>
           )}
 
@@ -302,13 +312,23 @@ export default function RegisterPage() {
                 Un lien vous a été envoyé à <span className="text-[#D4AF37]">{status.email}</span>.<br />
                 Cliquez dessus pour commencer votre inscription.
               </p>
-              <button
-                type="button"
-                onClick={() => setStatus({ kind: "idle" })}
-                className="text-[12px] text-[#888888] hover:text-[#D4AF37] transition-colors"
-              >
-                Utiliser une autre adresse
-              </button>
+              <div className="text-[12px] text-[#888888] text-center">
+                <button
+                  type="button"
+                  onClick={() => setStatus({ kind: "idle" })}
+                  className="hover:text-[#D4AF37] transition-colors"
+                >
+                  Utiliser une autre adresse
+                </button>
+                {" · "}
+                <button
+                  type="button"
+                  onClick={() => router.push("/login")}
+                  className="hover:text-[#D4AF37] transition-colors"
+                >
+                  Se connecter
+                </button>
+              </div>
             </motion.div>
           )}
 
@@ -364,13 +384,23 @@ export default function RegisterPage() {
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={() => setStatus({ kind: "idle" })}
-                className="text-[12px] text-[#888888] hover:text-[#D4AF37] transition-colors"
-              >
-                Utiliser une autre adresse
-              </button>
+              <div className="text-[12px] text-[#888888] text-center">
+                <button
+                  type="button"
+                  onClick={() => setStatus({ kind: "idle" })}
+                  className="hover:text-[#D4AF37] transition-colors"
+                >
+                  Utiliser une autre adresse
+                </button>
+                {" · "}
+                <button
+                  type="button"
+                  onClick={() => router.push("/login")}
+                  className="hover:text-[#D4AF37] transition-colors"
+                >
+                  Se connecter
+                </button>
+              </div>
             </motion.div>
           )}
 
@@ -397,13 +427,23 @@ export default function RegisterPage() {
               >
                 Se connecter
               </button>
-              <button
-                type="button"
-                onClick={() => setStatus({ kind: "idle" })}
-                className="block mx-auto text-[12px] text-[#888888] hover:text-[#D4AF37] transition-colors pt-4"
-              >
-                Utiliser une autre adresse
-              </button>
+              <div className="pt-4 text-[12px] text-[#888888] text-center">
+                <button
+                  type="button"
+                  onClick={() => setStatus({ kind: "idle" })}
+                  className="hover:text-[#D4AF37] transition-colors"
+                >
+                  Utiliser une autre adresse
+                </button>
+                {" · "}
+                <button
+                  type="button"
+                  onClick={() => router.push("/login")}
+                  className="hover:text-[#D4AF37] transition-colors"
+                >
+                  Se connecter
+                </button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
