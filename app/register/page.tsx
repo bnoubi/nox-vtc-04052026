@@ -10,7 +10,7 @@ import { Turnstile } from "@marsidev/react-turnstile"
 type Status =
   | { kind: "checking_session" }
   | { kind: "idle" }
-  | { kind: "active_session"; onboarding_step: number }
+  | { kind: "active_session"; onboarding_step: number; email: string }
   | { kind: "sent_new"; email: string }
   | { kind: "sent_resume"; email: string }
   | { kind: "already_completed" }
@@ -42,10 +42,40 @@ export default function RegisterPage() {
         router.push("/")
         return
       }
-      setStatus({ kind: "active_session", onboarding_step: account?.onboarding_step ?? 0 })
+      setStatus({
+        kind: "active_session",
+        onboarding_step: account?.onboarding_step ?? 0,
+        email: session.user.email ?? "",
+      })
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  async function sendResumeMagicLink(addr: string) {
+    setError(null)
+    setIsLoading(true)
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: addr,
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: `${window.location.origin}/auth/callback?type=onboarding`,
+          captchaToken: captchaToken || undefined,
+        },
+      })
+      setCaptchaToken(null)
+      setTurnstileKey(prev => prev + 1)
+      if (error) {
+        setError(error.message || JSON.stringify(error) || "Erreur inconnue")
+        return
+      }
+      setStatus({ kind: "sent_resume", email: addr })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : (JSON.stringify(e) || "Erreur inconnue"))
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -151,13 +181,47 @@ export default function RegisterPage() {
               <p className="text-[13px] text-[#888888] leading-relaxed mb-6">
                 Vous avez déjà commencé votre inscription. Cliquez ci-dessous pour continuer.
               </p>
+
               <button
                 type="button"
                 onClick={() => router.push(`/?resume_step=${status.onboarding_step}`)}
-                className="w-full h-14 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20"
+                className="w-full h-12 rounded-xl bg-[#D4AF37] text-[#0A0A0A] font-semibold hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 flex items-center justify-center gap-2"
               >
-                Continuer mon inscription
+                Continuer mon inscription →
               </button>
+
+              <div className="flex items-center gap-3 my-5">
+                <div className="flex-1 h-px bg-[#333]" />
+                <span className="text-[11px] text-[#666] tracking-widest">OU</span>
+                <div className="flex-1 h-px bg-[#333]" />
+              </div>
+
+              <div className="flex justify-center mb-3">
+                <Turnstile
+                  key={`turnstile-resume-${turnstileKey}`}
+                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
+                  onSuccess={(token) => setCaptchaToken(token)}
+                  onExpire={() => { setCaptchaToken(null); setTurnstileKey(prev => prev + 1) }}
+                  onError={() => setCaptchaToken(null)}
+                  options={{ theme: 'dark', refreshExpired: 'auto' }}
+                />
+              </div>
+
+              {error && (
+                <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-center text-[12px] text-red-400 mb-3">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => void sendResumeMagicLink(status.email)}
+                disabled={isLoading || !captchaToken || !status.email}
+                className="text-[12px] text-[#888888] hover:text-[#D4AF37] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? "Envoi..." : "Recevoir un lien par email"}
+              </button>
+
               <button
                 type="button"
                 onClick={() => setStatus({ kind: "idle" })}
