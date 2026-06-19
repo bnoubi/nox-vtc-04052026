@@ -12,7 +12,7 @@ type Status =
   | { kind: "idle" }
   | { kind: "active_session"; onboarding_step: number; email: string }
   | { kind: "sent_new"; email: string }
-  | { kind: "sent_resume"; email: string }
+  | { kind: "sent_resume"; email: string; step?: number }
   | { kind: "already_completed" }
 
 export default function RegisterPage() {
@@ -51,7 +51,7 @@ export default function RegisterPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function sendResumeMagicLink(addr: string) {
+  async function sendResumeMagicLink(addr: string, step?: number) {
     setError(null)
     setIsLoading(true)
     try {
@@ -69,7 +69,7 @@ export default function RegisterPage() {
         setError(error.message || JSON.stringify(error) || "Erreur inconnue")
         return
       }
-      setStatus({ kind: "sent_resume", email: addr })
+      setStatus({ kind: "sent_resume", email: addr, step })
     } catch (e) {
       setError(e instanceof Error ? e.message : (JSON.stringify(e) || "Erreur inconnue"))
     } finally {
@@ -121,7 +121,7 @@ export default function RegisterPage() {
           setError(error?.message || JSON.stringify(error) || "Erreur inconnue")
           return
         }
-        setStatus({ kind: "sent_resume", email })
+        setStatus({ kind: "sent_resume", email, step: data.onboarding_step })
         return
       }
 
@@ -215,7 +215,7 @@ export default function RegisterPage() {
 
               <button
                 type="button"
-                onClick={() => void sendResumeMagicLink(status.email)}
+                onClick={() => void sendResumeMagicLink(status.email, status.onboarding_step)}
                 disabled={isLoading || !captchaToken || !status.email}
                 className="text-[12px] text-[#888888] hover:text-[#D4AF37] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -338,6 +338,25 @@ export default function RegisterPage() {
                 <Mail className="w-7 h-7 text-[#D4AF37]" strokeWidth={1.5} />
               </div>
               <h2 className="text-[18px] font-semibold text-[#F5F5F5] mb-3">Reprenez où vous en étiez</h2>
+
+              {typeof status.step === "number" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/?resume_step=${status.step}`)}
+                    className="w-full h-12 rounded-xl bg-[#D4AF37] text-[#0A0A0A] font-semibold hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 flex items-center justify-center gap-2 mb-5"
+                  >
+                    Continuer mon inscription →
+                  </button>
+
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="flex-1 h-px bg-[#333]" />
+                    <span className="text-[11px] text-[#666] tracking-widest">OU</span>
+                    <div className="flex-1 h-px bg-[#333]" />
+                  </div>
+                </>
+              )}
+
               <p className="text-[13px] text-[#888888] leading-relaxed mb-6">
                 Vous avez déjà commencé votre inscription. Nous vous envoyons un lien à <span className="text-[#D4AF37]">{status.email}</span> pour reprendre.
               </p>
