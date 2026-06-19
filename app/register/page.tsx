@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Mail } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -8,7 +8,9 @@ import { createClient } from "@/lib/supabase/client"
 import { Turnstile } from "@marsidev/react-turnstile"
 
 type Status =
+  | { kind: "checking_session" }
   | { kind: "idle" }
+  | { kind: "active_session"; onboarding_step: number }
   | { kind: "sent_new"; email: string }
   | { kind: "sent_resume"; email: string }
   | { kind: "already_completed" }
@@ -17,12 +19,33 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [status, setStatus] = useState<Status>({ kind: "idle" })
+  const [status, setStatus] = useState<Status>({ kind: "checking_session" })
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [turnstileKey, setTurnstileKey] = useState(0)
 
   const router = useRouter()
   const supabase = createClient()
+
+  useEffect(() => {
+    void (async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user) {
+        setStatus({ kind: "idle" })
+        return
+      }
+      const { data: account } = await supabase
+        .from("user_accounts")
+        .select("onboarding_status, onboarding_step")
+        .eq("id", session.user.id)
+        .maybeSingle()
+      if (account?.onboarding_status === "completed") {
+        router.push("/")
+        return
+      }
+      setStatus({ kind: "active_session", onboarding_step: account?.onboarding_step ?? 0 })
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -112,6 +135,39 @@ export default function RegisterPage() {
         </motion.div>
 
         <AnimatePresence mode="wait">
+          {status.kind === "active_session" && (
+            <motion.div
+              key="active-session"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4 }}
+              className="text-center"
+            >
+              <div className="w-16 h-16 mx-auto rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/10 flex items-center justify-center mb-6">
+                <Mail className="w-7 h-7 text-[#D4AF37]" strokeWidth={1.5} />
+              </div>
+              <h2 className="text-[18px] font-semibold text-[#F5F5F5] mb-3">Reprenez où vous en étiez</h2>
+              <p className="text-[13px] text-[#888888] leading-relaxed mb-6">
+                Vous avez déjà commencé votre inscription. Cliquez ci-dessous pour continuer.
+              </p>
+              <button
+                type="button"
+                onClick={() => router.push(`/?resume_step=${status.onboarding_step}`)}
+                className="w-full h-14 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20"
+              >
+                Continuer mon inscription
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatus({ kind: "idle" })}
+                className="block mx-auto text-[12px] text-[#888888] hover:text-[#D4AF37] transition-colors pt-4"
+              >
+                Utiliser une autre adresse
+              </button>
+            </motion.div>
+          )}
+
           {status.kind === "idle" && (
             <motion.form
               key="form"
