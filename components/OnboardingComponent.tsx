@@ -198,13 +198,19 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
 
   useEffect(() => {
     if (step !== 5 || vehiclesLoaded) return
+    console.log("[vehicles] début fetch /data/vehicles.json")
     fetch('/data/vehicles.json')
-      .then((res) => res.json())
+      .then((res) => {
+        console.log("[vehicles] réponse statut:", res.status)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.json()
+      })
       .then((data: VehicleEntry[]) => {
+        console.log("[vehicles] données chargées:", data.length, "véhicules")
         setVehiclesData(data)
         setVehiclesLoaded(true)
       })
-      .catch((err) => console.error('[vehicles] erreur chargement:', err))
+      .catch((err) => console.error("[vehicles] ERREUR:", err))
   }, [step, vehiclesLoaded])
 
   async function saveStep(n: number) {
