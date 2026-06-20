@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { X, MessageSquare, Paperclip, CheckCircle, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
+import { notifyAdminNewTicket } from "@/app/actions/support.actions"
 
 interface SupportTicketModalProps {
   isOpen: boolean
@@ -115,11 +116,21 @@ export function SupportTicketModal({ isOpen, onClose }: SupportTicketModalProps)
       }
       console.log("[Support] Données envoyées:", { subject_category: payload.subject_category, message: message.trim(), user_id: payload.user_id })
 
-      const { error: insertError } = await supabase.from("support_tickets").insert(payload)
+      const { data: inserted, error: insertError } = await supabase
+        .from("support_tickets")
+        .insert(payload)
+        .select("id")
+        .single()
 
       if (insertError) {
         console.log("[Support] Erreur insert:", insertError)
         throw insertError
+      }
+
+      if (inserted?.id) {
+        notifyAdminNewTicket(inserted.id).catch((e) =>
+          console.log("[Support] notif admin failed:", e)
+        )
       }
 
       setSuccess(true)
