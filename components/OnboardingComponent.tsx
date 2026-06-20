@@ -292,13 +292,10 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Utilisateur non authentifié")
-      const { data: existing } = await supabase
-        .from("profiles")
-        .select("user_id")
-        .eq("siret", c.siren)
-        .neq("user_id", user.id)
-        .maybeSingle()
-      if (existing) {
+      const { data: alreadyTaken, error: rpcErr } = await supabase
+        .rpc("check_siret_exists", { p_siret: c.siren })
+      if (rpcErr) throw rpcErr
+      if (alreadyTaken) {
         setDuplicateCompany(true)
         setSaveError("Cette entreprise est déjà enregistrée sur NoX VTC. Si vous pensez qu'il s'agit d'une erreur, contactez-nous.")
         return
@@ -348,7 +345,13 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       await goToStep(3)
     } catch (e) {
       console.error("[Onboarding] Entreprise:", e)
-      setSaveError("Erreur lors de l'enregistrement. Réessayez.")
+      const code = (e as { code?: string } | null)?.code
+      if (code === "23505") {
+        setDuplicateCompany(true)
+        setSaveError("Cette entreprise est déjà enregistrée sur NoX VTC. Si vous pensez qu'il s'agit d'une erreur, contactez-nous.")
+      } else {
+        setSaveError("Erreur lors de l'enregistrement. Réessayez.")
+      }
     } finally {
       setLoading(false)
     }
