@@ -106,6 +106,8 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   const [codePostal, setCodePostal] = useState("")
   const [ville, setVille] = useState("")
   const [complementAdresse, setComplementAdresse] = useState("")
+  const [isLegalRep, setIsLegalRep] = useState(false)
+  const [duplicateCompany, setDuplicateCompany] = useState(false)
 
   // Step 3 (profil)
   const [prenom, setPrenom] = useState("")
@@ -279,6 +281,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
 
   async function handleSelectCompany(c: CompanyResult) {
     setSaveError(null)
+    setDuplicateCompany(false)
     setLoading(true)
     try {
       const code = normalizeNAF(c.activite_principale || c.siege?.activite_principale || "")
@@ -287,12 +290,17 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
         return
       }
       const supabase = createClient()
-      const { count } = await supabase
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error("Utilisateur non authentifié")
+      const { data: existing } = await supabase
         .from("profiles")
-        .select("user_id", { count: "exact", head: true })
-        .like("siret", `${c.siren}%`)
-      if ((count || 0) > 0) {
-        setSaveError("Cette entreprise est déjà enregistrée. Contactez le support si vous êtes le dirigeant.")
+        .select("user_id")
+        .eq("siret", c.siren)
+        .neq("user_id", user.id)
+        .maybeSingle()
+      if (existing) {
+        setDuplicateCompany(true)
+        setSaveError("Cette entreprise est déjà enregistrée sur NoX VTC. Si vous pensez qu'il s'agit d'une erreur, contactez-nous.")
         return
       }
       setSiret(c.siren)
@@ -334,6 +342,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
           complement_adresse: complementAdresse || null,
           vat_mode: vatInfo.vat_mode,
           is_micro_entrepreneur: vatInfo.is_micro_entrepreneur,
+          legal_rep_confirmed_at: new Date().toISOString(),
         }, { onConflict: 'user_id' })
       if (error) throw error
       await goToStep(3)
@@ -700,7 +709,17 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
               </div>
             )}
 
-            {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
+            {saveError && <p className="text-xs text-red-400 text-center mb-2">{saveError}</p>}
+            {duplicateCompany && (
+              <p className="text-[11px] text-muted-foreground/70 text-center mb-3">
+                <a
+                  href="mailto:support@noxvtc.fr?subject=Entreprise%20d%C3%A9j%C3%A0%20enregistr%C3%A9e&body=Bonjour,%0D%0A%0D%0AJe%20tente%20de%20m'inscrire%20avec%20une%20entreprise%20qui%20semble%20d%C3%A9j%C3%A0%20enregistr%C3%A9e.%0D%0A%0D%0ANom%20:%20%0D%0APr%C3%A9nom%20:%20%0D%0ASIREN%20concern%C3%A9%20:%20%0D%0AExplication%20:%20%0D%0A%0D%0AMerci"
+                  className="text-gold hover:underline"
+                >
+                  Contactez-nous
+                </a>
+              </p>
+            )}
             <p className="text-[11px] text-muted-foreground text-center">Saisissez au moins 3 caractères pour démarrer la recherche.</p>
             {logoutBtn}
           </motion.div>
@@ -771,12 +790,24 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-white/70 ml-1">N° TVA intracommunautaire</label>
-                <input type="text" value={tva} onChange={(e) => setTva(e.target.value)} placeholder="Optionnel — FRXX..." className={INPUT_CLS} />
+                <input type="text" value={tva} onChange={(e) => setTva(e.target.value)} placeholder="Optionnel — FRXXSIREN" className={INPUT_CLS} />
               </div>
             </div>
 
+            <label className="flex items-start gap-3 mb-6 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isLegalRep}
+                onChange={(e) => setIsLegalRep(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-onyx-border/60 bg-secondary/40 text-gold focus:ring-gold/40 focus:ring-offset-0 cursor-pointer accent-gold"
+              />
+              <span className="text-xs text-white/70 leading-relaxed">
+                Je certifie être le représentant légal de cette entreprise ou habilité à agir en son nom
+              </span>
+            </label>
+
             {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
-            <button onClick={handleSaveEnterprise} disabled={loading || !nomEntreprise || !adresse} className={PRIMARY_BTN}>
+            <button onClick={handleSaveEnterprise} disabled={loading || !nomEntreprise || !adresse || !isLegalRep} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Enregistrement...</span> : <><Save className="h-4 w-4" strokeWidth={2} />Confirmer et continuer</>}
             </button>
             {logoutBtn}
