@@ -15,6 +15,21 @@ type Status =
   | { kind: "sent_resume"; email: string; step?: number; sent: boolean }
   | { kind: "already_completed" }
 
+function translateAuthError(message: string): string {
+  if (/only request this after (\d+) seconds/i.test(message)) {
+    const match = message.match(/after (\d+) seconds/i)
+    const seconds = match ? match[1] : "quelques"
+    return `Pour des raisons de sécurité, vous ne pouvez refaire cette demande que dans ${seconds} secondes.`
+  }
+  if (/User already registered/i.test(message)) {
+    return "Cette adresse email est déjà utilisée."
+  }
+  if (/Invalid email/i.test(message)) {
+    return "Adresse email invalide."
+  }
+  return message
+}
+
 export default function RegisterPage() {
   const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -66,12 +81,12 @@ export default function RegisterPage() {
       setCaptchaToken(null)
       setTurnstileKey(prev => prev + 1)
       if (error) {
-        setError(error.message || JSON.stringify(error) || "Erreur inconnue")
+        setError(translateAuthError(error.message || JSON.stringify(error) || "Erreur inconnue"))
         return
       }
       setStatus({ kind: "sent_resume", email: addr, step, sent: true })
     } catch (e) {
-      setError(e instanceof Error ? e.message : (JSON.stringify(e) || "Erreur inconnue"))
+      setError(translateAuthError(e instanceof Error ? e.message : (JSON.stringify(e) || "Erreur inconnue")))
     } finally {
       setIsLoading(false)
     }
@@ -94,7 +109,7 @@ export default function RegisterPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data?.error || JSON.stringify(data) || "Erreur inconnue")
+        setError(translateAuthError(data?.error || JSON.stringify(data) || "Erreur inconnue"))
         return
       }
 
@@ -125,12 +140,12 @@ export default function RegisterPage() {
       setCaptchaToken(null)
       setTurnstileKey(prev => prev + 1)
       if (error) {
-        setError(error?.message || JSON.stringify(error) || "Erreur inconnue")
+        setError(translateAuthError(error?.message || JSON.stringify(error) || "Erreur inconnue"))
         return
       }
       setStatus({ kind: "sent_new", email })
     } catch (e) {
-      setError(e instanceof Error ? e.message : (JSON.stringify(e) || "Erreur inconnue"))
+      setError(translateAuthError(e instanceof Error ? e.message : (JSON.stringify(e) || "Erreur inconnue")))
     } finally {
       setIsLoading(false)
     }
