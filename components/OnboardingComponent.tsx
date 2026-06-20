@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Building2, ArrowRight, ShieldCheck, User, Save, CheckCircle2, Eye, EyeOff, Search, Car, UserCheck, Lock } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
+import vehiclesData from "@/lib/data/vehicles.json"
 
 const SIREN_WHITELIST = ["000000001","000000002","000000003","000000004","000000005","000000006","000000007","000000008","000000009","000000010"]
 const NAF_VTC = new Set(["4932Z", "4939B"])
@@ -112,6 +113,65 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   const [vCategory, setVCategory] = useState("")
   const [vMarque, setVMarque] = useState("")
   const [vModele, setVModele] = useState("")
+  const [vMotorisation, setVMotorisation] = useState("")
+  const [vCo2, setVCo2] = useState("")
+  const [vCylindree, setVCylindree] = useState<number | null>(null)
+  const [vMarqueOpen, setVMarqueOpen] = useState(false)
+  const [vModeleOpen, setVModeleOpen] = useState(false)
+
+  const uniqueMakes = useMemo(
+    () => [...new Set(vehiclesData.map((v) => v.make))].sort((a, b) => a.localeCompare(b)),
+    []
+  )
+
+  const marqueSuggestions = useMemo(() => {
+    const q = vMarque.trim().toLowerCase()
+    if (!q) return []
+    return uniqueMakes
+      .filter((m) => m.toLowerCase().includes(q) && m.toLowerCase() !== q)
+      .slice(0, 8)
+  }, [vMarque, uniqueMakes])
+
+  const modelsForMarque = useMemo(() => {
+    const target = vMarque.trim().toLowerCase()
+    if (!target) return [] as string[]
+    return [...new Set(
+      vehiclesData
+        .filter((v) => v.make.toLowerCase() === target)
+        .map((v) => v.model)
+    )].sort((a, b) => a.localeCompare(b))
+  }, [vMarque])
+
+  const modeleSuggestions = useMemo(() => {
+    const q = vModele.trim().toLowerCase()
+    if (!q || modelsForMarque.length === 0) return []
+    return modelsForMarque
+      .filter((m) => m.toLowerCase().includes(q) && m.toLowerCase() !== q)
+      .slice(0, 8)
+  }, [vModele, modelsForMarque])
+
+  function selectMarque(make: string) {
+    setVMarque(make)
+    setVMarqueOpen(false)
+    setVModele("")
+    setVMotorisation("")
+    setVCo2("")
+    setVCylindree(null)
+  }
+
+  function selectModele(model: string) {
+    setVModele(model)
+    setVModeleOpen(false)
+    const target = vMarque.trim().toLowerCase()
+    const best = vehiclesData
+      .filter((v) => v.make.toLowerCase() === target && v.model === model)
+      .sort((a, b) => b.year - a.year)[0]
+    if (best) {
+      setVMotorisation(best.motorisation)
+      setVCo2(best.co2 != null ? String(best.co2) : "")
+      setVCylindree(best.cylindree)
+    }
+  }
 
   // Step 6 (chauffeur)
   const [dPrenom, setDPrenom] = useState("")
@@ -329,12 +389,16 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("no user")
+      const co2Int = vCo2 ? parseInt(vCo2, 10) : null
       const { error } = await supabase.from("vehicles").insert({
         user_id: user.id,
         immatriculation: vImmat || null,
         category: vCategory || null,
         marque: vMarque || null,
         modele: vModele || null,
+        motorisation: vMotorisation || null,
+        co2: Number.isFinite(co2Int) ? co2Int : null,
+        cylindree: vCylindree,
       })
       if (error) throw error
       await goToStep(6)
@@ -809,16 +873,96 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                   <option value="minibus" className="bg-onyx text-white">Minibus</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-white/70 ml-1">Marque</label>
-                  <input type="text" value={vMarque} onChange={(e) => setVMarque(e.target.value)} placeholder="Mercedes" className={INPUT_CLS} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-white/70 ml-1">Modèle</label>
-                  <input type="text" value={vModele} onChange={(e) => setVModele(e.target.value)} placeholder="Classe E" className={INPUT_CLS} />
+              <div className="space-y-1.5 relative">
+                <label className="text-xs font-medium text-white/70 ml-1">MARQUE (D.1)</label>
+                <input
+                  type="text"
+                  value={vMarque}
+                  onChange={(e) => { setVMarque(e.target.value); setVMarqueOpen(true) }}
+                  onFocus={() => setVMarqueOpen(true)}
+                  onBlur={() => setTimeout(() => setVMarqueOpen(false), 150)}
+                  placeholder="Mercedes-Benz"
+                  className={INPUT_CLS}
+                  autoComplete="off"
+                />
+                {vMarqueOpen && marqueSuggestions.length > 0 && (
+                  <ul className="absolute z-50 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl bg-onyx-card border border-onyx-border/60 shadow-lg">
+                    {marqueSuggestions.map((m) => (
+                      <li key={m}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); selectMarque(m) }}
+                          className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-gold/10 transition-colors"
+                        >
+                          {m}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="space-y-1.5 relative">
+                <label className="text-xs font-medium text-white/70 ml-1">MODÈLE (D.3)</label>
+                <input
+                  type="text"
+                  value={vModele}
+                  onChange={(e) => { setVModele(e.target.value); setVModeleOpen(true) }}
+                  onFocus={() => setVModeleOpen(true)}
+                  onBlur={() => setTimeout(() => setVModeleOpen(false), 150)}
+                  placeholder="Classe E"
+                  className={INPUT_CLS}
+                  autoComplete="off"
+                  disabled={!vMarque}
+                />
+                {vModeleOpen && modeleSuggestions.length > 0 && (
+                  <ul className="absolute z-50 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl bg-onyx-card border border-onyx-border/60 shadow-lg">
+                    {modeleSuggestions.map((m) => (
+                      <li key={m}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); selectModele(m) }}
+                          className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-gold/10 transition-colors"
+                        >
+                          {m}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-white/70 ml-1">Type de moteur</label>
+                <input
+                  type="text"
+                  value={vMotorisation}
+                  onChange={(e) => setVMotorisation(e.target.value)}
+                  placeholder="Essence, Diesel, Hybride…"
+                  className={INPUT_CLS}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-white/70 ml-1">CO2 — TAUX D&apos;ÉMISSION (V.7)</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={vCo2}
+                    onChange={(e) => setVCo2(e.target.value.replace(/[^\d]/g, ""))}
+                    placeholder="120"
+                    className={`${INPUT_CLS} pr-14`}
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">g/km</span>
                 </div>
               </div>
+              <p className="text-[11px] text-muted-foreground/70 text-center pt-1">
+                Vous ne trouvez pas votre véhicule ?{" "}
+                <a
+                  href="mailto:support@noxvtc.fr?subject=Ajout%20d'un%20v%C3%A9hicule%20%E2%80%94%20demande%20manuelle&body=Bonjour,%0D%0A%0D%0AJe%20souhaite%20ajouter%20mon%20v%C3%A9hicule%20qui%20n'est%20pas%20disponible%20dans%20la%20biblioth%C3%A8que%20NoX%20VTC.%0D%0A%0D%0AInformations%20du%20v%C3%A9hicule%20:%0D%0A-%20Marque%20:%20%0D%0A-%20Mod%C3%A8le%20:%20%0D%0A-%20Ann%C3%A9e%20:%20%0D%0A-%20Type%20de%20moteur%20:%20%0D%0A%0D%0ACordialement"
+                  className="text-gold hover:underline"
+                >
+                  Contactez-nous
+                </a>
+              </p>
             </div>
 
             {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
