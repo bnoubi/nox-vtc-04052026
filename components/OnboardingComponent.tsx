@@ -6,7 +6,15 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Building2, ArrowRight, ShieldCheck, User, Save, CheckCircle2, Eye, EyeOff, Search, Car, UserCheck, Lock } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
-import vehiclesData from "@/lib/data/vehicles.json"
+
+type VehicleEntry = {
+  make: string
+  model: string
+  year: number
+  co2: number | null
+  cylindree: number | null
+  motorisation: string
+}
 
 const SIREN_WHITELIST = ["000000001","000000002","000000003","000000004","000000005","000000006","000000007","000000008","000000009","000000010"]
 const NAF_VTC = new Set(["4932Z", "4939B"])
@@ -118,10 +126,12 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   const [vCylindree, setVCylindree] = useState<number | null>(null)
   const [vMarqueOpen, setVMarqueOpen] = useState(false)
   const [vModeleOpen, setVModeleOpen] = useState(false)
+  const [vehiclesData, setVehiclesData] = useState<VehicleEntry[]>([])
+  const [vehiclesLoaded, setVehiclesLoaded] = useState(false)
 
   const uniqueMakes = useMemo(
     () => [...new Set(vehiclesData.map((v) => v.make))].sort((a, b) => a.localeCompare(b)),
-    []
+    [vehiclesData]
   )
 
   const marqueSuggestions = useMemo(() => {
@@ -140,7 +150,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
         .filter((v) => v.make.toLowerCase() === target)
         .map((v) => v.model)
     )].sort((a, b) => a.localeCompare(b))
-  }, [vMarque])
+  }, [vMarque, vehiclesData])
 
   const modeleSuggestions = useMemo(() => {
     const q = vModele.trim().toLowerCase()
@@ -185,6 +195,17 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       if (user) setIsGoogleUser(user.app_metadata?.provider === "google")
     })()
   }, [])
+
+  useEffect(() => {
+    if (step !== 5 || vehiclesLoaded) return
+    fetch('/data/vehicles.json')
+      .then((res) => res.json())
+      .then((data: VehicleEntry[]) => {
+        setVehiclesData(data)
+        setVehiclesLoaded(true)
+      })
+      .catch((err) => console.error('[vehicles] erreur chargement:', err))
+  }, [step, vehiclesLoaded])
 
   async function saveStep(n: number) {
     try {
@@ -881,9 +902,10 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                   onChange={(e) => { setVMarque(e.target.value); setVMarqueOpen(true) }}
                   onFocus={() => setVMarqueOpen(true)}
                   onBlur={() => setTimeout(() => setVMarqueOpen(false), 150)}
-                  placeholder="Mercedes-Benz"
+                  placeholder={vehiclesLoaded ? "Mercedes-Benz" : "Chargement…"}
                   className={INPUT_CLS}
                   autoComplete="off"
+                  disabled={!vehiclesLoaded}
                 />
                 {vMarqueOpen && marqueSuggestions.length > 0 && (
                   <ul className="absolute z-50 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl bg-onyx-card border border-onyx-border/60 shadow-lg">
@@ -909,10 +931,10 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                   onChange={(e) => { setVModele(e.target.value); setVModeleOpen(true) }}
                   onFocus={() => setVModeleOpen(true)}
                   onBlur={() => setTimeout(() => setVModeleOpen(false), 150)}
-                  placeholder="Classe E"
+                  placeholder={vehiclesLoaded ? "Classe E" : "Chargement…"}
                   className={INPUT_CLS}
                   autoComplete="off"
-                  disabled={!vMarque}
+                  disabled={!vehiclesLoaded || !vMarque}
                 />
                 {vModeleOpen && modeleSuggestions.length > 0 && (
                   <ul className="absolute z-50 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl bg-onyx-card border border-onyx-border/60 shadow-lg">
