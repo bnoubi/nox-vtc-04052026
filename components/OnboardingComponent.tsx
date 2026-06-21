@@ -7,13 +7,11 @@ import { Building2, ArrowRight, ShieldCheck, User, Save, CheckCircle2, Eye, EyeO
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 
-type VehicleEntry = {
-  make: string
-  model: string
-  year: number
-  co2: number | null
-  cylindree: number | null
-  motorisation: string
+type VehicleModel = {
+  marque: string
+  modele: string
+  categorie: string
+  motorisations: string[]
 }
 
 const SIREN_WHITELIST = ["000000001","000000002","000000003","000000004","000000005","000000006","000000007","000000008","000000009","000000010"]
@@ -124,16 +122,14 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   const [vMarque, setVMarque] = useState("")
   const [vModele, setVModele] = useState("")
   const [vMotorisation, setVMotorisation] = useState("")
-  const [vCo2, setVCo2] = useState("")
-  const [vCylindree, setVCylindree] = useState<number | null>(null)
   const [vMarqueOpen, setVMarqueOpen] = useState(false)
   const [vModeleOpen, setVModeleOpen] = useState(false)
-  const [vehiclesData, setVehiclesData] = useState<VehicleEntry[]>([])
-  const [vehiclesLoaded, setVehiclesLoaded] = useState(false)
+  const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([])
+  const [vehicleModelsLoaded, setVehicleModelsLoaded] = useState(false)
 
   const uniqueMakes = useMemo(
-    () => [...new Set(vehiclesData.map((v) => v.make))].sort((a, b) => a.localeCompare(b)),
-    [vehiclesData]
+    () => [...new Set(vehicleModels.map((v) => v.marque))].sort((a, b) => a.localeCompare(b)),
+    [vehicleModels]
   )
 
   const marqueSuggestions = useMemo(() => {
@@ -148,11 +144,11 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
     const target = vMarque.trim().toLowerCase()
     if (!target) return [] as string[]
     return [...new Set(
-      vehiclesData
-        .filter((v) => v.make.toLowerCase() === target)
-        .map((v) => v.model)
+      vehicleModels
+        .filter((v) => v.marque.toLowerCase() === target)
+        .map((v) => v.modele)
     )].sort((a, b) => a.localeCompare(b))
-  }, [vMarque, vehiclesData])
+  }, [vMarque, vehicleModels])
 
   const modeleSuggestions = useMemo(() => {
     const q = vModele.trim().toLowerCase()
@@ -162,26 +158,36 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       .slice(0, 8)
   }, [vModele, modelsForMarque])
 
+  const selectedModel = useMemo(() => {
+    const m = vMarque.trim().toLowerCase()
+    const mo = vModele.trim().toLowerCase()
+    if (!m || !mo) return null
+    return vehicleModels.find(
+      (v) => v.marque.toLowerCase() === m && v.modele.toLowerCase() === mo
+    ) ?? null
+  }, [vMarque, vModele, vehicleModels])
+
   function selectMarque(make: string) {
     setVMarque(make)
     setVMarqueOpen(false)
     setVModele("")
+    setVCategory("")
     setVMotorisation("")
-    setVCo2("")
-    setVCylindree(null)
   }
 
   function selectModele(model: string) {
     setVModele(model)
     setVModeleOpen(false)
     const target = vMarque.trim().toLowerCase()
-    const best = vehiclesData
-      .filter((v) => v.make.toLowerCase() === target && v.model === model)
-      .sort((a, b) => b.year - a.year)[0]
-    if (best) {
-      setVMotorisation(best.motorisation)
-      setVCo2(best.co2 != null ? String(best.co2) : "")
-      setVCylindree(best.cylindree)
+    const entry = vehicleModels.find(
+      (v) => v.marque.toLowerCase() === target && v.modele === model
+    )
+    if (entry) {
+      setVCategory(entry.categorie)
+      setVMotorisation(entry.motorisations.length === 1 ? entry.motorisations[0] : "")
+    } else {
+      setVCategory("")
+      setVMotorisation("")
     }
   }
 
@@ -203,21 +209,22 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   }, [])
 
   useEffect(() => {
-    if (step !== 5 || vehiclesLoaded) return
-    console.log("[vehicles] début fetch /data/vehicles.json")
-    fetch('/data/vehicles.json')
-      .then((res) => {
-        console.log("[vehicles] réponse statut:", res.status)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return res.json()
-      })
-      .then((data: VehicleEntry[]) => {
-        console.log("[vehicles] données chargées:", data.length, "véhicules")
-        setVehiclesData(data)
-        setVehiclesLoaded(true)
-      })
-      .catch((err) => console.error("[vehicles] ERREUR:", err))
-  }, [step, vehiclesLoaded])
+    if (step !== 5 || vehicleModelsLoaded) return
+    ;(async () => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("vehicle_models")
+        .select("marque,modele,categorie,motorisations")
+        .order("marque", { ascending: true })
+        .order("modele", { ascending: true })
+      if (error) {
+        console.error("[vehicle_models] erreur Supabase:", error.message)
+        return
+      }
+      setVehicleModels((data ?? []) as VehicleModel[])
+      setVehicleModelsLoaded(true)
+    })()
+  }, [step, vehicleModelsLoaded])
 
   async function saveStep(n: number) {
     try {
@@ -432,7 +439,6 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("no user")
-      const co2Int = vCo2 ? parseInt(vCo2, 10) : null
       const { error } = await supabase.from("vehicles").insert({
         user_id: user.id,
         immatriculation: vImmat || null,
@@ -440,8 +446,6 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
         marque: vMarque || null,
         modele: vModele || null,
         motorisation: vMotorisation || null,
-        co2: Number.isFinite(co2Int) ? co2Int : null,
-        cylindree: vCylindree,
       })
       if (error) throw error
       await goToStep(6)
@@ -919,25 +923,6 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                 <label className="text-xs font-medium text-white/70 ml-1">Plaque d'immatriculation</label>
                 <input type="text" value={vImmat} onChange={(e) => setVImmat(e.target.value.toUpperCase())} placeholder="AB-123-CD" className={INPUT_CLS} />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-white/70 ml-1">Catégorie</label>
-                <select
-                  value={vCategory}
-                  onChange={(e) => setVCategory(e.target.value)}
-                  className={`${INPUT_CLS} appearance-none`}
-                  style={{
-                    backgroundImage: `url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23A3A3A3%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")`,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right 1rem top 50%',
-                    backgroundSize: '0.65rem auto',
-                  }}
-                >
-                  <option value="" disabled className="bg-onyx text-muted-foreground">Sélectionner...</option>
-                  <option value="berline" className="bg-onyx text-white">Berline</option>
-                  <option value="van" className="bg-onyx text-white">Van</option>
-                  <option value="minibus" className="bg-onyx text-white">Minibus</option>
-                </select>
-              </div>
               <div className="space-y-1.5 relative">
                 <label className="text-xs font-medium text-white/70 ml-1">MARQUE (D.1)</label>
                 <input
@@ -946,10 +931,10 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                   onChange={(e) => { setVMarque(e.target.value); setVMarqueOpen(true) }}
                   onFocus={() => setVMarqueOpen(true)}
                   onBlur={() => setTimeout(() => setVMarqueOpen(false), 150)}
-                  placeholder={vehiclesLoaded ? "Mercedes-Benz" : "Chargement…"}
+                  placeholder={vehicleModelsLoaded ? "Mercedes-Benz" : "Chargement…"}
                   className={INPUT_CLS}
                   autoComplete="off"
-                  disabled={!vehiclesLoaded}
+                  disabled={!vehicleModelsLoaded}
                 />
                 {vMarqueOpen && marqueSuggestions.length > 0 && (
                   <ul className="absolute z-50 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl bg-onyx-card border border-onyx-border/60 shadow-lg">
@@ -975,10 +960,10 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                   onChange={(e) => { setVModele(e.target.value); setVModeleOpen(true) }}
                   onFocus={() => setVModeleOpen(true)}
                   onBlur={() => setTimeout(() => setVModeleOpen(false), 150)}
-                  placeholder={vehiclesLoaded ? "Classe E" : "Chargement…"}
+                  placeholder={vehicleModelsLoaded ? "Classe E" : "Chargement…"}
                   className={INPUT_CLS}
                   autoComplete="off"
-                  disabled={!vehiclesLoaded || !vMarque}
+                  disabled={!vehicleModelsLoaded || !vMarque}
                 />
                 {vModeleOpen && modeleSuggestions.length > 0 && (
                   <ul className="absolute z-50 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl bg-onyx-card border border-onyx-border/60 shadow-lg">
@@ -997,28 +982,37 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                 )}
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-white/70 ml-1">Type de moteur</label>
+                <label className="text-xs font-medium text-white/70 ml-1">Catégorie</label>
                 <input
                   type="text"
-                  value={vMotorisation}
-                  onChange={(e) => setVMotorisation(e.target.value)}
-                  placeholder="Essence, Diesel, Hybride…"
-                  className={INPUT_CLS}
+                  value={vCategory}
+                  readOnly
+                  disabled
+                  placeholder="Définie automatiquement par le modèle"
+                  className={`${INPUT_CLS} opacity-70 cursor-not-allowed`}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-white/70 ml-1">CO2 — TAUX D&apos;ÉMISSION (V.7)</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={vCo2}
-                    onChange={(e) => setVCo2(e.target.value.replace(/[^\d]/g, ""))}
-                    placeholder="120"
-                    className={`${INPUT_CLS} pr-14`}
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">g/km</span>
-                </div>
+                <label className="text-xs font-medium text-white/70 ml-1">Motorisation</label>
+                <select
+                  value={vMotorisation}
+                  onChange={(e) => setVMotorisation(e.target.value)}
+                  disabled={!selectedModel || selectedModel.motorisations.length === 0}
+                  className={`${INPUT_CLS} appearance-none ${(!selectedModel || selectedModel.motorisations.length === 0) ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23A3A3A3%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 1rem top 50%',
+                    backgroundSize: '0.65rem auto',
+                  }}
+                >
+                  <option value="" disabled className="bg-onyx text-muted-foreground">
+                    {selectedModel ? "Sélectionner..." : "Choisissez d'abord un modèle"}
+                  </option>
+                  {(selectedModel?.motorisations ?? []).map((m) => (
+                    <option key={m} value={m} className="bg-onyx text-white">{m}</option>
+                  ))}
+                </select>
               </div>
               <p className="text-[11px] text-muted-foreground/70 text-center pt-1">
                 Vous ne trouvez pas votre véhicule ?{" "}
@@ -1032,7 +1026,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             </div>
 
             {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
-            <button onClick={handleAddVehicle} disabled={loading || !vImmat || !vCategory || !vMarque || !vModele} className={PRIMARY_BTN}>
+            <button onClick={handleAddVehicle} disabled={loading || !vImmat || !vCategory || !vMarque || !vModele || !vMotorisation} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Ajout...</span> : <><Save className="h-4 w-4" strokeWidth={2} />Ajouter mon véhicule</>}
             </button>
             <button type="button" onClick={() => void goToStep(6)} disabled={loading} className={SECONDARY_BTN}>Plus tard</button>
