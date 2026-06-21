@@ -196,6 +196,13 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
     setVMotorisation("")
   }
 
+  function resetVehicleSelection() {
+    setVMarque("")
+    setVModele("")
+    setVCategory("")
+    setVMotorisation("")
+  }
+
   function selectModele(model: string) {
     setVModele(model)
     setVModeleOpen(false)
@@ -820,6 +827,10 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                 </div>
               </div>
 
+              <p className="p-3 rounded-xl bg-secondary/40 border border-onyx-border/40 text-[11px] text-white/70 leading-relaxed">
+                🔒 Ces 3 informations légales — raison sociale, forme juridique et SIREN — sont définitives après validation de votre inscription. L&apos;adresse, la TVA et vos autres coordonnées resteront modifiables depuis votre dashboard.
+              </p>
+
               <div className="border-t border-onyx-border/30 my-2" />
 
               <div className="space-y-1.5">
@@ -976,60 +987,93 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
               </div>
               <div className="space-y-1.5 relative">
                 <label className="text-xs font-medium text-white/70 ml-1">MARQUE (D.1)</label>
-                <input
-                  type="text"
-                  value={vMarque}
-                  onChange={(e) => { setVMarque(e.target.value); setVMarqueOpen(true) }}
-                  onFocus={() => setVMarqueOpen(true)}
-                  onBlur={() => setTimeout(() => setVMarqueOpen(false), 150)}
-                  placeholder={vehicleModelsLoaded ? "Mercedes-Benz" : "Chargement…"}
-                  className={INPUT_CLS}
-                  autoComplete="off"
-                  disabled={!vehicleModelsLoaded}
-                />
-                {vMarqueOpen && marqueSuggestions.length > 0 && (
-                  <ul className="absolute z-50 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl bg-onyx-card border border-onyx-border/60 shadow-lg">
-                    {marqueSuggestions.map((m) => (
-                      <li key={m}>
-                        <button
-                          type="button"
-                          onMouseDown={(e) => { e.preventDefault(); selectMarque(m) }}
-                          className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-gold/10 transition-colors"
-                        >
-                          {m}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                {selectedModel ? (
+                  <input
+                    type="text"
+                    value={vMarque}
+                    readOnly
+                    disabled
+                    className={`${INPUT_CLS} opacity-70 cursor-not-allowed`}
+                  />
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={vMarque}
+                      onChange={(e) => { setVMarque(e.target.value); setVMarqueOpen(true) }}
+                      onFocus={() => setVMarqueOpen(true)}
+                      onBlur={() => setTimeout(() => setVMarqueOpen(false), 150)}
+                      placeholder={vehicleModelsLoaded ? "Mercedes-Benz" : "Chargement…"}
+                      className={INPUT_CLS}
+                      autoComplete="off"
+                      disabled={!vehicleModelsLoaded}
+                    />
+                    {vMarqueOpen && marqueSuggestions.length > 0 && (
+                      <ul className="absolute z-50 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl bg-onyx-card border border-onyx-border/60 shadow-lg">
+                        {marqueSuggestions.map((m) => (
+                          <li key={m}>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => { e.preventDefault(); selectMarque(m) }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-gold/10 transition-colors"
+                            >
+                              {m}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
                 )}
               </div>
               <div className="space-y-1.5 relative">
                 <label className="text-xs font-medium text-white/70 ml-1">MODÈLE (D.3)</label>
-                <input
-                  type="text"
-                  value={vModele}
-                  onChange={(e) => { setVModele(e.target.value); setVModeleOpen(true) }}
-                  onFocus={() => setVModeleOpen(true)}
-                  onBlur={() => setTimeout(() => setVModeleOpen(false), 150)}
-                  placeholder={vehicleModelsLoaded ? "Classe E" : "Chargement…"}
-                  className={INPUT_CLS}
-                  autoComplete="off"
-                  disabled={!vehicleModelsLoaded || !vMarque}
-                />
-                {vModeleOpen && modeleSuggestions.length > 0 && (
-                  <ul className="absolute z-50 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl bg-onyx-card border border-onyx-border/60 shadow-lg">
-                    {modeleSuggestions.map((m) => (
-                      <li key={m}>
-                        <button
-                          type="button"
-                          onMouseDown={(e) => { e.preventDefault(); selectModele(m) }}
-                          className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-gold/10 transition-colors"
-                        >
-                          {m}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                {selectedModel ? (
+                  <input
+                    type="text"
+                    value={vModele}
+                    readOnly
+                    disabled
+                    className={`${INPUT_CLS} opacity-70 cursor-not-allowed`}
+                  />
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={vModele}
+                      onChange={(e) => { setVModele(e.target.value); setVModeleOpen(true) }}
+                      onFocus={() => setVModeleOpen(true)}
+                      onBlur={() => setTimeout(() => setVModeleOpen(false), 150)}
+                      placeholder={vehicleModelsLoaded ? "Classe E" : "Chargement…"}
+                      className={INPUT_CLS}
+                      autoComplete="off"
+                      disabled={!vehicleModelsLoaded || !vMarque}
+                    />
+                    {vModeleOpen && modeleSuggestions.length > 0 && (
+                      <ul className="absolute z-50 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl bg-onyx-card border border-onyx-border/60 shadow-lg">
+                        {modeleSuggestions.map((m) => (
+                          <li key={m}>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => { e.preventDefault(); selectModele(m) }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-gold/10 transition-colors"
+                            >
+                              {m}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+                {selectedModel && (
+                  <button
+                    type="button"
+                    onClick={resetVehicleSelection}
+                    className="mt-1 text-[11px] text-gold hover:underline"
+                  >
+                    ↻ Changer de véhicule
+                  </button>
                 )}
               </div>
               <div className="space-y-1.5">
