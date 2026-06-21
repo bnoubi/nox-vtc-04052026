@@ -191,6 +191,10 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   const [dEmail, setDEmail] = useState("")
 
   useEffect(() => {
+    console.log("[slide] step:", step, "monté:", step === -1)
+  }, [step])
+
+  useEffect(() => {
     ;(async () => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
@@ -559,7 +563,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             key="slides"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            exit={{ opacity: 0, pointerEvents: "none" }}
             transition={{ duration: 0.3 }}
             className="fixed inset-0 z-30 bg-[#0a0a0a] flex flex-col"
           >
@@ -666,7 +670,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
             className={card}
-            style={{ position: 'relative', zIndex: 10 }}
+            style={{ position: 'relative', zIndex: 40 }}
           >
             <div className="w-16 h-16 rounded-2xl bg-gold/10 border border-gold/20 flex items-center justify-center mb-6">
               <Building2 className="h-8 w-8 text-gold" strokeWidth={1.5} />

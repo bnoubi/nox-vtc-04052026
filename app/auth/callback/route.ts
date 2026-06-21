@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
 
   console.log('[callback] session établie:', !!session)
   console.log('[callback] user:', session?.user?.id)
+  console.log('[callback] nouveau user créé:', session?.user?.id, 'email:', session?.user?.email)
 
   if (exchangeError) {
     console.error('[callback] Erreur échange:', exchangeError.message)
@@ -120,8 +121,11 @@ export async function GET(request: NextRequest) {
           onboarding_status: 'not_started',
           onboarding_step: 0,
         })
-      if (insertErr && insertErr.code !== '23505') {
-        console.error('[callback] user_accounts insert err:', insertErr.message)
+      if (insertErr) {
+        console.error('[callback] user_accounts insert err:', insertErr.code, insertErr.message)
+        if (insertErr.code === '23505') {
+          console.warn('[callback] doublon user_accounts détecté (email ou id existant) — résidu d\'un ancien compte non purgé ?')
+        }
       }
       const reselect = await adminClient
         .from('user_accounts')
