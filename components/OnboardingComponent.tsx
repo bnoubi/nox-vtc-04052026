@@ -40,6 +40,26 @@ function libelleNatureJuridique(code?: string): string {
   return NATURE_JURIDIQUE_LIBELLES[(code || "").trim()] || ""
 }
 
+function calculateVehicleAge(dateStr: string): { years: number; days: number; display: string } {
+  if (!dateStr) return { years: 0, days: 0, display: "" }
+  const startDate = new Date(dateStr)
+  const today = new Date()
+  let years = today.getFullYear() - startDate.getFullYear()
+  const monthDiff = today.getMonth() - startDate.getMonth()
+  const dayDiff = today.getDate() - startDate.getDate()
+  if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) years--
+  const yearAnniversary = new Date(startDate)
+  yearAnniversary.setFullYear(startDate.getFullYear() + years)
+  const daysRemaining = Math.floor((today.getTime() - yearAnniversary.getTime()) / (1000 * 60 * 60 * 24))
+  return {
+    years,
+    days: daysRemaining,
+    display: `${years} an${years > 1 ? "s" : ""} et ${daysRemaining} jour${daysRemaining > 1 ? "s" : ""}`,
+  }
+}
+
+const VEHICLE_CATEGORIES = ["Berline", "SUV", "Break", "Monospace/Van", "Citadine", "Premium"] as const
+
 function normalizeStatut(libelle?: string): string {
   const s = (libelle || "").toLowerCase().trim()
   if (!s) return ""
@@ -122,6 +142,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   const [vMarque, setVMarque] = useState("")
   const [vModele, setVModele] = useState("")
   const [vMotorisation, setVMotorisation] = useState("")
+  const [vDateImmat, setVDateImmat] = useState("")
   const [vMarqueOpen, setVMarqueOpen] = useState(false)
   const [vModeleOpen, setVModeleOpen] = useState(false)
   const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([])
@@ -439,14 +460,27 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("no user")
-      const { error } = await supabase.from("vehicles").insert({
+      const payload = {
         user_id: user.id,
         immatriculation: vImmat || null,
         category: vCategory || null,
         marque: vMarque || null,
         modele: vModele || null,
         motorisation: vMotorisation || null,
-      })
+        date_mise_en_circulation: vDateImmat || null,
+      }
+      // Idempotence onboarding : un véhicule existant pour ce user est forcément
+      // celui de la session précédente (dashboard inaccessible avant la fin du flow).
+      const { data: existing } = await supabase
+        .from("vehicles")
+        .select("id")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      const { error } = existing
+        ? await supabase.from("vehicles").update(payload).eq("id", existing.id)
+        : await supabase.from("vehicles").insert(payload)
       if (error) throw error
       await goToStep(6)
     } catch (e) {
@@ -458,19 +492,36 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   }
 
   async function handleAddDriver() {
-    setLoading(true); setSaveError(null)
+    setSaveError(null)
+    const trimmedEmail = dEmail.trim()
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setSaveError("Format d'email invalide.")
+      return
+    }
+    setLoading(true)
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("no user")
       const full = `${dPrenom} ${dNom}`.trim()
-      const { error } = await supabase.from("drivers").insert({
+      const payload = {
         user_id: user.id,
         prenom: dPrenom || null,
         nom: dNom || null,
         name: full || null,
-        email: dEmail || null,
-      })
+        email: trimmedEmail || null,
+      }
+      // Idempotence onboarding : même logique que handleAddVehicle.
+      const { data: existing } = await supabase
+        .from("drivers")
+        .select("id")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      const { error } = existing
+        ? await supabase.from("drivers").update(payload).eq("id", existing.id)
+        : await supabase.from("drivers").insert(payload)
       if (error) throw error
       await afterDriverStep()
     } catch (e) {
@@ -982,15 +1033,38 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                 )}
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-white/70 ml-1">Catégorie</label>
+                <label className="text-xs font-medium text-white/70 ml-1">Date de 1ère immatriculation</label>
                 <input
-                  type="text"
-                  value={vCategory}
-                  readOnly
-                  disabled
-                  placeholder="Définie automatiquement par le modèle"
-                  className={`${INPUT_CLS} opacity-70 cursor-not-allowed`}
+                  type="date"
+                  value={vDateImmat}
+                  onChange={(e) => setVDateImmat(e.target.value)}
+                  className={`${INPUT_CLS} [color-scheme:dark]`}
                 />
+                {vDateImmat && (
+                  <div className="mt-2 px-3 py-2 rounded-lg bg-secondary/40 border border-onyx-border/40 flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground">Âge du véhicule</span>
+                    <span className="text-xs font-semibold text-gold">{calculateVehicleAge(vDateImmat).display}</span>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-white/70 ml-1">Catégorie</label>
+                <select
+                  value={vCategory}
+                  onChange={(e) => setVCategory(e.target.value)}
+                  className={`${INPUT_CLS} appearance-none`}
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23A3A3A3%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 1rem top 50%',
+                    backgroundSize: '0.65rem auto',
+                  }}
+                >
+                  <option value="" disabled className="bg-onyx text-muted-foreground">Sélectionner...</option>
+                  {VEHICLE_CATEGORIES.map((c) => (
+                    <option key={c} value={c} className="bg-onyx text-white">{c}</option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-white/70 ml-1">Motorisation</label>
@@ -1026,7 +1100,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             </div>
 
             {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
-            <button onClick={handleAddVehicle} disabled={loading || !vImmat || !vCategory || !vMarque || !vModele || !vMotorisation} className={PRIMARY_BTN}>
+            <button onClick={handleAddVehicle} disabled={loading || !vImmat || !vCategory || !vMarque || !vModele || !vMotorisation || !vDateImmat} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Ajout...</span> : <><Save className="h-4 w-4" strokeWidth={2} />Ajouter mon véhicule</>}
             </button>
             <button type="button" onClick={() => void goToStep(6)} disabled={loading} className={SECONDARY_BTN}>Plus tard</button>
@@ -1134,8 +1208,11 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                     onChange={(e) => setPwdConfirm(e.target.value)}
                     placeholder="Confirmez votre mot de passe"
                     autoComplete="new-password"
-                    className={`${INPUT_CLS} pl-11`}
+                    className={`${INPUT_CLS} pl-11 pr-11`}
                   />
+                  <button type="button" onClick={() => setShowPwdField(!showPwdField)} className="absolute right-4 top-1/2 -translate-y-1/2 p-1">
+                    {showPwdField ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
+                  </button>
                 </div>
               </div>
             </div>
