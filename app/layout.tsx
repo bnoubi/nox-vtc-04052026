@@ -4,6 +4,7 @@ import { Inter, Montserrat } from 'next/font/google'
 import { headers } from 'next/headers'
 
 import './globals.css'
+import { AxeptioConsent } from '@/components/AxeptioConsent'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -43,7 +44,29 @@ export default async function RootLayout({
   const nonce = (await headers()).get('x-nonce') ?? ''
   return (
     <html lang="en" nonce={nonce} className={`${inter.variable} ${montserrat.variable}`} suppressHydrationWarning>
-      <body className="font-sans antialiased" suppressHydrationWarning>{children}</body>
+      <head>
+        <script
+          nonce={nonce}
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.axeptioSettings = {
+                clientId: "6a38caef6f0c0b69da2fc608",
+                cookiesVersion: "appnoxvtc-fr",
+              };
+              (function(d, s) {
+                var t = d.getElementsByTagName(s)[0], e = d.createElement(s);
+                e.async = true;
+                e.src = "//static.axept.io/sdk.js";
+                t.parentNode.insertBefore(e, t);
+              })(document, "script");
+            `,
+          }}
+        />
+      </head>
+      <body className="font-sans antialiased" suppressHydrationWarning>
+        <AxeptioConsent />
+        {children}
+      </body>
     </html>
   )
 }
