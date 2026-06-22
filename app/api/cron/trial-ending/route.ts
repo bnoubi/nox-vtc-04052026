@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
   const targets = subs ?? []
   let sent = 0
   let failed = 0
+  let raced = 0
   const errors: string[] = []
 
   for (const sub of targets) {
@@ -66,17 +67,41 @@ export async function GET(request: NextRequest) {
       continue
     }
 
+    // Lock-then-send : on pose le flag d'abord, avec garde-fou `.is null`
+    // pour rendre l'opération atomique vs un autre worker qui aurait
+    // sélectionné le même candidat. Postgres garantit l'unicité du UPDATE.
+    const sentAt = new Date().toISOString()
+    const { data: locked, error: lockErr } = await adminDb
+      .from("subscriptions")
+      .update({ trial_ending_email_sent_at: sentAt })
+      .eq("id", sub.id)
+      .is("trial_ending_email_sent_at", null)
+      .select("id")
+
+    if (lockErr) {
+      failed++
+      errors.push(`${account.email}: lock ${lockErr.message}`)
+      continue
+    }
+    if (!locked || locked.length === 0) {
+      // Un autre worker (ou un appel concurrent) a déjà réservé l'envoi.
+      raced++
+      continue
+    }
+
     const prenom = (account.prenom || "").trim()
     const nom = (account.nom || "").trim()
     const { subject, html } = trialEndingEmail({ prenom, nom })
     const result = await sendEmail(account.email, subject, html)
+
     if (result.success) {
       sent++
+    } else {
+      // Rollback du flag pour permettre un retry au prochain run.
       await adminDb
         .from("subscriptions")
-        .update({ trial_ending_email_sent_at: new Date().toISOString() })
+        .update({ trial_ending_email_sent_at: null })
         .eq("id", sub.id)
-    } else {
       failed++
       errors.push(`${account.email}: ${result.error}`)
     }
@@ -87,6 +112,7 @@ export async function GET(request: NextRequest) {
     candidates: targets.length,
     sent,
     failed,
+    raced,
     ...(errors.length ? { errors } : {}),
   })
 }
