@@ -13,9 +13,13 @@ export async function POST() {
 
   const { data: account } = await supabase
     .from("user_accounts")
-    .select("prenom, nom")
+    .select("prenom, nom, welcome_emails_sent_at")
     .eq("id", user.id)
     .maybeSingle()
+
+  if (account?.welcome_emails_sent_at) {
+    return NextResponse.json({ skipped: true, reason: "already_sent", at: account.welcome_emails_sent_at })
+  }
 
   const meta = user.user_metadata ?? {}
   const prenom = (account?.prenom || meta.prenom || meta.given_name || "").trim()
@@ -39,6 +43,13 @@ export async function POST() {
     console.error("[onboarding/welcome] email 1 erreur:", welcomeResult.error)
     return NextResponse.json({ error: "Email 1 failed", details: welcomeResult.error }, { status: 500 })
   }
+
+  // Pose le flag d'idempotence dès qu'Email 1 part avec succès — on évite
+  // qu'un second appel reparte Email 1 même si Email 2 plante juste après.
+  await supabase
+    .from("user_accounts")
+    .update({ welcome_emails_sent_at: new Date().toISOString() })
+    .eq("id", user.id)
 
   const scheduledAt = new Date(Date.now() + 3 * 60 * 1000).toISOString()
   const trialResult = await sendEmail(user.email, trial.subject, trial.html, { scheduledAt })
