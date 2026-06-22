@@ -37,8 +37,9 @@ export async function GET(request: NextRequest) {
 
   const { data: subs, error: subsErr } = await adminDb
     .from("subscriptions")
-    .select("user_id, trial_ends_at")
+    .select("id, user_id, trial_ends_at")
     .eq("status", "trial")
+    .is("trial_ending_email_sent_at", null)
     .gte("trial_ends_at", start.toISOString())
     .lt("trial_ends_at", end.toISOString())
 
@@ -71,6 +72,10 @@ export async function GET(request: NextRequest) {
     const result = await sendEmail(account.email, subject, html)
     if (result.success) {
       sent++
+      await adminDb
+        .from("subscriptions")
+        .update({ trial_ending_email_sent_at: new Date().toISOString() })
+        .eq("id", sub.id)
     } else {
       failed++
       errors.push(`${account.email}: ${result.error}`)
