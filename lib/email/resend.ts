@@ -6,12 +6,14 @@ export async function sendEmail(
   to: string,
   subject: string,
   html: string,
+  options?: { scheduledAt?: string },
 ): Promise<{ success: boolean; error?: string }> {
   const { error } = await resend.emails.send({
     from: 'NoX VTC <noreply@noxvtc.fr>',
     to: [to],
     subject,
     html,
+    ...(options?.scheduledAt ? { scheduledAt: options.scheduledAt } : {}),
   })
   if (error) return { success: false, error: error.message }
   return { success: true }

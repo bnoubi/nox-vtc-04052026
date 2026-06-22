@@ -31,3 +31,6 @@ agentdb.rvf.lock
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+# Données véhicules brutes (XML/CSV/XLSX volumineux, sources locales uniquement)
+/data/
