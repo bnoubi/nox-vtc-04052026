@@ -9,7 +9,7 @@ function buildCspHeaders(request: NextRequest): { nonce: string; csp: string } {
     `script-src 'self' 'nonce-${nonce}' https://challenges.cloudflare.com https://maps.googleapis.com https://maps.gstatic.com https://static.axept.io https://*.axept.io https://www.googletagmanager.com`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' blob: https://maps.googleapis.com https://maps.gstatic.com https://*.supabase.co https://images.unsplash.com https://static.axept.io https://*.axept.io https://www.google-analytics.com https://storage.googleapis.com",
+    "img-src 'self' blob: https://maps.googleapis.com https://maps.gstatic.com https://*.supabase.co https://images.unsplash.com https://static.axept.io https://*.axept.io https://axeptio.imgix.net https://www.google-analytics.com https://storage.googleapis.com",
     "connect-src 'self' https://*.supabase.co https://challenges.cloudflare.com https://maps.googleapis.com https://places.googleapis.com https://routes.googleapis.com https://recherche-entreprises.api.gouv.fr wss://*.supabase.co https://*.axept.io https://www.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com",
     "frame-src https://challenges.cloudflare.com https://*.axept.io",
     "object-src 'none'",
