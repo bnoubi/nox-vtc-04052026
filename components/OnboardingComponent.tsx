@@ -105,6 +105,10 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isGoogleUser, setIsGoogleUser] = useState(false)
 
+  // CGU/CGV — acceptation obligatoire à la dernière étape
+  const [cguAccepted, setCguAccepted] = useState(false)
+  const [showCguModal, setShowCguModal] = useState(false)
+
   // Step 7 (mot de passe — uniquement pour utilisateurs magic link)
   const [pwd, setPwd] = useState("")
   const [pwdConfirm, setPwdConfirm] = useState("")
@@ -580,7 +584,10 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        await supabase.from("user_accounts").update({ onboarding_status: "completed" }).eq("id", user.id)
+        await supabase.from("user_accounts").update({
+          onboarding_status: "completed",
+          cgu_accepted_at: new Date().toISOString(),
+        }).eq("id", user.id)
         await supabase.from("profiles").upsert({ user_id: user.id, onboarding_status: "completed" }, { onConflict: 'user_id' })
       }
     } catch (e) {
@@ -601,6 +608,27 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
     >
       Se déconnecter
     </button>
+  )
+
+  const cguCheckbox = (
+    <label className="flex items-start gap-3 mb-4 p-3 rounded-xl bg-gold/5 border border-gold/20 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={cguAccepted}
+        onChange={(e) => setCguAccepted(e.target.checked)}
+        className="mt-0.5 h-4 w-4 accent-gold cursor-pointer flex-shrink-0"
+      />
+      <span className="text-xs text-white/80 leading-relaxed">
+        J'ai lu et j'accepte les{" "}
+        <button
+          type="button"
+          onClick={(e) => { e.preventDefault(); setShowCguModal(true) }}
+          className="text-gold underline hover:text-gold-light"
+        >
+          Conditions Générales d'Utilisation et de Vente
+        </button>
+      </span>
+    </label>
   )
 
   const prevBtnFor = (n: number, before?: () => void) => (
@@ -1206,11 +1234,12 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
               </div>
             </div>
 
+            {isGoogleUser && cguCheckbox}
             {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
-            <button onClick={handleAddDriver} disabled={loading || !dPrenom || !dNom} className={PRIMARY_BTN}>
+            <button onClick={handleAddDriver} disabled={loading || !dPrenom || !dNom || (isGoogleUser && !cguAccepted)} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Ajout...</span> : <><CheckCircle2 className="h-4 w-4" strokeWidth={2} />Ajouter et terminer</>}
             </button>
-            <button type="button" onClick={afterDriverStep} disabled={loading} className={SECONDARY_BTN}>Plus tard</button>
+            <button type="button" onClick={afterDriverStep} disabled={loading || (isGoogleUser && !cguAccepted)} className={SECONDARY_BTN}>Plus tard</button>
             {logoutBtn}
           </motion.div>
         )}
@@ -1272,14 +1301,73 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
               </div>
             </div>
 
+            {cguCheckbox}
             {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
-            <button onClick={handleSavePassword} disabled={loading || pwd.length < 8 || pwd !== pwdConfirm} className={PRIMARY_BTN}>
+            <button onClick={handleSavePassword} disabled={loading || pwd.length < 8 || pwd !== pwdConfirm || !cguAccepted} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Enregistrement...</span> : <><CheckCircle2 className="h-4 w-4" strokeWidth={2} />Finaliser mon inscription</>}
             </button>
-            <button type="button" onClick={finishOnboarding} disabled={loading} className={SECONDARY_BTN}>
+            <button type="button" onClick={finishOnboarding} disabled={loading || !cguAccepted} className={SECONDARY_BTN}>
               Passer cette étape
             </button>
             {logoutBtn}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showCguModal && (
+          <motion.div
+            key="cgu-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowCguModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-3xl h-[85vh] bg-[#1a1a1a] border border-gold/30 rounded-3xl flex flex-col overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-onyx-border/50">
+                <h2 className="text-base font-bold font-heading text-white">Conditions Générales d'Utilisation et de Vente</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowCguModal(false)}
+                  className="text-white/60 hover:text-white text-2xl leading-none"
+                  aria-label="Fermer"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="flex-1 bg-[#0a0a0a] overflow-hidden">
+                <iframe
+                  src="/assets/CGU_CGV_NoX_VTC.pdf#toolbar=0&navpanes=0"
+                  className="w-full h-full"
+                  title="CGU/CGV NoX VTC"
+                />
+              </div>
+              <div className="flex gap-3 px-6 py-4 border-t border-onyx-border/50">
+                <a
+                  href="/assets/CGU_CGV_NoX_VTC.pdf"
+                  download="CGU_CGV_NoX_VTC.pdf"
+                  className="flex-1 h-11 rounded-xl border border-gold/30 text-gold text-sm font-medium flex items-center justify-center hover:bg-gold/10 transition-colors"
+                >
+                  Télécharger le PDF
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setShowCguModal(false)}
+                  className="flex-1 h-11 rounded-xl bg-gold text-primary-foreground text-sm font-semibold hover:bg-gold-light active:scale-[0.98] transition-all"
+                >
+                  Fermer
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
