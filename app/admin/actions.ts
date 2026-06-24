@@ -1,12 +1,33 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { createServerClient } from '@supabase/ssr'
 import { createClient as createSbClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/email/resend'
 import { templateMessage } from '@/lib/email/templates'
+import {
+  PLAN_RANK,
+  TRIAL_PLAN_CODE,
+  effectivePlan,
+  effectiveStatus,
+  effectiveTrialDates,
+  normalizePlanCode,
+  normalizeSubStatus,
+  displayName,
+  type PlanCode,
+  type SubStatus,
+} from '@/lib/plans'
 
-const PLAN_RANK: Record<string, number> = { SOLO: 1, DUO: 2, TEAM: 3, ENTERPRISE: 4 }
+// Revalide les écrans admin après chaque écriture en base.
+// targetUserId : si fourni, invalide aussi la page détail user.
+function revalidateAdminWrites(targetUserId?: string) {
+  revalidatePath('/admin')
+  revalidatePath('/admin/users')
+  revalidatePath('/admin/subscriptions')
+  revalidatePath('/admin/tokens')
+  if (targetUserId) revalidatePath('/admin/users/[id]', 'page')
+}
 
 // ─── Types KPI ───────────────────────────────────────────────────────────────
 
@@ -39,6 +60,10 @@ function makeAdminClient() {
 
 function sumAmount(rows: { amount: number | null }[] | null): number {
   return rows?.reduce((s, r) => s + Math.abs(r.amount ?? 0), 0) ?? 0
+}
+
+function sumColumn<T extends Record<string, unknown>>(rows: T[] | null, col: keyof T): number {
+  return rows?.reduce((s, r) => s + Math.abs(Number(r[col] ?? 0)), 0) ?? 0
 }
 
 // ─── Server Action principale ─────────────────────────────────────────────────
@@ -75,9 +100,9 @@ export async function getAdminKPIs(): Promise<AdminKPIs> {
     inscritsPrev,
   ] = await Promise.all([
     // 1
-    db.from('subscriptions').select('user_id').eq('status', 'active'),
-    // 2
-    db.from('subscriptions').select('user_id').eq('status', 'trialing'),
+    db.from('subscriptions').select('user_id, status').in('status', ['active']),
+    // 2 — accepter 'trial' (réel en base) ET 'trialing' (legacy/Stripe)
+    db.from('subscriptions').select('user_id, status').in('status', ['trial', 'trialing']),
     // 3 courant
     db.from('subscriptions').select('*', { count: 'exact', head: true })
       .eq('status', 'expired').gte('current_period_end', startCurr),
@@ -96,12 +121,12 @@ export async function getAdminKPIs(): Promise<AdminKPIs> {
     // 5 précédent
     db.from('token_transactions').select('amount')
       .eq('type', 'consumption').gte('created_at', startPrev).lt('created_at', startCurr),
-    // 6 courant
-    db.from('invoices').select('amount')
-      .eq('status', 'paid').gte('created_at', startCurr),
+    // 6 courant — convention métier réelle : colonne `montant_ttc`, statut `payee`
+    db.from('invoices').select('montant_ttc')
+      .eq('status', 'payee').gte('created_at', startCurr),
     // 6 précédent
-    db.from('invoices').select('amount')
-      .eq('status', 'paid').gte('created_at', startPrev).lt('created_at', startCurr),
+    db.from('invoices').select('montant_ttc')
+      .eq('status', 'payee').gte('created_at', startPrev).lt('created_at', startCurr),
     // 7 courant
     db.from('bcs').select('*', { count: 'exact', head: true }).gte('created_at', startCurr),
     // 7 précédent
@@ -136,8 +161,8 @@ export async function getAdminKPIs(): Promise<AdminKPIs> {
       previous: tokUsePrev.error ? null : sumAmount(tokUsePrev.data as { amount: number | null }[]),
     },
     revenus: {
-      current:  revCurr.error ? null : sumAmount(revCurr.data as { amount: number | null }[]),
-      previous: revPrev.error ? null : sumAmount(revPrev.data as { amount: number | null }[]),
+      current:  revCurr.error ? null : sumColumn(revCurr.data as { montant_ttc: number | null }[], 'montant_ttc'),
+      previous: revPrev.error ? null : sumColumn(revPrev.data as { montant_ttc: number | null }[], 'montant_ttc'),
     },
     bcsCount: {
       current:  bcsCurr.error ? null : (bcsCurr.count ?? 0),
@@ -196,14 +221,14 @@ export async function checkAdminRole(): Promise<boolean> {
 export interface UserRow {
   id: string
   email: string
-  full_name: string | null
-  plan: string
+  full_name: string
+  plan: PlanCode
   tokens: number
-  wallet_balance: number | null
+  wallet_balance: number
   account_status: string
   onboarding_status: string
   created_at: string
-  sub_status: string | null
+  sub_status: SubStatus
   phone: string | null
 }
 
@@ -215,8 +240,8 @@ export interface UserDetail extends UserRow {
   last_sign_in_at: string | null
   profile: { nom_entreprise: string | null; statut_juridique: string | null; telephone: string | null } | null
   subscription: {
-    status: string; plan: string | null; started_at: string | null; ended_at: string | null
-    pending_plan: string | null; pending_at: string | null
+    status: SubStatus; plan: PlanCode | null; started_at: string | null; ended_at: string | null
+    pending_plan: PlanCode | null; pending_at: string | null
   } | null
   tokenHistory: { id: string; type: string; amount: number; description: string | null; created_at: string }[]
 }
@@ -271,37 +296,47 @@ export async function getUsers(params: GetUsersParams = {}): Promise<{ users: Us
 
   const [accRes, subRes, walletRes] = await Promise.all([
     db.from('user_accounts')
-      .select('id, email, full_name, plan, tokens, onboarding_status, created_at, account_status, phone')
+      .select('id, email, full_name, prenom, nom, plan, tokens, onboarding_status, created_at, account_status, phone')
       .in('id', allIds),
-    db.from('subscriptions').select('user_id, status').in('user_id', allIds),
+    db.from('subscriptions')
+      .select('user_id, status, plan, trial_started_at, trial_ends_at, created_at')
+      .in('user_id', allIds)
+      .order('created_at', { ascending: false }),
     db.from('wallets').select('user_id, balance').in('user_id', allIds),
   ])
 
-  type AccRow = { id: string; email: string; full_name: string | null; plan: string; tokens: number; onboarding_status: string; created_at: string; account_status: string; phone: string | null }
+  type AccRow = { id: string; email: string; full_name: string | null; prenom: string | null; nom: string | null; plan: string | null; tokens: number; onboarding_status: string; created_at: string; account_status: string | null; phone: string | null }
+  type SubMini = { user_id: string; status: string; plan: string | null; trial_started_at: string | null; trial_ends_at: string | null }
   const accMap: Record<string, AccRow> = {}
-  const subMap: Record<string, string> = {}
+  const subMap: Record<string, SubMini> = {}
   const walletMap: Record<string, number> = {}
   const profMap: Record<string, { email: string | null; created_at: string | null; telephone: string | null }> = {}
 
   if (accRes.data) for (const a of accRes.data as AccRow[]) accMap[a.id] = a
-  if (subRes.data) for (const s of subRes.data as { user_id: string; status: string }[]) subMap[s.user_id] = s.status
+  if (subRes.data) for (const s of subRes.data as SubMini[]) {
+    // Une seule ligne par user (la plus récente — déjà triée desc).
+    if (!subMap[s.user_id]) subMap[s.user_id] = s
+  }
   if (walletRes.data) for (const w of walletRes.data as { user_id: string; balance: number }[]) walletMap[w.user_id] = w.balance
   for (const p of profData as { user_id: string; email: string | null; created_at: string | null; telephone: string | null }[]) profMap[p.user_id] = p
 
   let rows: UserRow[] = allIds.map(uid => {
     const acc = accMap[uid]
+    const sub = subMap[uid] ?? null
     const prof = profMap[uid]
+    const plan = effectivePlan(sub, acc?.plan ?? null)
+    const status = effectiveStatus({ account_status: acc?.account_status ?? null }, sub)
     return {
       id: uid,
       email: acc?.email ?? prof?.email ?? '—',
-      full_name: acc?.full_name ?? null,
-      plan: acc?.plan ?? 'SOLO',
+      full_name: displayName(acc, null, acc?.email ?? prof?.email ?? null),
+      plan,
       tokens: acc?.tokens ?? 0,
-      wallet_balance: walletMap[uid] ?? null,
+      wallet_balance: walletMap[uid] ?? 0,
       account_status: acc?.account_status ?? 'active',
       onboarding_status: acc?.onboarding_status ?? 'not_started',
       created_at: acc?.created_at ?? prof?.created_at ?? new Date().toISOString(),
-      sub_status: subMap[uid] ?? null,
+      sub_status: status,
       phone: acc?.phone ?? null,
     }
   })
@@ -313,7 +348,10 @@ export async function getUsers(params: GetUsersParams = {}): Promise<{ users: Us
       (u.full_name?.toLowerCase().includes(s) ?? false)
     )
   }
-  if (plan !== 'all') rows = rows.filter(u => u.plan === plan)
+  if (plan !== 'all') {
+    const wanted = normalizePlanCode(plan)
+    rows = rows.filter(u => u.plan === wanted)
+  }
 
   rows.sort((a, b) => {
     const av = sortBy === 'tokens' ? a.tokens : sortBy === 'full_name' ? (a.full_name ?? '').toLowerCase() : a.created_at
@@ -338,15 +376,22 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
   const [accRes, profRes, subRes, txRes, walletRes, authUserRes] = await Promise.all([
     db.from('user_accounts').select('id, email, full_name, plan, tokens, onboarding_status, phone, prenom, nom, created_at, account_status').eq('id', userId).maybeSingle(),
     db.from('profiles').select('nom_entreprise, statut_juridique, telephone').eq('user_id', userId).maybeSingle(),
-    db.from('subscriptions').select('status, plan, started_at, ended_at, pending_plan, pending_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    db.from('subscriptions').select('status, plan, current_period_start, current_period_end, trial_started_at, trial_ends_at, pending_plan, pending_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     db.from('token_transactions').select('id, type, amount, description, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(10),
     db.from('wallets').select('balance').eq('user_id', userId).maybeSingle(),
     sbAdmin.auth.admin.getUserById(userId),
   ])
 
-  type AccRow = { id: string; email: string; full_name: string | null; plan: string; tokens: number; onboarding_status: string; phone: string | null; prenom: string | null; nom: string | null; created_at: string; account_status: string }
+  type AccRow = { id: string; email: string; full_name: string | null; plan: string | null; tokens: number; onboarding_status: string; phone: string | null; prenom: string | null; nom: string | null; created_at: string; account_status: string | null }
+  type SubRaw = {
+    status: string; plan: string | null
+    current_period_start: string | null; current_period_end: string | null
+    trial_started_at: string | null; trial_ends_at: string | null
+    pending_plan: string | null; pending_at: string | null
+  }
   const acc = accRes.data as AccRow | null
-  const authUser = authUserRes.data?.user as { email?: string; banned_until?: string; last_sign_in_at?: string; created_at?: string } | null
+  const subRaw = subRes.data as SubRaw | null
+  const authUser = authUserRes.data?.user as { email?: string; banned_until?: string; last_sign_in_at?: string; created_at?: string; user_metadata?: { full_name?: string; name?: string } } | null
 
   // Sans user_accounts NI auth user → vraiment introuvable
   if (!acc && !authUser) return null
@@ -354,24 +399,43 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
   const bannedUntil = authUser?.banned_until
   const is_banned = !!(bannedUntil && new Date(bannedUntil) > new Date())
 
+  const effPlan = effectivePlan(subRaw, acc?.plan ?? null)
+  const effStatus = effectiveStatus({ account_status: acc?.account_status ?? null }, subRaw)
+  // started_at/ended_at n'existent pas en base : effectiveTrialDates dérive depuis
+  // current_period_* (avec fallback trial_*).
+  const dates = effectiveTrialDates(subRaw)
+  const startedAt = dates.start
+  const endedAt = dates.end
+
+  const subscription: UserDetail['subscription'] = subRaw
+    ? {
+        status: normalizeSubStatus(subRaw.status),
+        plan: subRaw.plan ? normalizePlanCode(subRaw.plan) : null,
+        started_at: startedAt,
+        ended_at: endedAt,
+        pending_plan: subRaw.pending_plan ? normalizePlanCode(subRaw.pending_plan) : null,
+        pending_at: subRaw.pending_at,
+      }
+    : null
+
   return {
     id: userId,
     email: acc?.email ?? authUser?.email ?? '—',
-    full_name: acc?.full_name ?? null,
+    full_name: displayName(acc, authUser?.user_metadata ?? null, acc?.email ?? authUser?.email ?? null),
     prenom: acc?.prenom ?? null,
     nom: acc?.nom ?? null,
     phone: acc?.phone ?? null,
-    plan: acc?.plan ?? 'SOLO',
+    plan: effPlan,
     tokens: acc?.tokens ?? 0,
-    wallet_balance: (walletRes.data as { balance: number } | null)?.balance ?? null,
+    wallet_balance: (walletRes.data as { balance: number } | null)?.balance ?? 0,
     account_status: acc?.account_status ?? 'active',
     onboarding_status: acc?.onboarding_status ?? 'not_started',
     created_at: acc?.created_at ?? authUser?.created_at ?? new Date().toISOString(),
-    sub_status: (subRes.data as { status: string } | null)?.status ?? null,
+    sub_status: effStatus,
     is_banned,
     last_sign_in_at: authUser?.last_sign_in_at ?? null,
     profile: profRes.data as UserDetail['profile'],
-    subscription: subRes.data as UserDetail['subscription'],
+    subscription,
     tokenHistory: txRes.error ? [] : (txRes.data as UserDetail['tokenHistory']) ?? [],
   }
 }
@@ -409,43 +473,74 @@ export async function addTokens(targetUserId: string, amount: number, motif: str
   }).select()
   console.log('[addTokens] token_transactions insert:', { data: txData, error: txError })
   if (txError) return { success: false, error: 'Erreur lors de l\'enregistrement de la transaction.' }
+
+  // Filet de sécurité : garder user_accounts.tokens synchrone avec wallets.balance.
+  // L'affichage canonique est wallets.balance (Lot 1) — cette écriture évite qu'un
+  // écran legacy lisant user_accounts.tokens montre un "0" trompeur.
+  await db.from('user_accounts').update({ tokens: balanceAfter }).eq('id', targetUserId)
+
   await logAction(auth.adminId, 'add_tokens', targetUserId, { amount, motif })
+  revalidateAdminWrites(targetUserId)
   return { success: true }
 }
 
 export async function changePlan(targetUserId: string, newPlan: string, startDate?: string, endDate?: string): Promise<{ success: boolean; error?: string }> {
-  if (!['SOLO', 'DUO', 'TEAM', 'ENTERPRISE'].includes(newPlan)) return { success: false, error: 'Plan invalide.' }
+  // Tolère MAJUSCULES (legacy) et minuscules ; rejette tout le reste avant toute écriture.
+  const lc = (newPlan ?? '').toString().trim().toLowerCase()
+  if (!['solo', 'duo', 'team'].includes(lc)) return { success: false, error: 'Plan invalide.' }
   const auth = await verifyAdmin()
   if ('error' in auth) return { success: false, error: auth.error }
 
+  const normalizedNew: PlanCode = normalizePlanCode(newPlan)
   const db = makeAdminClient()
-  const { data: accData } = await db.from('user_accounts').select('plan').eq('id', targetUserId).single()
-  const currentPlan = (accData as { plan: string } | null)?.plan ?? 'SOLO'
-  const isDowngrade = (PLAN_RANK[newPlan] ?? 0) < (PLAN_RANK[currentPlan] ?? 0)
 
-  if (isDowngrade) {
-    const { data: sub } = await db.from('subscriptions').select('id')
-      .eq('user_id', targetUserId).order('created_at', { ascending: false }).limit(1).maybeSingle()
-    if (sub) {
-      await db.from('subscriptions')
-        .update({ pending_plan: newPlan, pending_at: endDate ?? null })
-        .eq('id', (sub as { id: string }).id)
+  // Source de vérité : subscriptions.plan (fallback user_accounts.plan).
+  const [subRead, accRead] = await Promise.all([
+    db.from('subscriptions').select('id, plan, status')
+      .eq('user_id', targetUserId)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    db.from('user_accounts').select('plan').eq('id', targetUserId).maybeSingle(),
+  ])
+  const subRow = subRead.data as { id: string; plan: string | null; status: string } | null
+  const accRow = accRead.data as { plan: string | null } | null
+  const currentPlanRaw = subRow?.plan ?? accRow?.plan ?? null
+  const currentPlan: PlanCode = normalizePlanCode(currentPlanRaw)
+
+  // Décision produit : l'admin ne peut PAS rétrograder un abonné depuis le back-office.
+  if ((PLAN_RANK[normalizedNew] ?? 0) < (PLAN_RANK[currentPlan] ?? 0)) {
+    return { success: false, error: "Il n'est pas possible de rétrograder un abonné depuis le back-office." }
+  }
+
+  // Upgrade (ou même rang) : MAJ synchrone subscriptions.plan + user_accounts.plan (normalisé).
+  const { error: accError } = await db.from('user_accounts')
+    .update({ plan: normalizedNew, updated_at: new Date().toISOString() })
+    .eq('id', targetUserId)
+  if (accError) return { success: false, error: 'Erreur lors de la mise à jour du compte.' }
+
+  if (subRow) {
+    const subUpdate: Record<string, string> = { plan: normalizedNew }
+    if (startDate) subUpdate.current_period_start = startDate
+    if (endDate)   subUpdate.current_period_end   = endDate
+    // Trial qui upgrade au-dessus du plan d'essai → bascule en 'active'.
+    if (subRow.status === 'trial' && (PLAN_RANK[normalizedNew] ?? 0) > (PLAN_RANK[TRIAL_PLAN_CODE] ?? 0)) {
+      subUpdate.status = 'active'
     }
-  } else {
-    const { error } = await db.from('user_accounts')
-      .update({ plan: newPlan, updated_at: new Date().toISOString() })
-      .eq('id', targetUserId)
-    if (error) return { success: false, error: 'Erreur lors de la mise à jour.' }
-    if (startDate && endDate) {
-      await db.from('subscriptions').insert({
-        user_id: targetUserId, plan: newPlan, status: 'active', current_period_start: startDate, current_period_end: endDate,
-      })
-    }
+    const { error: subError } = await db.from('subscriptions')
+      .update(subUpdate).eq('id', subRow.id)
+    if (subError) return { success: false, error: 'Erreur lors de la mise à jour de l\'abonnement.' }
+  } else if (startDate && endDate) {
+    // Aucune ligne subscriptions : UNE ligne propre (cas migration legacy).
+    const { error: insError } = await db.from('subscriptions').insert({
+      user_id: targetUserId, plan: normalizedNew, status: 'active',
+      current_period_start: startDate, current_period_end: endDate,
+    })
+    if (insError) return { success: false, error: 'Erreur lors de la création de l\'abonnement.' }
   }
 
   await logAction(auth.adminId, 'change_plan', targetUserId, {
-    current_plan: currentPlan, new_plan: newPlan, is_downgrade: isDowngrade, start_date: startDate, end_date: endDate,
+    current_plan: currentPlan, new_plan: normalizedNew, start_date: startDate, end_date: endDate,
   })
+  revalidateAdminWrites(targetUserId)
   return { success: true }
 }
 
@@ -482,6 +577,7 @@ export async function suspendAccount(targetUserId: string): Promise<{ success: b
 
   await setAccountStatus(targetUserId, 'suspended')
   await logAction(auth.adminId, 'suspend_account', targetUserId)
+  revalidateAdminWrites(targetUserId)
   return { success: true }
 }
 
@@ -495,6 +591,7 @@ export async function reactivateAccount(targetUserId: string): Promise<{ success
 
   await setAccountStatus(targetUserId, 'active')
   await logAction(auth.adminId, 'reactivate_account', targetUserId)
+  revalidateAdminWrites(targetUserId)
   return { success: true }
 }
 
@@ -508,6 +605,7 @@ export async function deleteAccount(targetUserId: string): Promise<{ success: bo
 
   await setAccountStatus(targetUserId, 'deleted')
   await logAction(auth.adminId, 'delete_account', targetUserId)
+  revalidateAdminWrites(targetUserId)
   return { success: true }
 }
 
@@ -535,6 +633,7 @@ export async function sendAdminEmail(targetUserId: string, subject: string, mess
   if (!result.success) return { success: false, error: result.error }
 
   await logAction(auth.adminId, 'send_email', targetUserId, { subject })
+  revalidateAdminWrites(targetUserId)
   return { success: true }
 }
 
@@ -546,10 +645,10 @@ export interface SubscriptionRow {
   id: string
   user_id: string
   email: string
-  full_name: string | null
+  full_name: string
   phone: string | null
-  plan: string
-  sub_status: string
+  plan: PlanCode
+  sub_status: SubStatus
   account_status: string
   current_period_start: string | null
   current_period_end: string | null
@@ -570,50 +669,64 @@ export async function getSubscriptions(params: GetSubsParams = {}): Promise<{ su
   const db = makeAdminClient()
   const { plan = 'all', status = 'all', page = 0 } = params
 
-  type SubRaw = { id: string; user_id: string; plan: string | null; status: string; current_period_start: string | null; current_period_end: string | null; created_at: string }
+  type SubRaw = {
+    id: string; user_id: string; plan: string | null; status: string
+    current_period_start: string | null; current_period_end: string | null
+    trial_started_at: string | null; trial_ends_at: string | null
+    created_at: string
+  }
 
-  let query = db.from('subscriptions')
-    .select('id, user_id, plan, status, current_period_start, current_period_end, created_at')
+  // Filtre côté JS après normalisation : les valeurs en base sont en MAJUSCULES
+  // (SOLO/DUO/TEAM) et le statut 'trial' (legacy 'trialing'). Filtrer côté SQL
+  // raterait toujours les essais réels.
+  const { data: subs, error } = await db.from('subscriptions')
+    .select('id, user_id, plan, status, current_period_start, current_period_end, trial_started_at, trial_ends_at, created_at')
     .order('created_at', { ascending: false })
-  if (plan !== 'all') query = query.eq('plan', plan)
-  if (status !== 'all') query = query.eq('status', status)
-
-  const { data: subs, error } = await query
   if (error) {
     console.error('[getSubscriptions] Supabase error:', JSON.stringify(error))
     return { subs: [], total: 0 }
   }
   if (!subs?.length) {
-    console.warn('[getSubscriptions] Requête OK mais aucune ligne retournée')
     return { subs: [], total: 0 }
   }
-  console.log(`[getSubscriptions] ${subs.length} lignes récupérées`)
 
   // Dédupliquer : une ligne par user_id (la plus récente déjà triée)
   const seen = new Set<string>()
   const unique = (subs as SubRaw[]).filter(s => { if (seen.has(s.user_id)) return false; seen.add(s.user_id); return true })
 
   const userIds = unique.map(s => s.user_id)
-  type AccRaw = { id: string; email: string; full_name: string | null; phone: string | null; account_status: string }
-  const { data: accs } = await db.from('user_accounts').select('id, email, full_name, phone, account_status').in('id', userIds)
+  type AccRaw = { id: string; email: string; full_name: string | null; prenom: string | null; nom: string | null; phone: string | null; plan: string | null; account_status: string | null }
+  const { data: accs } = await db.from('user_accounts').select('id, email, full_name, prenom, nom, phone, plan, account_status').in('id', userIds)
   const accMap: Record<string, AccRaw> = {}
   if (accs) for (const a of accs as AccRaw[]) accMap[a.id] = a
 
-  const rows: SubscriptionRow[] = unique.map(s => {
+  let rows: SubscriptionRow[] = unique.map(s => {
     const acc = accMap[s.user_id]
+    const effPlan = effectivePlan(s, acc?.plan ?? null)
+    const effStat = effectiveStatus({ account_status: acc?.account_status ?? null }, s)
+    const dates = effectiveTrialDates(s)
     return {
       id: s.id,
       user_id: s.user_id,
       email: acc?.email ?? '—',
-      full_name: acc?.full_name ?? null,
+      full_name: displayName(acc, null, acc?.email ?? null),
       phone: acc?.phone ?? null,
-      plan: s.plan ?? 'SOLO',
-      sub_status: s.status,
+      plan: effPlan,
+      sub_status: effStat,
       account_status: acc?.account_status ?? 'active',
-      current_period_start: s.current_period_start,
-      current_period_end: s.current_period_end,
+      current_period_start: dates.start,
+      current_period_end: dates.end,
     }
   })
+
+  if (plan !== 'all') {
+    const wanted = normalizePlanCode(plan)
+    rows = rows.filter(r => r.plan === wanted)
+  }
+  if (status !== 'all') {
+    const wantedStatus = normalizeSubStatus(status)
+    rows = rows.filter(r => r.sub_status === wantedStatus)
+  }
 
   return { subs: rows.slice(page * SUBS_PAGE_SIZE, (page + 1) * SUBS_PAGE_SIZE), total: rows.length }
 }
@@ -625,14 +738,14 @@ export async function getSubscriptions(params: GetSubsParams = {}): Promise<{ su
 export interface TokenRow {
   user_id: string
   email: string
-  full_name: string | null
+  full_name: string
   phone: string | null
-  plan: string
-  sub_status: string | null
+  plan: PlanCode
+  sub_status: SubStatus
   wallet_balance: number
   last_tx_date: string | null
   last_tx_amount: number | null
-  expired_sub_plan: string | null
+  expired_sub_plan: PlanCode | null
 }
 
 export interface GetTokensParams {
@@ -651,22 +764,22 @@ export async function getTokensData(params: GetTokensParams = {}): Promise<{ row
   const db = makeAdminClient()
   const { plan = 'all', status = 'all', balance = 'all', page = 0 } = params
 
-  type AccRow = { id: string; email: string; full_name: string | null; phone: string | null; plan: string }
+  type AccRow = { id: string; email: string; full_name: string | null; prenom: string | null; nom: string | null; phone: string | null; plan: string | null; account_status: string | null }
   const { data: accs, error: accErr } = await db
     .from('user_accounts')
-    .select('id, email, full_name, phone, plan')
+    .select('id, email, full_name, prenom, nom, phone, plan, account_status')
   if (accErr || !accs?.length) return { rows: [], total: 0 }
 
   const allIds = (accs as AccRow[]).map(a => a.id)
 
-  type SubRaw = { user_id: string; status: string; plan: string | null }
+  type SubRaw = { user_id: string; status: string; plan: string | null; trial_started_at: string | null; trial_ends_at: string | null }
   type TxRaw  = { user_id: string; amount: number; created_at: string }
   type WalRaw = { user_id: string; balance: number }
 
   const [walletRes, subRes, txRes] = await Promise.all([
     db.from('wallets').select('user_id, balance').in('user_id', allIds),
     db.from('subscriptions')
-      .select('user_id, status, plan')
+      .select('user_id, status, plan, trial_started_at, trial_ends_at, created_at')
       .in('user_id', allIds)
       .order('created_at', { ascending: false }),
     db.from('token_transactions')
@@ -676,11 +789,13 @@ export async function getTokensData(params: GetTokensParams = {}): Promise<{ row
   ])
 
   const subMap: Record<string, SubRaw> = {}
-  const expiredSubPlan: Record<string, string> = {}
+  const expiredSubPlan: Record<string, PlanCode> = {}
   for (const s of (subRes.data ?? []) as SubRaw[]) {
     if (!subMap[s.user_id]) subMap[s.user_id] = s
-    if (s.status === 'expired' && (s.plan === 'DUO' || s.plan === 'TEAM') && !expiredSubPlan[s.user_id]) {
-      expiredSubPlan[s.user_id] = s.plan
+    const normStat = normalizeSubStatus(s.status)
+    const normPlan = normalizePlanCode(s.plan)
+    if (normStat === 'expired' && (normPlan === 'duo' || normPlan === 'team') && !expiredSubPlan[s.user_id]) {
+      expiredSubPlan[s.user_id] = normPlan
     }
   }
 
@@ -692,21 +807,32 @@ export async function getTokensData(params: GetTokensParams = {}): Promise<{ row
   const walletMap: Record<string, number> = {}
   for (const w of (walletRes.data ?? []) as WalRaw[]) walletMap[w.user_id] = w.balance
 
-  let rows: TokenRow[] = (accs as AccRow[]).map(acc => ({
-    user_id: acc.id,
-    email: acc.email,
-    full_name: acc.full_name,
-    phone: acc.phone,
-    plan: acc.plan ?? 'SOLO',
-    sub_status: subMap[acc.id]?.status ?? null,
-    wallet_balance: walletMap[acc.id] ?? 0,
-    last_tx_date: lastTxMap[acc.id]?.created_at ?? null,
-    last_tx_amount: lastTxMap[acc.id]?.amount ?? null,
-    expired_sub_plan: acc.plan === 'SOLO' ? (expiredSubPlan[acc.id] ?? null) : null,
-  }))
+  let rows: TokenRow[] = (accs as AccRow[]).map(acc => {
+    const sub = subMap[acc.id] ?? null
+    const effPlan = effectivePlan(sub, acc.plan ?? null)
+    const effStat = effectiveStatus({ account_status: acc.account_status ?? null }, sub)
+    return {
+      user_id: acc.id,
+      email: acc.email,
+      full_name: displayName(acc, null, acc.email),
+      phone: acc.phone,
+      plan: effPlan,
+      sub_status: effStat,
+      wallet_balance: walletMap[acc.id] ?? 0,
+      last_tx_date: lastTxMap[acc.id]?.created_at ?? null,
+      last_tx_amount: lastTxMap[acc.id]?.amount ?? null,
+      expired_sub_plan: effPlan === 'solo' ? (expiredSubPlan[acc.id] ?? null) : null,
+    }
+  })
 
-  if (plan !== 'all') rows = rows.filter(r => r.plan === plan)
-  if (status !== 'all') rows = rows.filter(r => r.sub_status === status)
+  if (plan !== 'all') {
+    const wanted = normalizePlanCode(plan)
+    rows = rows.filter(r => r.plan === wanted)
+  }
+  if (status !== 'all') {
+    const wantedStatus = normalizeSubStatus(status)
+    rows = rows.filter(r => r.sub_status === wantedStatus)
+  }
   if (balance === 'empty') rows = rows.filter(r => r.wallet_balance === 0)
   else if (balance === 'low') rows = rows.filter(r => r.wallet_balance > 0 && r.wallet_balance < 5)
 
@@ -745,27 +871,48 @@ export async function changeSubscriptionPlan(
   startDate?: string,
   endDate?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  if (!['SOLO', 'DUO', 'TEAM', 'ENTERPRISE'].includes(newPlan)) return { success: false, error: 'Plan invalide.' }
+  const lc = (newPlan ?? '').toString().trim().toLowerCase()
+  if (!['solo', 'duo', 'team'].includes(lc)) return { success: false, error: 'Plan invalide.' }
   const auth = await verifyAdmin()
   if ('error' in auth) return { success: false, error: auth.error }
 
   const db = makeAdminClient()
+  const normalized: PlanCode = normalizePlanCode(newPlan)
 
-  const subUpdate: Record<string, string> = { plan: newPlan }
+  // Lire le plan courant (source de vérité = subscriptions) pour valider le sens du changement.
+  const { data: subRead, error: subReadErr } = await db.from('subscriptions')
+    .select('id, plan, status')
+    .eq('user_id', userId)
+    .in('status', ['active', 'trial', 'trialing'])
+    .order('created_at', { ascending: false }).limit(1).maybeSingle()
+  if (subReadErr) return { success: false, error: 'Erreur lecture abonnement.' }
+  const subCurrent = subRead as { id: string; plan: string | null; status: string } | null
+  if (!subCurrent) return { success: false, error: 'Aucun abonnement actif ou en essai trouvé pour cet utilisateur.' }
+
+  const currentPlan: PlanCode = normalizePlanCode(subCurrent.plan)
+  // Décision produit : pas de downgrade depuis le back-office.
+  if ((PLAN_RANK[normalized] ?? 0) < (PLAN_RANK[currentPlan] ?? 0)) {
+    return { success: false, error: "Il n'est pas possible de rétrograder un abonné depuis le back-office." }
+  }
+
+  const subUpdate: Record<string, string> = { plan: normalized }
   if (startDate) subUpdate.current_period_start = startDate
-  if (endDate) subUpdate.current_period_end = endDate
+  if (endDate)   subUpdate.current_period_end   = endDate
+  // Trial qui upgrade au-dessus du plan d'essai → bascule en 'active'.
+  if (subCurrent.status === 'trial' && (PLAN_RANK[normalized] ?? 0) > (PLAN_RANK[TRIAL_PLAN_CODE] ?? 0)) {
+    subUpdate.status = 'active'
+  }
 
-  const [subRes, accRes] = await Promise.all([
-    db.from('subscriptions').update(subUpdate).eq('user_id', userId).in('status', ['active', 'trialing']),
-    db.from('user_accounts').update({ plan: newPlan, updated_at: new Date().toISOString() }).eq('id', userId),
-  ])
+  const { data: subUpdated, error: subErr } = await db.from('subscriptions')
+    .update(subUpdate)
+    .eq('id', subCurrent.id)
+    .select('id')
+  if (subErr) return { success: false, error: 'Erreur mise à jour abonnement.' }
+  if (!subUpdated || subUpdated.length === 0) {
+    return { success: false, error: 'Aucun abonnement actif ou en essai trouvé pour cet utilisateur.' }
+  }
 
-  console.log('[changeSubscriptionPlan] sub error:', JSON.stringify(subRes.error))
-  console.log('[changeSubscriptionPlan] acc error:', JSON.stringify(accRes.error))
-
-  if (subRes.error) return { success: false, error: 'Erreur mise à jour abonnement.' }
-  if (accRes.error) return { success: false, error: 'Erreur mise à jour compte.' }
-
-  await logAction(auth.adminId, 'change_plan', userId, { new_plan: newPlan, source: 'subscriptions', start_date: startDate, end_date: endDate })
+  await logAction(auth.adminId, 'change_plan', userId, { new_plan: normalized, source: 'subscriptions', start_date: startDate, end_date: endDate })
+  revalidateAdminWrites(userId)
   return { success: true }
 }

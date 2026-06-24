@@ -13,6 +13,7 @@ import {
   type TokenRow, type TokenHistoryTx,
 } from '@/app/admin/actions'
 import { StatusBadge } from '../../users/_components/status-badge'
+import { PLAN_COLORS, PLAN_OPTIONS, planLabel, type PlanCode } from '@/lib/plans'
 
 const TOKEN_MOTIF_GROUPS = [
   { label: 'Commerciaux', options: ['Offre de bienvenue', 'Offre de lancement', 'Code promo'] },
@@ -31,19 +32,12 @@ const TYPE_LABELS: Record<string, string> = {
   refund: 'Remboursement',
 }
 
-const PLAN_COLORS: Record<string, { bg: string; text: string }> = {
-  SOLO:       { bg: 'rgba(107,114,128,0.15)', text: 'var(--admin-muted-foreground)' },
-  DUO:        { bg: 'rgba(139,92,246,0.15)',  text: '#8B5CF6' },
-  TEAM:       { bg: 'rgba(59,130,246,0.15)',  text: '#3B82F6' },
-  ENTERPRISE: { bg: 'rgba(204,255,0,0.15)',   text: 'var(--admin-primary)' },
-}
-
-function PlanBadge({ plan }: { plan: string }) {
-  const cfg = PLAN_COLORS[plan] ?? PLAN_COLORS.SOLO
+function PlanBadge({ plan }: { plan: PlanCode }) {
+  const color = PLAN_COLORS[plan]
   return (
     <span className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
-      style={{ backgroundColor: cfg.bg, color: cfg.text }}>
-      {plan}
+      style={{ backgroundColor: `${color}26`, color }}>
+      {planLabel(plan)}
     </span>
   )
 }
@@ -184,13 +178,13 @@ export function TokensTable() {
           <select value={planFilter} onChange={e => { setPlanFilter(e.target.value); setPage(0) }}
             className="rounded-lg border px-3 py-2 text-sm" style={selectStyle}>
             <option value="all">Tous les plans</option>
-            {['SOLO', 'DUO', 'TEAM'].map(p => <option key={p} value={p}>{p}</option>)}
+            {PLAN_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
           <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }}
             className="rounded-lg border px-3 py-2 text-sm" style={selectStyle}>
             <option value="all">Tous les statuts</option>
             <option value="active">Actif</option>
-            <option value="trialing">Essai</option>
+            <option value="trial">Essai</option>
             <option value="suspended">Suspendu</option>
             <option value="expired">Expiré</option>
           </select>
@@ -244,7 +238,7 @@ export function TokensTable() {
                       </div>
                       <div className="min-w-0">
                         <p className="font-medium truncate max-w-[160px]" style={{ color: 'var(--admin-foreground)' }}>
-                          {row.full_name ?? '—'}
+                          {row.full_name}
                         </p>
                         <p className="text-xs truncate max-w-[160px]" style={{ color: 'var(--admin-muted-foreground)' }}>
                           {row.email}
@@ -295,7 +289,7 @@ export function TokensTable() {
                       {row.expired_sub_plan && (
                         <span className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
                           style={{ backgroundColor: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}>
-                          Ancien {row.expired_sub_plan}
+                          Ancien {planLabel(row.expired_sub_plan)}
                         </span>
                       )}
                     </div>

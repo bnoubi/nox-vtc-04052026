@@ -66,6 +66,7 @@ import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 import { usePromo } from "@/lib/hooks/usePromo"
 import { SupportTicketModal } from "./support-ticket-modal"
 import { SupportHistory } from "./support-history"
+import { planLabel } from "@/lib/plans"
 
 // ── Helpers : expiration la plus proche ───────────────────────
 
@@ -180,7 +181,6 @@ class SettingsErrorBoundary extends React.Component<{ children: React.ReactNode 
 const SOLO_LIMIT = 1
 const DUO_LIMIT = 2
 const TEAM_LIMIT = 10
-const PLAN_LABEL: Record<string, string> = { SOLO: "Starter", DUO: "Pro", TEAM: "Premium" }
 
 type SettingsScreen = "main" | "team" | "fleet" | "profile" | "accountSecurity" | "enterprise" | "banking" | "subscription" | "notifications" | "security" | "cgv" | "tarifs" | "wallet_history"
 
@@ -1157,7 +1157,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                 "text-2xl font-bold font-heading mt-0.5",
                 isTeam ? "gold-gradient-text" : isDuo ? "text-gold" : "text-foreground"
               )}>
-                {PLAN_LABEL[plan] ?? plan}
+                {planLabel(plan)}
               </p>
             </div>
             <div className={cn(
@@ -1393,7 +1393,7 @@ function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => voi
           <Lock className="h-6 w-6 text-gold" strokeWidth={1.5} />
         </div>
         <div className="text-center">
-          <p className="text-sm font-semibold font-heading text-foreground mb-1.5">Limite {PLAN_LABEL[plan] ?? plan} atteinte</p>
+          <p className="text-sm font-semibold font-heading text-foreground mb-1.5">Limite {planLabel(plan)} atteinte</p>
           <p className="text-xs text-muted-foreground leading-relaxed max-w-[240px]">
             Vous utilisez {currentLimit}/{currentLimit} {limitLabel}. Choisissez une offre pour en ajouter davantage.
           </p>
@@ -2296,7 +2296,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
             ? "bg-gradient-to-r from-gold/25 via-gold/15 to-gold/25 border-gold/50 gold-badge-glow"
             : "bg-gold/15 border-gold/30"
         )}>
-          <span className={cn("text-[10px] font-bold tracking-wider", isTeam ? "gold-gradient-text" : "text-gold")}>{PLAN_LABEL[plan] ?? plan}</span>
+          <span className={cn("text-[10px] font-bold tracking-wider", isTeam ? "gold-gradient-text" : "text-gold")}>{planLabel(plan)}</span>
         </div>
       </div>
 

@@ -14,8 +14,8 @@ import {
   type SubscriptionRow,
 } from '@/app/admin/actions'
 import { StatusBadge } from '../../users/_components/status-badge'
+import { PLAN_COLORS, PLAN_OPTIONS, PLAN_RANK, planLabel, type PlanCode } from '@/lib/plans'
 
-const PLAN_OPTIONS = ['SOLO', 'DUO', 'TEAM']
 const DURATION_OPTIONS = [
   { value: '1', label: '1 mois' }, { value: '3', label: '3 mois' },
   { value: '6', label: '6 mois' }, { value: '12', label: '12 mois' },
@@ -27,19 +27,12 @@ function addMonths(dateStr: string, months: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-const PLAN_COLORS: Record<string, { bg: string; text: string }> = {
-  SOLO:       { bg: 'rgba(107,114,128,0.15)', text: 'var(--admin-muted-foreground)' },
-  DUO:        { bg: 'rgba(139,92,246,0.15)',  text: '#8B5CF6' },
-  TEAM:       { bg: 'rgba(59,130,246,0.15)',  text: '#3B82F6' },
-  ENTERPRISE: { bg: 'rgba(204,255,0,0.15)',   text: 'var(--admin-primary)' },
-}
-
-function PlanBadge({ plan }: { plan: string }) {
-  const cfg = PLAN_COLORS[plan] ?? PLAN_COLORS.SOLO
+function PlanBadge({ plan }: { plan: PlanCode }) {
+  const color = PLAN_COLORS[plan]
   return (
     <span className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
-      style={{ backgroundColor: cfg.bg, color: cfg.text }}>
-      {plan}
+      style={{ backgroundColor: `${color}26`, color }}>
+      {planLabel(plan)}
     </span>
   )
 }
@@ -80,7 +73,7 @@ export function SubscriptionsTable() {
   const [activeSub, setActiveSub]       = useState<SubscriptionRow | null>(null)
   const [showPlan, setShowPlan]         = useState(false)
   const [showToggle, setShowToggle]     = useState(false)
-  const [selectedPlan, setSelectedPlan] = useState('')
+  const [selectedPlan, setSelectedPlan] = useState<PlanCode>('solo')
   const [planDuration, setPlanDuration] = useState('1')
   const [planStartDate, setPlanStartDate] = useState(() => new Date().toISOString().slice(0, 10))
 
@@ -129,9 +122,15 @@ export function SubscriptionsTable() {
 
   function openPlan(sub: SubscriptionRow) {
     setActiveSub(sub)
-    setSelectedPlan(sub.plan)
+    // Upgrade-only : pré-sélectionne le 1er plan de rang strictement supérieur.
+    const firstUpgrade = PLAN_OPTIONS.find(p => (PLAN_RANK[p.value] ?? 0) > (PLAN_RANK[sub.plan] ?? 0))
+    setSelectedPlan(firstUpgrade?.value ?? sub.plan)
     setShowPlan(true)
   }
+
+  // Un abonné déjà au plan max n'a aucun upgrade possible → bouton désactivé.
+  const isAtMaxPlan = (sub: SubscriptionRow) =>
+    !PLAN_OPTIONS.some(p => (PLAN_RANK[p.value] ?? 0) > (PLAN_RANK[sub.plan] ?? 0))
 
   function openToggle(sub: SubscriptionRow) {
     setActiveSub(sub)
@@ -144,9 +143,6 @@ export function SubscriptionsTable() {
 
   const isBanned = (sub: SubscriptionRow) =>
     sub.account_status === 'suspended' || sub.account_status === 'deleted'
-
-  const effectiveStatus = (sub: SubscriptionRow) =>
-    sub.account_status !== 'active' ? sub.account_status : sub.sub_status
 
   return (
     <>
@@ -172,13 +168,13 @@ export function SubscriptionsTable() {
           <select value={plan} onChange={e => { setPlan(e.target.value); setPage(0) }}
             className="rounded-lg border px-3 py-2 text-sm" style={selectStyle}>
             <option value="all">Tous les plans</option>
-            {PLAN_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+            {PLAN_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
           <select value={status} onChange={e => { setStatus(e.target.value); setPage(0) }}
             className="rounded-lg border px-3 py-2 text-sm" style={selectStyle}>
             <option value="all">Tous les statuts</option>
             <option value="active">Actif</option>
-            <option value="trialing">Essai</option>
+            <option value="trial">Essai</option>
             <option value="suspended">Désactivé</option>
             <option value="expired">Expiré</option>
             <option value="deleted">Supprimé</option>
@@ -227,7 +223,7 @@ export function SubscriptionsTable() {
                       </div>
                       <div className="min-w-0">
                         <p className="font-medium truncate max-w-[160px]" style={{ color: 'var(--admin-foreground)' }}>
-                          {sub.full_name ?? '—'}
+                          {sub.full_name}
                         </p>
                         <p className="text-xs truncate max-w-[160px]" style={{ color: 'var(--admin-muted-foreground)' }}>
                           {sub.email}
@@ -241,7 +237,7 @@ export function SubscriptionsTable() {
                   {/* Plan */}
                   <td className="py-3 px-4"><PlanBadge plan={sub.plan} /></td>
                   {/* Statut */}
-                  <td className="py-3 px-4"><StatusBadge status={effectiveStatus(sub)} /></td>
+                  <td className="py-3 px-4"><StatusBadge status={sub.sub_status} /></td>
                   {/* Date début */}
                   <td className="py-3 px-4 whitespace-nowrap" style={{ color: 'var(--admin-muted-foreground)' }}>
                     {sub.current_period_start ? new Date(sub.current_period_start).toLocaleDateString('fr-FR') : '—'}
@@ -255,7 +251,9 @@ export function SubscriptionsTable() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => openPlan(sub)}
-                        className="text-xs font-medium px-3 py-1.5 rounded-lg border transition-opacity hover:opacity-80"
+                        disabled={isAtMaxPlan(sub)}
+                        title={isAtMaxPlan(sub) ? 'Plan maximum atteint' : undefined}
+                        className="text-xs font-medium px-3 py-1.5 rounded-lg border transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
                         style={{ borderColor: 'var(--admin-primary)', color: 'var(--admin-primary)' }}>
                         Changer le plan
                       </button>
@@ -299,51 +297,60 @@ export function SubscriptionsTable() {
         </div>
       </div>
 
-      {/* Modal — Changer le plan */}
+      {/* Modal — Changer le plan (upgrades uniquement) */}
       {(() => {
-        const isUpgradeWithDates = activeSub != null && (
-          (activeSub.plan === 'SOLO' && (selectedPlan === 'DUO' || selectedPlan === 'TEAM')) ||
-          (activeSub.plan === 'DUO' && selectedPlan === 'TEAM')
-        )
+        const availableUpgrades = activeSub
+          ? PLAN_OPTIONS.filter(p => (PLAN_RANK[p.value] ?? 0) > (PLAN_RANK[activeSub.plan] ?? 0))
+          : []
+        const isMaxPlan = activeSub != null && availableUpgrades.length === 0
+        const isUpgrade = activeSub != null && (PLAN_RANK[selectedPlan] ?? 0) > (PLAN_RANK[activeSub.plan] ?? 0)
         const planEndDate = planStartDate ? addMonths(planStartDate, parseInt(planDuration)) : ''
         return (
           <Dialog open={showPlan} onOpenChange={open => { setShowPlan(open); if (!open) setActiveSub(null) }}>
             <DialogContent {...{ 'data-admin-theme': theme }} style={dialogStyle}>
               <DialogHeader><DialogTitle>Changer le plan</DialogTitle></DialogHeader>
               <div className="py-2 space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Nouveau plan</Label>
-                  <select value={selectedPlan} onChange={e => setSelectedPlan(e.target.value)}
-                    className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle}>
-                    {PLAN_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                  <p className="text-xs" style={{ color: 'var(--admin-muted-foreground)' }}>
-                    Plan actuel : <strong>{activeSub?.plan}</strong>
+                {isMaxPlan ? (
+                  <p className="text-sm" style={{ color: 'var(--admin-muted-foreground)' }}>
+                    Cet abonné est déjà au plan le plus élevé (<strong>{activeSub ? planLabel(activeSub.plan) : '—'}</strong>).
                   </p>
-                </div>
-
-                {isUpgradeWithDates && (
+                ) : (
                   <>
                     <div className="space-y-1.5">
-                      <Label>Durée</Label>
-                      <select value={planDuration} onChange={e => setPlanDuration(e.target.value)}
+                      <Label>Nouveau plan</Label>
+                      <select value={selectedPlan} onChange={e => setSelectedPlan(e.target.value as PlanCode)}
                         className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle}>
-                        {DURATION_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                        {availableUpgrades.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                       </select>
+                      <p className="text-xs" style={{ color: 'var(--admin-muted-foreground)' }}>
+                        Plan actuel : <strong>{activeSub ? planLabel(activeSub.plan) : '—'}</strong>
+                      </p>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label>Date de début</Label>
-                        <input type="date" value={planStartDate} onChange={e => setPlanStartDate(e.target.value)}
-                          className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle} />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Date de fin</Label>
-                        <div className="rounded-lg border px-3 py-2 text-sm" style={{ ...selectStyle, opacity: 0.6 }}>
-                          {planEndDate || '—'}
+
+                    {isUpgrade && (
+                      <>
+                        <div className="space-y-1.5">
+                          <Label>Durée</Label>
+                          <select value={planDuration} onChange={e => setPlanDuration(e.target.value)}
+                            className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle}>
+                            {DURATION_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                          </select>
                         </div>
-                      </div>
-                    </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label>Date de début</Label>
+                            <input type="date" value={planStartDate} onChange={e => setPlanStartDate(e.target.value)}
+                              className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle} />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Date de fin</Label>
+                            <div className="rounded-lg border px-3 py-2 text-sm" style={{ ...selectStyle, opacity: 0.6 }}>
+                              {planEndDate || '—'}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -351,15 +358,16 @@ export function SubscriptionsTable() {
                 <button onClick={() => { setShowPlan(false); setActiveSub(null) }}
                   className="text-sm px-4 py-2 rounded-lg border"
                   style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-muted-foreground)' }}>
-                  Annuler
+                  {isMaxPlan ? 'Fermer' : 'Annuler'}
                 </button>
                 <button
-                  disabled={busy || !activeSub || selectedPlan === activeSub?.plan}
+                  disabled={busy || !activeSub || isMaxPlan || !isUpgrade}
+                  hidden={isMaxPlan}
                   className="text-sm px-4 py-2 rounded-lg font-medium disabled:opacity-50"
                   style={{ backgroundColor: 'var(--admin-primary)', color: '#0F0F0F' }}
                   onClick={() => activeSub && runAction(
-                    () => changeSubscriptionPlan(activeSub.user_id, selectedPlan, isUpgradeWithDates ? planStartDate : undefined, isUpgradeWithDates ? planEndDate : undefined),
-                    `Plan changé en ${selectedPlan}.`
+                    () => changeSubscriptionPlan(activeSub.user_id, selectedPlan, planStartDate, planEndDate),
+                    `Plan changé en ${planLabel(selectedPlan)}.`
                   )}>
                   {busy ? 'En cours…' : 'Confirmer'}
                 </button>

@@ -4,6 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { Suspense } from "react"
 import { motion } from "framer-motion"
 import { CheckCircle2 } from "lucide-react"
+import { planLabel } from "@/lib/plans"
 
 function SuccessContent() {
   const params = useSearchParams()
@@ -17,8 +18,6 @@ function SuccessContent() {
   const after = params.get("after")
 
   const isSubscription = type === "subscription"
-
-  const PLAN_LABEL: Record<string, string> = { SOLO: "Starter", DUO: "Pro", TEAM: "Premium" }
 
   function formatDate(iso: string | null): string {
     if (!iso) return ""
@@ -49,7 +48,7 @@ function SuccessContent() {
           {isSubscription ? (
             <>
               <h1 className="text-2xl font-bold text-[#C5A059] tracking-tight mb-2">
-                Bienvenue sur l'offre {PLAN_LABEL[plan ?? ""] ?? plan} !
+                Bienvenue sur l'offre {planLabel(plan)} !
               </h1>
               <p className="text-[15px] text-[#1A1A1A]/70 mb-6 leading-relaxed">
                 Merci pour votre confiance

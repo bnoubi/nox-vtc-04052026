@@ -10,11 +10,10 @@ import { Label } from '@/components/ui/label'
 import { useAdminTheme } from '@/lib/theme/admin-theme-context'
 import { addTokens, changePlan, suspendAccount, reactivateAccount, deleteAccount, sendAdminEmail, type UserDetail } from '@/app/admin/actions'
 import { StatusBadge } from '../../_components/status-badge'
+import { PLAN_OPTIONS, PLAN_RANK, planLabel, type PlanCode } from '@/lib/plans'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const PLAN_OPTIONS = ['SOLO', 'DUO', 'TEAM', 'ENTERPRISE']
-const PLAN_RANK: Record<string, number> = { SOLO: 1, DUO: 2, TEAM: 3, ENTERPRISE: 4 }
 const DURATION_OPTIONS = [
   { value: '1', label: '1 mois' }, { value: '3', label: '3 mois' },
   { value: '6', label: '6 mois' }, { value: '12', label: '12 mois' },
@@ -93,7 +92,12 @@ export function UserDetailClient({ user }: Props) {
   const [tokenAmount, setTokenAmount]           = useState('')
   const [tokenMotifKey, setTokenMotifKey]       = useState('')
   const [tokenMotifCustom, setTokenMotifCustom] = useState('')
-  const [newPlan, setNewPlan]                   = useState(user.plan)
+  // Upgrades-only : on n'expose dans le <select> que les plans de rang strictement
+  // supérieur à celui de l'abonné. La valeur initiale est le premier upgrade
+  // disponible (ou user.plan en repli si déjà au max — bouton désactivé dans ce cas).
+  const availableUpgrades = PLAN_OPTIONS.filter(p => (PLAN_RANK[p.value] ?? 0) > (PLAN_RANK[user.plan] ?? 0))
+  const isMaxPlan = availableUpgrades.length === 0
+  const [newPlan, setNewPlan]                   = useState<PlanCode>(availableUpgrades[0]?.value ?? user.plan)
   const [planDuration, setPlanDuration]         = useState('1')
   const [planStartDate, setPlanStartDate]       = useState(() => new Date().toISOString().slice(0, 10))
   const [emailSubject, setEmailSubject]         = useState('')
@@ -101,9 +105,21 @@ export function UserDetailClient({ user }: Props) {
 
   useEffect(() => {
     if (!feedback) return
-    const t = setTimeout(() => setFeedback(null), 4000)
+    // Succès : fade après 5 s (la modale se ferme, l'admin a déjà la confirmation visuelle).
+    // Erreurs : pas d'auto-clear — elles restent jusqu'à la prochaine action,
+    // sinon l'admin rate le message (modale masquait le bandeau d'arrière-plan).
+    if (feedback.type !== 'success') return
+    const t = setTimeout(() => setFeedback(null), 5000)
     return () => clearTimeout(t)
   }, [feedback])
+
+  // Resync newPlan à chaque ouverture de la modale : après un upgrade réussi,
+  // user.plan a évolué et l'ancienne valeur de newPlan pourrait être obsolète
+  // (ex. promu solo→duo, prochain upgrade par défaut = team).
+  useEffect(() => {
+    if (!showPlan) return
+    setNewPlan(availableUpgrades[0]?.value ?? user.plan)
+  }, [showPlan, user.plan, availableUpgrades])
 
   async function run(fn: () => Promise<{ success: boolean; error?: string }>, onClose: () => void, successMsg: string) {
     setBusy(true)
@@ -121,42 +137,27 @@ export function UserDetailClient({ user }: Props) {
     }
   }
 
-  const initials = (user.full_name ?? user.email).slice(0, 2).toUpperCase()
-  const nameParts = `${user.prenom ?? ''} ${user.nom ?? ''}`.trim()
-  const displayName = user.full_name ?? (nameParts || user.email)
-  const balance = user.wallet_balance ?? user.tokens
+  const initials = user.full_name.slice(0, 2).toUpperCase()
+  const displayName = user.full_name
+  const balance = user.wallet_balance
   const actualMotif = tokenMotifKey === 'Autre' ? tokenMotifCustom : tokenMotifKey
   const planEndDate = planStartDate ? addMonths(planStartDate, parseInt(planDuration)) : ''
   const phone = user.phone ?? user.profile?.telephone ?? null
 
-  // Plan upgrade/downgrade logic
+  // Upgrade-only : newPlan est toujours un rang strictement supérieur tant que
+  // !isMaxPlan. Le bloc dates s'affiche dès qu'on est dans ce cas (== !isMaxPlan).
   const newPlanRank = PLAN_RANK[newPlan] ?? 0
   const currentPlanRank = PLAN_RANK[user.plan] ?? 0
-  const isUpgradeWithDates = (
-    (user.plan === 'SOLO' && (newPlan === 'DUO' || newPlan === 'TEAM')) ||
-    (user.plan === 'DUO' && newPlan === 'TEAM')
-  )
-  const isDowngrade = newPlanRank < currentPlanRank && newPlan !== user.plan
-  const downgradeEffectDate = user.subscription?.ended_at
+  const isUpgradeWithDates = newPlanRank > currentPlanRank
 
   const isDeleted = user.account_status === 'deleted'
-  // Effective account status (account_status takes priority over subscription status)
-  const effectiveStatus = user.account_status !== 'active' ? user.account_status : (user.sub_status ?? undefined)
 
   const dialogStyle = { backgroundColor: 'var(--admin-card)', borderColor: 'var(--admin-border)', color: 'var(--admin-foreground)' }
   const selectStyle = { backgroundColor: 'var(--admin-background)', borderColor: 'var(--admin-border)', color: 'var(--admin-foreground)' }
 
   return (
     <div className="space-y-6">
-      {feedback && (
-        <div className="rounded-lg px-4 py-3 text-sm font-medium" style={{
-          backgroundColor: feedback.type === 'success' ? 'rgba(56,161,105,0.1)' : 'rgba(229,62,62,0.1)',
-          color: feedback.type === 'success' ? 'var(--admin-success)' : 'var(--admin-destructive)',
-          border: `1px solid ${feedback.type === 'success' ? 'var(--admin-success)' : 'var(--admin-destructive)'}44`,
-        }}>
-          {feedback.message}
-        </div>
-      )}
+      <FeedbackBanner feedback={feedback} onDismiss={() => setFeedback(null)} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Colonne gauche */}
@@ -176,7 +177,7 @@ export function UserDetailClient({ user }: Props) {
             <Row label="Téléphone" value={phone ?? '—'} />
             <Row label="Date d'inscription" value={new Date(user.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })} />
             <Row label="Statut onboarding" value={user.onboarding_status} />
-            {effectiveStatus && <Row label="Statut compte" value={<StatusBadge status={effectiveStatus} />} />}
+            <Row label="Statut compte" value={<StatusBadge status={user.sub_status} />} />
 
           </Section>
 
@@ -195,7 +196,7 @@ export function UserDetailClient({ user }: Props) {
         <div className="space-y-4">
           <Section title="Abonnement">
             <Row label="Plan actuel" value={
-              <span className="font-semibold" style={{ color: 'var(--admin-primary)' }}>{user.plan}</span>
+              <span className="font-semibold" style={{ color: 'var(--admin-primary)' }}>{planLabel(user.plan)}</span>
             } />
             {user.subscription ? (
               <>
@@ -205,7 +206,7 @@ export function UserDetailClient({ user }: Props) {
                 {user.subscription.pending_plan && (
                   <Row label="Passage prévu" value={
                     <span style={{ color: '#F59E0B' }}>
-                      → {user.subscription.pending_plan}
+                      → {planLabel(user.subscription.pending_plan)}
                       {user.subscription.pending_at && ` le ${new Date(user.subscription.pending_at).toLocaleDateString('fr-FR')}`}
                     </span>
                   } />
@@ -288,6 +289,7 @@ export function UserDetailClient({ user }: Props) {
       <Dialog open={showTokens} onOpenChange={setShowTokens}>
         <DialogContent {...{ 'data-admin-theme': theme }} style={dialogStyle}>
           <DialogHeader><DialogTitle>Attribuer des jetons</DialogTitle></DialogHeader>
+          <FeedbackBanner feedback={feedback} onDismiss={() => setFeedback(null)} />
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
               <Label>Montant (1–50)</Label>
@@ -343,61 +345,62 @@ export function UserDetailClient({ user }: Props) {
       <Dialog open={showPlan} onOpenChange={setShowPlan}>
         <DialogContent {...{ 'data-admin-theme': theme }} style={dialogStyle}>
           <DialogHeader><DialogTitle>Changer de plan</DialogTitle></DialogHeader>
+          <FeedbackBanner feedback={feedback} onDismiss={() => setFeedback(null)} />
           <div className="py-2 space-y-3">
-            <div className="space-y-1.5">
-              <Label>Nouveau plan</Label>
-              <select value={newPlan} onChange={e => setNewPlan(e.target.value)}
-                className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle}>
-                {PLAN_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-              <p className="text-xs" style={{ color: 'var(--admin-muted-foreground)' }}>Plan actuel : <strong>{user.plan}</strong></p>
-            </div>
-
-            {isUpgradeWithDates && (
+            {isMaxPlan ? (
+              <p className="text-sm" style={{ color: 'var(--admin-muted-foreground)' }}>
+                Cet abonné est déjà au plan le plus élevé (<strong>{planLabel(user.plan)}</strong>).
+              </p>
+            ) : (
               <>
                 <div className="space-y-1.5">
-                  <Label>Durée</Label>
-                  <select value={planDuration} onChange={e => setPlanDuration(e.target.value)}
+                  <Label>Nouveau plan</Label>
+                  <select value={newPlan} onChange={e => setNewPlan(e.target.value as PlanCode)}
                     className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle}>
-                    {DURATION_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                    {availableUpgrades.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                   </select>
+                  <p className="text-xs" style={{ color: 'var(--admin-muted-foreground)' }}>Plan actuel : <strong>{planLabel(user.plan)}</strong></p>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Date de début</Label>
-                    <input type="date" value={planStartDate} onChange={e => setPlanStartDate(e.target.value)}
-                      className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Date de fin</Label>
-                    <div className="rounded-lg border px-3 py-2 text-sm" style={{ ...selectStyle, opacity: 0.6 }}>
-                      {planEndDate || '—'}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
 
-            {isDowngrade && downgradeEffectDate && (
-              <div className="rounded-lg px-3 py-2.5 text-sm" style={{
-                backgroundColor: 'rgba(245,158,11,0.08)', borderColor: '#F59E0B44',
-                border: '1px solid #F59E0B44', color: '#F59E0B',
-              }}>
-                Prise d'effet le {new Date(downgradeEffectDate).toLocaleDateString('fr-FR')} (fin de la période en cours)
-              </div>
+                {isUpgradeWithDates && (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label>Durée</Label>
+                      <select value={planDuration} onChange={e => setPlanDuration(e.target.value)}
+                        className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle}>
+                        {DURATION_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Date de début</Label>
+                        <input type="date" value={planStartDate} onChange={e => setPlanStartDate(e.target.value)}
+                          className="w-full rounded-lg border px-3 py-2 text-sm" style={selectStyle} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Date de fin</Label>
+                        <div className="rounded-lg border px-3 py-2 text-sm" style={{ ...selectStyle, opacity: 0.6 }}>
+                          {planEndDate || '—'}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
             )}
           </div>
           <DialogFooter>
             <button className="text-sm px-4 py-2 rounded-lg border"
               style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-muted-foreground)' }}
-              onClick={() => setShowPlan(false)}>Annuler</button>
-            <button disabled={busy || newPlan === user.plan}
+              onClick={() => setShowPlan(false)}>{isMaxPlan ? 'Fermer' : 'Annuler'}</button>
+            <button disabled={busy || isMaxPlan}
               className="text-sm px-4 py-2 rounded-lg font-medium disabled:opacity-50"
               style={{ backgroundColor: 'var(--admin-primary)', color: '#0F0F0F' }}
+              hidden={isMaxPlan}
               onClick={() => run(
-                () => changePlan(user.id, newPlan, isUpgradeWithDates ? planStartDate : undefined, isUpgradeWithDates ? planEndDate : (downgradeEffectDate ?? undefined)),
+                () => changePlan(user.id, newPlan, planStartDate, planEndDate),
                 () => setShowPlan(false),
-                isDowngrade ? `Passage en ${newPlan} planifié.` : `Plan changé en ${newPlan}.`
+                `Plan changé en ${planLabel(newPlan)}.`
               )}>
               {busy ? 'En cours…' : 'Confirmer'}
             </button>
@@ -411,6 +414,7 @@ export function UserDetailClient({ user }: Props) {
           <DialogHeader>
             <DialogTitle>{user.is_banned ? 'Réactiver le compte' : 'Suspendre le compte'}</DialogTitle>
           </DialogHeader>
+          <FeedbackBanner feedback={feedback} onDismiss={() => setFeedback(null)} />
           <div className="py-2">
             <p className="text-sm" style={{ color: 'var(--admin-foreground)' }}>
               {user.is_banned
@@ -448,6 +452,7 @@ export function UserDetailClient({ user }: Props) {
           <DialogHeader>
             <DialogTitle>Supprimer le compte</DialogTitle>
           </DialogHeader>
+          <FeedbackBanner feedback={feedback} onDismiss={() => setFeedback(null)} />
           <div className="py-2 space-y-3">
             <p className="text-sm" style={{ color: 'var(--admin-foreground)' }}>
               Êtes-vous sûr de vouloir supprimer le compte de <strong>{displayName}</strong> ?
@@ -481,6 +486,7 @@ export function UserDetailClient({ user }: Props) {
       <Dialog open={showEmail} onOpenChange={setShowEmail}>
         <DialogContent {...{ 'data-admin-theme': theme }} style={dialogStyle}>
           <DialogHeader><DialogTitle>Envoyer un email</DialogTitle></DialogHeader>
+          <FeedbackBanner feedback={feedback} onDismiss={() => setFeedback(null)} />
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
               <Label>Destinataire</Label>
@@ -520,6 +526,38 @@ export function UserDetailClient({ user }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// Bandeau de feedback réutilisé hors et dans chaque modale : indispensable
+// dans les modales car le backdrop Radix masque le rendu d'arrière-plan
+// (sinon l'admin ne voit jamais le message d'erreur quand l'action échoue).
+function FeedbackBanner({
+  feedback,
+  onDismiss,
+}: {
+  feedback: { type: 'success' | 'error'; message: string } | null
+  onDismiss: () => void
+}) {
+  if (!feedback) return null
+  const isSuccess = feedback.type === 'success'
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-lg px-4 py-3 text-sm font-medium" style={{
+      backgroundColor: isSuccess ? 'rgba(56,161,105,0.1)' : 'rgba(229,62,62,0.1)',
+      color: isSuccess ? 'var(--admin-success)' : 'var(--admin-destructive)',
+      border: `1px solid ${isSuccess ? 'var(--admin-success)' : 'var(--admin-destructive)'}44`,
+    }}>
+      <span className="flex-1">{feedback.message}</span>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Fermer le message"
+        className="shrink-0 text-base leading-none opacity-70 hover:opacity-100"
+        style={{ color: 'inherit' }}
+      >
+        ×
+      </button>
     </div>
   )
 }

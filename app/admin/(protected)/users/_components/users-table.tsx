@@ -5,20 +5,18 @@ import Link from 'next/link'
 import { Search, ChevronUp, ChevronDown, ChevronsUpDown, X } from 'lucide-react'
 import { getUsers, type UserRow, type GetUsersParams } from '@/app/admin/actions'
 import { StatusBadge } from './status-badge'
+import { PLAN_COLORS, PLAN_OPTIONS, planLabel, type PlanCode } from '@/lib/plans'
 
 type SortCol = 'created_at' | 'full_name' | 'tokens'
 
-const PLAN_COLORS: Record<string, { bg: string; text: string }> = {
-  SOLO:       { bg: 'rgba(107,114,128,0.15)', text: 'var(--admin-muted-foreground)' },
-  TEAM:       { bg: 'rgba(59,130,246,0.15)',  text: '#3B82F6' },
-  ENTERPRISE: { bg: 'rgba(197,160,89,0.15)',  text: 'var(--admin-primary)' },
-}
-
-function PlanBadge({ plan }: { plan: string }) {
-  const cfg = PLAN_COLORS[plan] ?? PLAN_COLORS.SOLO
+function PlanBadge({ plan }: { plan: PlanCode }) {
+  const color = PLAN_COLORS[plan]
   return (
-    <span className="inline-block text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: cfg.bg, color: cfg.text }}>
-      {plan}
+    <span
+      className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
+      style={{ backgroundColor: `${color}26`, color }}
+    >
+      {planLabel(plan)}
     </span>
   )
 }
@@ -119,9 +117,7 @@ export function UsersTable() {
           style={{ borderColor: 'var(--admin-border)', backgroundColor: 'var(--admin-background)', color: 'var(--admin-foreground)' }}
         >
           <option value="all">Tous les plans</option>
-          <option value="SOLO">SOLO</option>
-          <option value="TEAM">TEAM</option>
-          <option value="ENTERPRISE">ENTERPRISE</option>
+          {PLAN_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
         </select>
 
         {(search || plan !== 'all') && (
@@ -176,7 +172,7 @@ export function UsersTable() {
                       {(u.full_name ?? u.email).slice(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <p className="font-medium truncate" style={{ color: 'var(--admin-foreground)' }}>{u.full_name ?? '—'}</p>
+                      <p className="font-medium truncate" style={{ color: 'var(--admin-foreground)' }}>{u.full_name}</p>
                       <p className="text-xs truncate" style={{ color: 'var(--admin-muted-foreground)' }}>{u.email}</p>
                       <p className="text-xs truncate" style={{ color: 'var(--admin-muted-foreground)' }}>
                         {u.phone ?? '—'}
@@ -190,11 +186,11 @@ export function UsersTable() {
                 </td>
                 {/* Statut */}
                 <td className="py-3 px-4">
-                  <StatusBadge status={u.account_status !== 'active' ? u.account_status : (u.sub_status ?? 'active')} />
+                  <StatusBadge status={u.sub_status} />
                 </td>
                 {/* Jetons */}
                 <td className="py-3 px-4 font-medium tabular-nums" style={{ color: 'var(--admin-foreground)' }}>
-                  {(u.wallet_balance ?? u.tokens).toLocaleString('fr-FR')}
+                  {u.wallet_balance.toLocaleString('fr-FR')}
                 </td>
                 {/* Inscription */}
                 <td className="py-3 px-4 whitespace-nowrap" style={{ color: 'var(--admin-muted-foreground)' }}>
