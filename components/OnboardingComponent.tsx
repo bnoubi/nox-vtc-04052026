@@ -696,13 +696,10 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                   />
                   <div className="absolute inset-x-0 bottom-0 h-[40%] bg-gradient-to-t from-black/90 to-transparent" />
                   <div className="absolute top-16 left-0 right-0 flex flex-col items-center">
-                    <img
-                      src="/assets/logo_onboarding_120.png"
-                      alt="NoX VTC"
-                      width={120}
-                      height={120}
-                      className="mb-4"
-                    />
+                    <div className="flex flex-col items-center mb-4">
+                      <span style={{ fontFamily: 'serif', color: '#C9A84C', fontSize: '3.75rem', lineHeight: 1 }}>N</span>
+                      <span style={{ color: '#8B6914', fontSize: '0.875rem', letterSpacing: '0.2em', marginTop: '0.25rem' }}>NoX VTC</span>
+                    </div>
                   </div>
                   <div className="absolute inset-x-0 bottom-32 px-8 text-center">
                     <h1 className="text-2xl font-bold font-heading mb-3 text-white">Bienvenue sur NoX VTC</h1>
