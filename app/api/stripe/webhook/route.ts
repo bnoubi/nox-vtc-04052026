@@ -3,11 +3,27 @@ import { stripe } from '@/lib/stripe/client'
 import { createServerClient } from '@supabase/ssr'
 import Stripe from 'stripe'
 
-const TOKEN_AMOUNTS: Record<string, number> = {
-  [process.env.STRIPE_PRICE_PACK_DECOUVERTE ?? '']: 10,
-  [process.env.STRIPE_PRICE_PACK_PRIVILEGE   ?? '']: 30,
-  [process.env.STRIPE_PRICE_PACK_PRESTIGE    ?? '']: 50,
+// Mapping priceId Stripe → nb de jetons. Deux conventions de noms d'env
+// coexistent (lib/config/prices.ts utilise PACK_5/15/25 ; le webhook
+// historique utilisait DECOUVERTE/PRIVILEGE/PRESTIGE). On lit les deux,
+// chaque variable définie ajoute une entrée — pas de collision sur ''
+// puisqu'on ne pousse que des valeurs non-vides.
+function buildTokenAmounts(): Record<string, number> {
+  const map: Record<string, number> = {}
+  const add = (priceId: string | undefined, tokens: number) => {
+    if (priceId && priceId.trim()) map[priceId] = tokens
+  }
+  // Convention historique (legacy)
+  add(process.env.STRIPE_PRICE_PACK_DECOUVERTE, 10)
+  add(process.env.STRIPE_PRICE_PACK_PRIVILEGE,  30)
+  add(process.env.STRIPE_PRICE_PACK_PRESTIGE,   50)
+  // Convention actuelle (lib/config/prices.ts)
+  add(process.env.STRIPE_PRICE_PACK_5,  10)
+  add(process.env.STRIPE_PRICE_PACK_15, 30)
+  add(process.env.STRIPE_PRICE_PACK_25, 50)
+  return map
 }
+const TOKEN_AMOUNTS: Record<string, number> = buildTokenAmounts()
 
 function resolvePlan(priceId: string): string {
   const duo  = process.env.STRIPE_PRICE_DUO  ?? ''
@@ -27,41 +43,85 @@ function makeAdminDb() {
 }
 
 async function creditTokens(userId: string, priceId: string) {
-  const tokens = TOKEN_AMOUNTS[priceId]
-  if (!tokens) {
-    console.error('[webhook] creditTokens — unknown priceId:', priceId)
-    return
-  }
+  // Bloc entier sous try/catch — un crash ici redémarrait PM2 sur chaque
+  // checkout token pack (logs vides après "checkout.session.completed").
+  // On loggue chaque étape pour qu'un futur incident soit diagnostiquable.
+  console.log('[creditTokens] called — userId:', userId, '| priceId:', priceId)
+  try {
+    const tokens = TOKEN_AMOUNTS[priceId]
+    if (!tokens) {
+      console.error('[creditTokens] unknown priceId:', priceId,
+        '| TOKEN_AMOUNTS keys:', Object.keys(TOKEN_AMOUNTS).length ? Object.keys(TOKEN_AMOUNTS) : '(empty — vérifier STRIPE_PRICE_PACK_* dans .env.local)')
+      return
+    }
+    console.log('[creditTokens] TOKEN_AMOUNTS resolved:', tokens, 'tokens')
 
-  const db = makeAdminDb()
-  const { data: wallet } = await db.from('wallets').select('id, balance').eq('user_id', userId).maybeSingle()
-
-  let walletId: string
-  let balanceAfter: number
-
-  if (wallet) {
-    const w = wallet as { id: string; balance: number }
-    walletId = w.id
-    balanceAfter = w.balance + tokens
-    await db.from('wallets').update({ balance: balanceAfter }).eq('user_id', userId)
-  } else {
-    balanceAfter = tokens
-    const { data: newWallet } = await db
+    const db = makeAdminDb()
+    const { data: wallet, error: walletReadErr } = await db
       .from('wallets')
-      .insert({ user_id: userId, balance: tokens })
-      .select('id')
-      .single()
-    walletId = (newWallet as { id: string } | null)?.id ?? ''
-  }
+      .select('id, balance')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (walletReadErr) {
+      console.error('[creditTokens] wallet SELECT error:', walletReadErr)
+      return
+    }
+    const w = wallet as { id: string; balance: number } | null
+    console.log('[creditTokens] wallet fetched:',
+      w ? `id=${w.id} balance=${w.balance}` : 'not found')
 
-  await db.from('token_transactions').insert({
-    user_id:      userId,
-    type:         'purchase',
-    amount:       tokens,
-    description:  'Achat pack jetons',
-    wallet_id:    walletId || null,
-    balance_after: balanceAfter,
-  })
+    let walletId: string | null = null
+    let balanceAfter: number
+
+    if (w) {
+      walletId = w.id
+      balanceAfter = w.balance + tokens
+      const { error: updErr } = await db
+        .from('wallets')
+        .update({ balance: balanceAfter })
+        .eq('user_id', userId)
+      if (updErr) {
+        console.error('[creditTokens] wallet UPDATE error:', updErr)
+        return
+      }
+      console.log('[creditTokens] wallet updated — new balance:', balanceAfter)
+    } else {
+      balanceAfter = tokens
+      // maybeSingle (et non single) : ne throw pas si l'INSERT ne retourne
+      // pas de row (RLS, conflit silencieux), on traite l'erreur explicitement.
+      const { data: newWallet, error: insErr } = await db
+        .from('wallets')
+        .insert({ user_id: userId, balance: tokens })
+        .select('id')
+        .maybeSingle()
+      if (insErr) {
+        console.error('[creditTokens] wallet INSERT error:', insErr)
+        return
+      }
+      walletId = (newWallet as { id: string } | null)?.id ?? null
+      console.log('[creditTokens] wallet created — id:', walletId, '| balance:', balanceAfter)
+    }
+
+    const { error: txErr } = await db.from('token_transactions').insert({
+      user_id:      userId,
+      type:         'purchase',
+      amount:       tokens,
+      description:  'Achat pack jetons',
+      wallet_id:    walletId,
+      balance_after: balanceAfter,
+    })
+    if (txErr) {
+      console.error('[creditTokens] token_transactions INSERT error:', txErr)
+      return
+    }
+    console.log('[creditTokens] OK — total balance après crédit:', balanceAfter)
+  } catch (err) {
+    // Filet final : toute exception non prévue (réseau, JSON, etc.) est
+    // capturée ici — le webhook continue son cycle et Stripe ne re-tente pas
+    // en boucle après le 200 retourné par le POST handler.
+    console.error('[creditTokens] CRASH caught:',
+      err instanceof Error ? `${err.message}\n${err.stack}` : err)
+  }
 }
 
 async function upsertSubscription(userId: string, priceId: string, status: string, stripeSubId: string) {
