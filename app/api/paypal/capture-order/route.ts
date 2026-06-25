@@ -95,6 +95,7 @@ async function processCapture(orderID: string, itemType: string, userId: string)
     await db.from('subscriptions').insert({
       user_id:              userId,
       plan,
+      target_plan:          'solo',
       status:               'active',
       current_period_start: new Date().toISOString(),
     })

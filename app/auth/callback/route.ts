@@ -79,6 +79,7 @@ export async function GET(request: NextRequest) {
         .insert({
           user_id: session.user.id,
           plan: 'TEAM',
+          target_plan: 'solo',
           status: 'trial',
           trial_started_at: new Date().toISOString(),
           trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()

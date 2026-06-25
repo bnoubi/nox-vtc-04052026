@@ -5,8 +5,9 @@ import { Resend } from 'resend'
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(request: NextRequest) {
+  const expected = process.env.CRON_SECRET
   const cronSecret = request.headers.get('x-cron-secret')
-  if (cronSecret !== 'nox-cron-f90c40da4c8f9f905b8f510945b30018') {
+  if (!expected || cronSecret !== expected) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

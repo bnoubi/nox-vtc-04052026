@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
     .insert({
       user_id: userId,
       plan: 'TEAM',
+      target_plan: 'solo',
       status: 'trial',
       trial_started_at: new Date().toISOString(),
       trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
