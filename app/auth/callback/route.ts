@@ -60,30 +60,50 @@ export async function GET(request: NextRequest) {
 
   if (session?.user) {
     const adminClient = createAdminClient()
+    const userId = session.user.id
+    const meta = (session.user.user_metadata ?? {}) as Record<string, unknown>
+    const metaFullName = typeof meta.full_name === 'string' ? meta.full_name
+      : typeof meta.name === 'string' ? meta.name : null
 
-    // Trial TEAM 14 jours si pas encore créé
-    const { data: existingSub } = await adminClient
-      .from('subscriptions')
-      .select('user_id')
-      .eq('user_id', session.user.id)
-      .maybeSingle()
-
-    if (!existingSub) {
-      console.log('[callback] creating trial for:', session.user.id)
-      await adminClient
+    // Backfill défensif (idempotent) : rattrape silencieusement tout trigger
+    // DB qui aurait échoué (le RAISE WARNING ajouté côté SQL logue l'erreur
+    // mais ne bloque pas la création de auth.users). Tous les upserts
+    // utilisent ON CONFLICT DO NOTHING — JAMAIS DO UPDATE — donc une ligne
+    // déjà créée par le trigger ne sera jamais écrasée.
+    const tasks: Promise<unknown>[] = [
+      adminClient
         .from('wallets')
-        .upsert({ user_id: session.user.id, balance: 0 }, { onConflict: 'user_id', ignoreDuplicates: true })
-
-      await adminClient
+        .upsert({ user_id: userId, balance: 0 }, { onConflict: 'user_id', ignoreDuplicates: true }),
+      adminClient
         .from('subscriptions')
-        .insert({
-          user_id: session.user.id,
+        .upsert({
+          user_id: userId,
           plan: 'TEAM',
           target_plan: 'solo',
           status: 'trial',
           trial_started_at: new Date().toISOString(),
-          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-        })
+          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        }, { onConflict: 'user_id', ignoreDuplicates: true }),
+    ]
+    if (session.user.email) {
+      tasks.push(
+        adminClient
+          .from('user_accounts')
+          .upsert({
+            id: userId,
+            email: session.user.email,
+            full_name: metaFullName,
+            plan: 'SOLO',
+            onboarding_step: 0,
+          }, { onConflict: 'id', ignoreDuplicates: true })
+      )
+    } else {
+      console.warn('[callback] session.user.email manquant — user_accounts backfill skipped pour', userId)
+    }
+    const results = await Promise.all(tasks)
+    for (const r of results) {
+      const err = (r as { error?: { message?: string; code?: string } | null }).error
+      if (err) console.error('[callback] backfill error:', err.code, err.message)
     }
 
     // Recovery password → page reset
