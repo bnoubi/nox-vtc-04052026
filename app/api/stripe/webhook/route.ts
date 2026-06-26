@@ -42,11 +42,11 @@ function makeAdminDb() {
   )
 }
 
-async function creditTokens(userId: string, priceId: string) {
+async function creditTokens(userId: string, priceId: string, paymentIntentId: string | null) {
   // Bloc entier sous try/catch — un crash ici redémarrait PM2 sur chaque
   // checkout token pack (logs vides après "checkout.session.completed").
   // On loggue chaque étape pour qu'un futur incident soit diagnostiquable.
-  console.log('[creditTokens] called — userId:', userId, '| priceId:', priceId)
+  console.log('[creditTokens] called — userId:', userId, '| priceId:', priceId, '| paymentIntentId:', paymentIntentId)
   try {
     const tokens = TOKEN_AMOUNTS[priceId]
     if (!tokens) {
@@ -57,6 +57,24 @@ async function creditTokens(userId: string, priceId: string) {
     console.log('[creditTokens] TOKEN_AMOUNTS resolved:', tokens, 'tokens')
 
     const db = makeAdminDb()
+
+    // Idempotence : si Stripe rejoue le webhook (retry après timeout), on
+    // refuse de re-créditer. paymentIntentId == null = cas legacy/anormal,
+    // on insère sans garantie d'unicité plutôt que d'échouer.
+    if (paymentIntentId) {
+      const { data: existingTx, error: dupErr } = await db
+        .from('token_transactions')
+        .select('id')
+        .eq('stripe_payment_intent_id', paymentIntentId)
+        .maybeSingle()
+      if (dupErr) {
+        console.error('[creditTokens] idempotence SELECT error:', dupErr)
+      } else if (existingTx) {
+        console.log('[creditTokens] doublon détecté, ignoré — paymentIntentId:', paymentIntentId)
+        return
+      }
+    }
+
     const { data: wallet, error: walletReadErr } = await db
       .from('wallets')
       .select('id, balance')
@@ -109,6 +127,7 @@ async function creditTokens(userId: string, priceId: string) {
       description:  'Achat pack jetons',
       wallet_id:    walletId,
       balance_after: balanceAfter,
+      stripe_payment_intent_id: paymentIntentId,
     })
     if (txErr) {
       console.error('[creditTokens] token_transactions INSERT error:', txErr)
@@ -203,7 +222,10 @@ export async function POST(req: NextRequest) {
         }
 
         if (session.mode === 'payment') {
-          await creditTokens(userId, priceId)
+          const paymentIntentId = typeof session.payment_intent === 'string'
+            ? session.payment_intent
+            : session.payment_intent?.id ?? null
+          await creditTokens(userId, priceId, paymentIntentId)
         } else if (session.mode === 'subscription') {
           if (!session.subscription) {
             console.error('[webhook] checkout.session.completed — session.subscription est null (abonnement non créé ?)')
@@ -249,9 +271,13 @@ export async function POST(req: NextRequest) {
         if (existing) {
           const { error } = await db
             .from('subscriptions')
-            .update({ status: 'expired', ended_at: new Date().toISOString() })
+            .update({ status: 'expired', updated_at: new Date().toISOString() })
             .eq('id', (existing as { id: string }).id)
-          if (error) console.error('[webhook] customer.subscription.deleted — erreur UPDATE:', error)
+          if (error) {
+            console.error('[webhook] customer.subscription.deleted — erreur UPDATE:', error)
+          } else {
+            console.log('[webhook] subscription.deleted — userId:', userId, ', status: expired')
+          }
         }
         break
       }
@@ -266,6 +292,34 @@ export async function POST(req: NextRequest) {
 
         const db = makeAdminDb()
         await db.from('user_accounts').update({ account_status: 'suspended' }).eq('id', userId)
+        break
+      }
+
+      case 'invoice.paid': {
+        // SDK v22 : invoice.subscription au niveau racine n'existe plus,
+        // l'identifiant d'abonnement est dans parent.subscription_details.
+        // Pour les invoices one-time (packs jetons), ce chemin est null → on ignore.
+        const invoice = event.data.object as Stripe.Invoice
+        const subRef  = invoice.parent?.subscription_details?.subscription
+        const subId   = typeof subRef === 'string' ? subRef : subRef?.id ?? null
+
+        if (!subId) break
+
+        const periodEnd = new Date(invoice.period_end * 1000).toISOString()
+        console.log('[webhook] invoice.paid — subId:', subId, '| period_end:', periodEnd)
+
+        const db = makeAdminDb()
+        const { error } = await db
+          .from('subscriptions')
+          .update({
+            status: 'active',
+            current_period_end: periodEnd,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('stripe_subscription_id', subId)
+        if (error) {
+          console.error('[webhook] invoice.paid — erreur UPDATE subscriptions:', error)
+        }
         break
       }
     }
