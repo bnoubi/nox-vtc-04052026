@@ -1117,15 +1117,39 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                 <input
                   type="date"
                   value={vDateImmat}
+                  max={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setVDateImmat(e.target.value)}
                   className={`${INPUT_CLS} [color-scheme:dark]`}
                 />
-                {vDateImmat && (
-                  <div className="mt-2 px-3 py-2 rounded-lg bg-secondary/40 border border-onyx-border/40 flex items-center justify-between">
-                    <span className="text-[10px] text-muted-foreground">Âge du véhicule</span>
-                    <span className="text-xs font-semibold text-gold">{calculateVehicleAge(vDateImmat).display}</span>
-                  </div>
-                )}
+                {(() => {
+                  if (!vDateImmat) return null
+                  const todayISO = new Date().toISOString().split('T')[0]
+                  // Comparaison lexicographique sûre sur format YYYY-MM-DD.
+                  const isFuture = vDateImmat > todayISO
+                  // Âge nul ou négatif (date >= aujourd'hui) → on n'affiche pas
+                  // de durée trompeuse type "-7 ans et 273 jours".
+                  const isInvalidAge = vDateImmat >= todayISO
+                  return (
+                    <>
+                      {isFuture && (
+                        <p className="mt-1.5 text-xs text-red-400">
+                          La date d&apos;immatriculation ne peut pas être dans le futur
+                        </p>
+                      )}
+                      {isInvalidAge ? (
+                        <div className="mt-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center justify-between">
+                          <span className="text-[10px] text-red-400">Âge du véhicule</span>
+                          <span className="text-xs font-semibold text-red-400">Date invalide</span>
+                        </div>
+                      ) : (
+                        <div className="mt-2 px-3 py-2 rounded-lg bg-secondary/40 border border-onyx-border/40 flex items-center justify-between">
+                          <span className="text-[10px] text-muted-foreground">Âge du véhicule</span>
+                          <span className="text-xs font-semibold text-gold">{calculateVehicleAge(vDateImmat).display}</span>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-white/70 ml-1">Catégorie</label>
@@ -1180,7 +1204,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
             </div>
 
             {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
-            <button onClick={handleAddVehicle} disabled={loading || !vImmat || !vCategory || !vMarque || !vModele || !vMotorisation || !vDateImmat} className={PRIMARY_BTN}>
+            <button onClick={handleAddVehicle} disabled={loading || !vImmat || !vCategory || !vMarque || !vModele || !vMotorisation || !vDateImmat || vDateImmat > new Date().toISOString().split('T')[0]} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Ajout...</span> : <><Save className="h-4 w-4" strokeWidth={2} />Ajouter mon véhicule</>}
             </button>
             <button type="button" onClick={() => void goToStep(6)} disabled={loading} className={SECONDARY_BTN}>Plus tard</button>

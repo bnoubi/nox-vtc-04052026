@@ -115,11 +115,13 @@ export async function GET(req: NextRequest) {
 
   const result = await processCapture(orderID, itemType, userId)
 
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://app.noxvtc.fr'
+
   if ('error' in result) {
-    return NextResponse.redirect(new URL(`/?paypal=error&msg=${encodeURIComponent(result.error ?? '')}`, req.url))
+    return NextResponse.redirect(new URL(`/?paypal=error&msg=${encodeURIComponent(result.error ?? '')}`, baseUrl))
   }
 
-  return NextResponse.redirect(new URL(result.redirectUrl, req.url))
+  return NextResponse.redirect(new URL(result.redirectUrl, baseUrl))
 }
 
 export async function POST(req: NextRequest) {
