@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { sendEmail } from '@/lib/email/resend'
+import { subscriptionExpiredEmail } from '@/emails/subscription-expired'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -64,8 +67,72 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Expiration abonnements PayPal (cancel_at dépassé, pas de webhook)
+  let expiredPaypalCount = 0
+  try {
+    const adminDb = createAdminClient()
+    const now = new Date().toISOString()
+
+    const { data: expiredPaypalSubs } = await adminDb
+      .from('subscriptions')
+      .select('id, user_id, plan')
+      .eq('payment_provider', 'paypal')
+      .not('cancel_at', 'is', null)
+      .lt('cancel_at', now)
+      .neq('status', 'expired')
+
+    if (expiredPaypalSubs && expiredPaypalSubs.length > 0) {
+      for (const sub of expiredPaypalSubs as { id: string; user_id: string; plan: string }[]) {
+        try {
+          // Basculer l'abonnement et le compte en solo
+          await adminDb
+            .from('subscriptions')
+            .update({ status: 'expired', plan: 'solo', target_plan: 'solo', updated_at: now })
+            .eq('id', sub.id)
+
+          await adminDb
+            .from('user_accounts')
+            .update({ plan: 'solo', updated_at: now })
+            .eq('id', sub.user_id)
+
+          // Récupérer email + nom
+          const { data: account } = await adminDb
+            .from('user_accounts')
+            .select('email, full_name')
+            .eq('id', sub.user_id)
+            .maybeSingle()
+
+          const acc = account as { email: string; full_name: string } | null
+          if (acc?.email) {
+            const planName = sub.plan === 'TEAM' || sub.plan === 'team'
+              ? 'Premium'
+              : 'Pro'
+            const { subject, html } = subscriptionExpiredEmail({
+              userName: acc.full_name ?? 'Client',
+              planName,
+              expiredAt: now,
+            })
+            const result = await sendEmail(acc.email, subject, html)
+            if (!result.success) {
+              console.error('[expire-paypal] email erreur userId:', sub.user_id, result.error)
+            } else {
+              console.log('[expire-paypal] email expiration envoyé:', sub.user_id)
+            }
+          }
+
+          expiredPaypalCount++
+        } catch (subErr) {
+          console.error('[expire-paypal] erreur traitement userId:', sub.user_id, subErr)
+        }
+      }
+    }
+  } catch (paypalErr) {
+    console.error('[expire-paypal] erreur globale:', paypalErr)
+  }
+
   return NextResponse.json({
     expired: expiredTrials?.length ?? 0,
+    expiredPaypal: expiredPaypalCount,
     message: 'Trials expired successfully'
   })
 }

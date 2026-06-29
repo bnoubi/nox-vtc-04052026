@@ -4,6 +4,7 @@ import { createServerClient } from '@supabase/ssr'
 import Stripe from 'stripe'
 import { generateAndStoreSaasInvoice } from '@/lib/saas-invoice-generator'
 import { saasInvoiceEmail } from '@/emails/saas-invoice'
+import { subscriptionExpiredEmail } from '@/emails/subscription-expired'
 import { sendEmail } from '@/lib/email/resend'
 
 // Mapping priceId Stripe → nb de jetons. Deux conventions de noms d'env
@@ -383,6 +384,39 @@ export async function POST(req: NextRequest) {
             .update({ plan: 'solo', updated_at: now })
             .eq('id', userId)
           if (accErr) console.error('[webhook] customer.subscription.deleted — erreur UPDATE user_accounts:', accErr)
+        }
+
+        // Email d'expiration — isolé pour ne jamais crasher le webhook
+        try {
+          const { data: account } = await db
+            .from('user_accounts')
+            .select('email, full_name')
+            .eq('id', userId)
+            .maybeSingle()
+
+          const acc = account as { email: string; full_name: string } | null
+          if (acc?.email) {
+            const oldPriceId = sub.items.data[0]?.price.id ?? ''
+            const oldPlan    = resolvePlan(oldPriceId)
+            const planName   = oldPlan === 'TEAM' ? 'Premium' : 'Pro'
+            const expiredAt  = sub.ended_at
+              ? new Date(sub.ended_at * 1000).toISOString()
+              : new Date().toISOString()
+
+            const { subject, html } = subscriptionExpiredEmail({
+              userName: acc.full_name ?? 'Client',
+              planName,
+              expiredAt,
+            })
+            const result = await sendEmail(acc.email, subject, html)
+            if (!result.success) {
+              console.error('[webhook] subscription.deleted — email expiration erreur:', result.error)
+            } else {
+              console.log('[webhook] subscription.deleted — email expiration envoyé:', userId)
+            }
+          }
+        } catch (emailErr) {
+          console.error('[webhook] subscription.deleted — email expiration exception:', emailErr)
         }
         break
       }
