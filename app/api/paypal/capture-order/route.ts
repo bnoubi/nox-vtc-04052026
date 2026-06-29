@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { capturePayPalOrder } from '@/lib/paypal/client'
 import { createServerClient } from '@supabase/ssr'
-import { getTokenPack } from '@/lib/config/prices'
+import { getTokenPack, getPlan } from '@/lib/config/prices'
+import { generateAndStoreSaasInvoice } from '@/lib/saas-invoice-generator'
+import { saasInvoiceEmail } from '@/emails/saas-invoice'
+import { sendEmail } from '@/lib/email/resend'
 
 const schema = z.object({
   orderID:  z.string().min(1),
@@ -16,6 +19,83 @@ function makeAdminDb() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { cookies: { getAll: () => [], setAll: () => {} } },
   )
+}
+
+async function handleSaasInvoicePaypal(opts: {
+  userId: string
+  itemType: string
+  orderID: string
+}) {
+  try {
+    const { userId, itemType, orderID } = opts
+    const db = makeAdminDb()
+
+    const { data: account } = await db
+      .from('user_accounts')
+      .select('email, full_name')
+      .eq('id', userId)
+      .maybeSingle()
+
+    const acc = account as { email: string; full_name: string } | null
+    const userEmail = acc?.email ?? ''
+    const userName  = acc?.full_name ?? 'Client'
+
+    if (!userEmail) {
+      console.warn('[saas-invoice] PayPal — email introuvable pour userId:', userId)
+      return
+    }
+
+    const isPack = itemType.startsWith('pack_')
+    let description: string
+    let montantTTC: number
+    let type: 'subscription' | 'token_pack'
+
+    if (isPack) {
+      const pack = getTokenPack(itemType)
+      description = pack?.description ?? 'Pack jetons NoX VTC'
+      montantTTC  = pack?.price ?? 0
+      type = 'token_pack'
+    } else {
+      const plan = getPlan(itemType)
+      description = plan?.description ?? 'Abonnement NoX VTC'
+      montantTTC  = plan?.price ?? 0
+      type = 'subscription'
+    }
+
+    if (montantTTC <= 0) {
+      console.log('[saas-invoice] PayPal — montant 0, pas de facture')
+      return
+    }
+
+    const { numero, pdfSignedUrl } = await generateAndStoreSaasInvoice({
+      userId, userEmail, userName, type, description,
+      montantTTC, paymentProvider: 'paypal', providerReference: orderID,
+    })
+
+    const montant_ht = Math.round((montantTTC / 1.20) * 100) / 100
+    const tva_amount = Math.round((montantTTC - montant_ht) * 100) / 100
+    const { subject, html } = saasInvoiceEmail({
+      userName, numero, description,
+      montantTTC, montantHT: montant_ht, tvaAmount: tva_amount,
+      pdfUrl: pdfSignedUrl ?? '', type,
+    })
+
+    const emailResult = await sendEmail(userEmail, subject, html)
+    if (!emailResult.success) {
+      console.error('[saas-invoice] PayPal — email error:', emailResult.error)
+    } else {
+      console.log('[saas-invoice] PayPal — email sent to:', userEmail)
+    }
+
+    await db
+      .from('saas_invoices')
+      .update({ email_sent_at: new Date().toISOString(), status: 'sent' })
+      .eq('numero', numero)
+
+    console.log('[saas-invoice] PayPal — done, numero:', numero)
+  } catch (err) {
+    console.error('[saas-invoice] PayPal — error:', err instanceof Error ? `${err.message}\n${err.stack}` : err)
+  }
 }
 
 async function processCapture(orderID: string, itemType: string, userId: string) {
@@ -72,6 +152,8 @@ async function processCapture(orderID: string, itemType: string, userId: string)
       balance_after: balanceAfter,
     })
 
+    await handleSaasInvoicePaypal({ userId, itemType, orderID })
+
     return { redirectUrl: `/payment/success?type=token_pack&amount=${tokens}&before=${balanceBefore}&after=${balanceAfter}` }
   }
 
@@ -86,10 +168,12 @@ async function processCapture(orderID: string, itemType: string, userId: string)
     .limit(1)
     .maybeSingle()
 
+  const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+
   if (existing) {
     await db
       .from('subscriptions')
-      .update({ plan, status: 'active' })
+      .update({ plan, status: 'active', payment_provider: 'paypal', current_period_end: periodEnd })
       .eq('id', (existing as { id: string }).id)
   } else {
     await db.from('subscriptions').insert({
@@ -97,11 +181,15 @@ async function processCapture(orderID: string, itemType: string, userId: string)
       plan,
       target_plan:          'solo',
       status:               'active',
+      payment_provider:     'paypal',
       current_period_start: new Date().toISOString(),
+      current_period_end:   periodEnd,
     })
   }
 
   await db.from('user_accounts').update({ plan }).eq('id', userId)
+
+  await handleSaasInvoicePaypal({ userId, itemType, orderID })
 
   const validUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   return { redirectUrl: `/payment/success?type=subscription&plan=${plan}&valid_until=${validUntil}` }

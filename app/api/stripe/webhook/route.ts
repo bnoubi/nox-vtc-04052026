@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe/client'
 import { createServerClient } from '@supabase/ssr'
 import Stripe from 'stripe'
+import { generateAndStoreSaasInvoice } from '@/lib/saas-invoice-generator'
+import { saasInvoiceEmail } from '@/emails/saas-invoice'
+import { sendEmail } from '@/lib/email/resend'
 
 // Mapping priceId Stripe → nb de jetons. Deux conventions de noms d'env
 // coexistent (lib/config/prices.ts utilise PACK_5/15/25 ; le webhook
@@ -166,7 +169,7 @@ async function upsertSubscription(userId: string, priceId: string, status: strin
   if (existing) {
     const { error: updateSubError } = await db
       .from('subscriptions')
-      .update({ plan, status, stripe_subscription_id: stripeSubId })
+      .update({ plan, status, stripe_subscription_id: stripeSubId, payment_provider: 'stripe' })
       .eq('id', (existing as { id: string }).id)
     if (updateSubError) {
       console.error('[webhook] upsertSubscription — erreur UPDATE subscriptions:', updateSubError)
@@ -175,7 +178,7 @@ async function upsertSubscription(userId: string, priceId: string, status: strin
     }
   } else {
     const { error: insertSubError } = await db.from('subscriptions').insert({
-      user_id: userId, plan, target_plan: 'solo', status, stripe_subscription_id: stripeSubId, current_period_start: new Date().toISOString(),
+      user_id: userId, plan, target_plan: 'solo', status, stripe_subscription_id: stripeSubId, current_period_start: new Date().toISOString(), payment_provider: 'stripe',
     })
     if (insertSubError) {
       console.error('[webhook] upsertSubscription — erreur INSERT subscriptions:', insertSubError)
@@ -189,6 +192,91 @@ async function upsertSubscription(userId: string, priceId: string, status: strin
     console.error('[webhook] upsertSubscription — erreur UPDATE user_accounts:', updateAccountError)
   } else {
     console.log('[webhook] upsertSubscription — user_accounts.plan mis à jour → ', plan)
+  }
+}
+
+function buildInvoiceDescription(priceId: string, mode: 'payment' | 'subscription'): string {
+  if (mode === 'payment') {
+    const pack5  = process.env.STRIPE_PRICE_PACK_5
+    const pack15 = process.env.STRIPE_PRICE_PACK_15
+    const pack25 = process.env.STRIPE_PRICE_PACK_25
+    const packD  = process.env.STRIPE_PRICE_PACK_DECOUVERTE
+    const packP  = process.env.STRIPE_PRICE_PACK_PRIVILEGE
+    const packPr = process.env.STRIPE_PRICE_PACK_PRESTIGE
+    if ((pack5  && priceId === pack5)  || (packD  && priceId === packD))  return 'Pack Découverte — 10 jetons'
+    if ((pack15 && priceId === pack15) || (packP  && priceId === packP))  return 'Pack Privilège — 30 jetons'
+    if ((pack25 && priceId === pack25) || (packPr && priceId === packPr)) return 'Pack Prestige — 50 jetons'
+    return 'Pack jetons NoX VTC'
+  }
+  const plan = resolvePlan(priceId)
+  if (plan === 'DUO') return 'Offre Pro — abonnement mensuel'
+  if (plan === 'TEAM') return 'Offre Premium — abonnement mensuel'
+  return 'Abonnement NoX VTC'
+}
+
+async function handleSaasInvoiceStripe(opts: {
+  userId: string
+  priceId: string
+  mode: 'payment' | 'subscription'
+  montantTTC: number
+  providerReference: string
+}) {
+  try {
+    const { userId, priceId, mode, montantTTC, providerReference } = opts
+
+    if (montantTTC <= 0) {
+      console.log('[saas-invoice] montant 0 — pas de facture générée')
+      return
+    }
+
+    const db = makeAdminDb()
+
+    const { data: account } = await db
+      .from('user_accounts')
+      .select('email, full_name')
+      .eq('id', userId)
+      .maybeSingle()
+
+    const acc = account as { email: string; full_name: string } | null
+    const userEmail = acc?.email ?? ''
+    const userName  = acc?.full_name ?? 'Client'
+
+    if (!userEmail) {
+      console.warn('[saas-invoice] email introuvable pour userId:', userId)
+      return
+    }
+
+    const description = buildInvoiceDescription(priceId, mode)
+    const type: 'subscription' | 'token_pack' = mode === 'payment' ? 'token_pack' : 'subscription'
+
+    const { numero, pdfSignedUrl } = await generateAndStoreSaasInvoice({
+      userId, userEmail, userName, type, description,
+      montantTTC, paymentProvider: 'stripe', providerReference,
+    })
+
+    const montant_ht = Math.round((montantTTC / 1.20) * 100) / 100
+    const tva_amount = Math.round((montantTTC - montant_ht) * 100) / 100
+    const { subject, html } = saasInvoiceEmail({
+      userName, numero, description,
+      montantTTC, montantHT: montant_ht, tvaAmount: tva_amount,
+      pdfUrl: pdfSignedUrl ?? '', type,
+    })
+
+    const emailResult = await sendEmail(userEmail, subject, html)
+    if (!emailResult.success) {
+      console.error('[saas-invoice] email error:', emailResult.error)
+    } else {
+      console.log('[saas-invoice] email sent to:', userEmail)
+    }
+
+    await db
+      .from('saas_invoices')
+      .update({ email_sent_at: new Date().toISOString(), status: 'sent' })
+      .eq('numero', numero)
+
+    console.log('[saas-invoice] done — numero:', numero)
+  } catch (err) {
+    console.error('[saas-invoice] error:', err instanceof Error ? `${err.message}\n${err.stack}` : err)
   }
 }
 
@@ -226,6 +314,11 @@ export async function POST(req: NextRequest) {
             ? session.payment_intent
             : session.payment_intent?.id ?? null
           await creditTokens(userId, priceId, paymentIntentId)
+          await handleSaasInvoiceStripe({
+            userId, priceId, mode: 'payment',
+            montantTTC: (session.amount_total ?? 0) / 100,
+            providerReference: paymentIntentId ?? `session_${session.id}`,
+          })
         } else if (session.mode === 'subscription') {
           if (!session.subscription) {
             console.error('[webhook] checkout.session.completed — session.subscription est null (abonnement non créé ?)')
@@ -235,6 +328,11 @@ export async function POST(req: NextRequest) {
             ? session.subscription
             : session.subscription.id
           await upsertSubscription(userId, priceId, 'active', subId)
+          await handleSaasInvoiceStripe({
+            userId, priceId, mode: 'subscription',
+            montantTTC: (session.amount_total ?? 0) / 100,
+            providerReference: subId,
+          })
         }
         break
       }
@@ -269,15 +367,22 @@ export async function POST(req: NextRequest) {
           .maybeSingle()
 
         if (existing) {
+          const now = new Date().toISOString()
           const { error } = await db
             .from('subscriptions')
-            .update({ status: 'expired', updated_at: new Date().toISOString() })
+            .update({ status: 'expired', plan: 'solo', target_plan: 'solo', cancel_at: null, updated_at: now })
             .eq('id', (existing as { id: string }).id)
           if (error) {
-            console.error('[webhook] customer.subscription.deleted — erreur UPDATE:', error)
+            console.error('[webhook] customer.subscription.deleted — erreur UPDATE subscriptions:', error)
           } else {
-            console.log('[webhook] subscription.deleted — userId:', userId, ', status: expired')
+            console.log('[webhook] subscription.deleted — userId:', userId, ', status: expired, plan → solo')
           }
+
+          const { error: accErr } = await db
+            .from('user_accounts')
+            .update({ plan: 'solo', updated_at: now })
+            .eq('id', userId)
+          if (accErr) console.error('[webhook] customer.subscription.deleted — erreur UPDATE user_accounts:', accErr)
         }
         break
       }
