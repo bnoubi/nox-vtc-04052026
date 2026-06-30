@@ -1,12 +1,13 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { SubScreenHeader, GlassCard } from "../tab-settings"
 import { createClient } from "@/lib/supabase/client"
 import { deleteUserAccount } from "@/app/actions/account.actions"
 import { toast } from "sonner"
 import { AlertTriangle, Lock, LogOut, Mail } from "lucide-react"
+import { Turnstile, TurnstileInstance } from "@marsidev/react-turnstile"
 
 const slideIn = {
   initial: { opacity: 0, x: 60 },
@@ -22,34 +23,48 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
   const [password, setPassword] = useState("")
   const [otpCode, setOtpCode] = useState("")
   const [userEmail, setUserEmail] = useState("")
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileInstance>(null)
 
   useEffect(() => {
     async function loadUser() {
       const supabase = createClient()
       const { data } = await supabase.auth.getUser()
-      if (data?.user?.email) {
-        setUserEmail(data.user.email)
-      }
+      if (data?.user?.email) setUserEmail(data.user.email)
     }
     loadUser()
   }, [])
 
-  async function enterStep2() {
+  async function fetchVerificationMethod(token: string) {
     setMethodLoading(true)
     try {
-      const res = await fetch('/api/account/request-deletion-otp', { method: 'POST' })
+      const res = await fetch('/api/account/request-deletion-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ captchaToken: token }),
+      })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Erreur lors de la vérification')
       setVerificationMethod(data.method)
-      setStep(2)
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : 'Erreur lors de la vérification')
+      turnstileRef.current?.reset()
+      setCaptchaToken(null)
     } finally {
       setMethodLoading(false)
     }
   }
 
+  function handleTurnstileSuccess(token: string) {
+    setCaptchaToken(token)
+    // Pour password : token déjà connu, on garde juste le captchaToken pour signInWithPassword
+    // Pour otp / inconnu : appel API pour déterminer la méthode et envoyer l'OTP
+    if (verificationMethod === 'password') return
+    fetchVerificationMethod(token)
+  }
+
   async function handleDelete() {
+    if (!captchaToken) return
     setLoading(true)
     const supabase = createClient()
 
@@ -57,7 +72,8 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
       if (verificationMethod === 'password') {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: userEmail,
-          password: password,
+          password,
+          options: { captchaToken },
         })
         if (signInError) throw new Error("Mot de passe incorrect")
 
@@ -80,11 +96,14 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Erreur lors de la suppression du compte")
       setLoading(false)
+    } finally {
+      turnstileRef.current?.reset()
+      setCaptchaToken(null)
     }
   }
 
   const hasInput = verificationMethod === 'password' ? !!password : !!otpCode
-  const isConfirmDisabled = !hasInput || loading
+  const isConfirmDisabled = !hasInput || !captchaToken || loading
 
   return (
     <motion.div key="deleteAccount" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full bg-background absolute inset-0 z-10 w-full">
@@ -108,14 +127,10 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
                 </p>
 
                 <button
-                  onClick={enterStep2}
-                  disabled={methodLoading}
-                  className="w-full py-3 rounded-xl bg-red-600/20 border border-red-600/30 text-red-400 font-bold hover:bg-red-600/30 active:scale-[0.98] transition-all disabled:opacity-50"
+                  onClick={() => setStep(2)}
+                  className="w-full py-3 rounded-xl bg-red-600/20 border border-red-600/30 text-red-400 font-bold hover:bg-red-600/30 active:scale-[0.98] transition-all"
                 >
-                  {methodLoading
-                    ? <span className="animate-pulse">Chargement...</span>
-                    : "Je veux supprimer mon compte"
-                  }
+                  Je veux supprimer mon compte
                 </button>
               </div>
             </GlassCard>
@@ -130,12 +145,17 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
               <div className="p-5">
                 <p className="text-sm font-semibold text-red-400 mb-2">Confirmez votre identité</p>
 
-                {verificationMethod === 'password' ? (
+                {/* Champ selon la méthode détectée */}
+                {methodLoading && (
+                  <p className="text-xs text-red-200/50 mb-4 animate-pulse">Vérification en cours...</p>
+                )}
+
+                {!methodLoading && verificationMethod === 'password' && (
                   <>
                     <p className="text-xs text-red-200/70 mb-4">
                       Pour des raisons de sécurité, veuillez saisir votre mot de passe actuel pour valider la suppression de <strong className="text-red-200">{userEmail}</strong>.
                     </p>
-                    <div className="space-y-1.5 mb-6">
+                    <div className="space-y-1.5 mb-4">
                       <label className="text-[10px] uppercase tracking-wider text-red-400/80 font-semibold flex items-center gap-1.5 ml-1">
                         <Lock className="h-3 w-3" /> Mot de passe
                       </label>
@@ -148,12 +168,14 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
                       />
                     </div>
                   </>
-                ) : (
+                )}
+
+                {!methodLoading && verificationMethod === 'otp' && (
                   <>
                     <p className="text-xs text-red-200/70 mb-4">
                       Un code de vérification a été envoyé à <strong className="text-red-200">{userEmail}</strong>. Saisissez-le pour confirmer la suppression.
                     </p>
-                    <div className="space-y-1.5 mb-6">
+                    <div className="space-y-1.5 mb-4">
                       <label className="text-[10px] uppercase tracking-wider text-red-400/80 font-semibold flex items-center gap-1.5 ml-1">
                         <Mail className="h-3 w-3" /> Code reçu par email
                       </label>
@@ -169,6 +191,16 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
                     </div>
                   </>
                 )}
+
+                {/* Widget Turnstile — protection captcha pour les deux flux */}
+                <div className="flex justify-center mb-4">
+                  <Turnstile
+                    ref={turnstileRef}
+                    siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
+                    onSuccess={handleTurnstileSuccess}
+                    options={{ theme: 'dark' }}
+                  />
+                </div>
 
                 <div className="flex flex-col gap-3">
                   <button
@@ -190,7 +222,12 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
                     )}
                   </button>
                   <button
-                    onClick={() => setStep(1)}
+                    onClick={() => {
+                      setStep(1)
+                      setVerificationMethod(null)
+                      setPassword("")
+                      setOtpCode("")
+                    }}
                     disabled={loading}
                     className="w-full py-2.5 rounded-xl text-xs font-semibold text-muted-foreground hover:text-white transition-colors"
                   >
