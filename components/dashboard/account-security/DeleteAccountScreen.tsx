@@ -78,12 +78,15 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
         if (signInError) throw new Error("Mot de passe incorrect")
 
       } else if (verificationMethod === 'otp') {
-        const { error: otpError } = await supabase.auth.verifyOtp({
-          email: userEmail,
-          token: otpCode,
-          type: 'email',
+        const res = await fetch('/api/account/verify-deletion-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: otpCode }),
         })
-        if (otpError) throw new Error("Code de vérification invalide ou expiré")
+        const data = await res.json()
+        if (!res.ok || !data.verified) {
+          throw new Error(data.error || "Code de vérification invalide ou expiré")
+        }
       }
 
       const result = await deleteUserAccount()
