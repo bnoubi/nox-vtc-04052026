@@ -6,7 +6,7 @@ import { SubScreenHeader, GlassCard } from "../tab-settings"
 import { createClient } from "@/lib/supabase/client"
 import { deleteUserAccount } from "@/app/actions/account.actions"
 import { toast } from "sonner"
-import { AlertTriangle, Lock, LogOut } from "lucide-react"
+import { AlertTriangle, Lock, LogOut, Mail } from "lucide-react"
 
 const slideIn = {
   initial: { opacity: 0, x: 60 },
@@ -17,7 +17,10 @@ const slideIn = {
 export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState<1 | 2>(1)
   const [loading, setLoading] = useState(false)
+  const [methodLoading, setMethodLoading] = useState(false)
+  const [verificationMethod, setVerificationMethod] = useState<'password' | 'otp' | null>(null)
   const [password, setPassword] = useState("")
+  const [otpCode, setOtpCode] = useState("")
   const [userEmail, setUserEmail] = useState("")
 
   useEffect(() => {
@@ -31,70 +34,88 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
     loadUser()
   }, [])
 
+  async function enterStep2() {
+    setMethodLoading(true)
+    try {
+      const res = await fetch('/api/account/request-deletion-otp', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erreur lors de la vérification')
+      setVerificationMethod(data.method)
+      setStep(2)
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Erreur lors de la vérification')
+    } finally {
+      setMethodLoading(false)
+    }
+  }
+
   async function handleDelete() {
     setLoading(true)
     const supabase = createClient()
 
     try {
-      // 1. Verify password by attempting to sign in
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: userEmail,
-        password: password,
-      })
+      if (verificationMethod === 'password') {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: userEmail,
+          password: password,
+        })
+        if (signInError) throw new Error("Mot de passe incorrect")
 
-      if (signInError) {
-        throw new Error("Mot de passe incorrect")
+      } else if (verificationMethod === 'otp') {
+        const { error: otpError } = await supabase.auth.verifyOtp({
+          email: userEmail,
+          token: otpCode,
+          type: 'email',
+        })
+        if (otpError) throw new Error("Code de vérification invalide ou expiré")
       }
 
-      // 2. Call Server Action to delete user
       const result = await deleteUserAccount()
+      if (result?.error) throw new Error(result.error)
 
-      if (result?.error) {
-        throw new Error(result.error)
-      }
-
-      // 3. Clear session and redirect
       await supabase.auth.signOut()
-      toast.success("Votre compte a été définitivement supprimé.")
-      
-      // La redirection est gérée naturellement après le signOut 
-      // si l'application possède une logique d'écoute au niveau root,
-      // sinon on force côté client :
+      toast.success("Votre demande de suppression a été enregistrée. Un email de confirmation vous a été envoyé.")
       window.location.href = "/login"
 
-    } catch (error: any) {
-      toast.error(error.message || "Erreur lors de la suppression du compte")
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Erreur lors de la suppression du compte")
       setLoading(false)
     }
   }
+
+  const hasInput = verificationMethod === 'password' ? !!password : !!otpCode
+  const isConfirmDisabled = !hasInput || loading
 
   return (
     <motion.div key="deleteAccount" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full bg-background absolute inset-0 z-10 w-full">
       <SubScreenHeader title="Zone de danger" onBack={onBack} />
       <div className="flex-1 overflow-y-auto pb-6">
-        
+
         {step === 1 && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-4 mt-2">
             <GlassCard className="border-red-900/30 overflow-hidden relative">
-              {/* Fond d'alerte */}
               <div className="absolute inset-0 bg-red-950/10 pointer-events-none" />
-              
+
               <div className="p-5 flex flex-col items-center text-center">
                 <div className="w-14 h-14 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4">
                   <AlertTriangle className="h-6 w-6 text-red-500" strokeWidth={1.5} />
                 </div>
-                
+
                 <h2 className="text-base font-bold text-red-500 mb-2">Suppression définitive</h2>
-                
+
                 <p className="text-xs text-red-200/70 mb-5 leading-relaxed">
                   Attention, la suppression de votre compte est irréversible. Toutes vos données personnelles et votre accès à NoX VTC seront perdus.
                 </p>
 
                 <button
-                  onClick={() => setStep(2)}
-                  className="w-full py-3 rounded-xl bg-red-600/20 border border-red-600/30 text-red-400 font-bold hover:bg-red-600/30 active:scale-[0.98] transition-all"
+                  onClick={enterStep2}
+                  disabled={methodLoading}
+                  className="w-full py-3 rounded-xl bg-red-600/20 border border-red-600/30 text-red-400 font-bold hover:bg-red-600/30 active:scale-[0.98] transition-all disabled:opacity-50"
                 >
-                  Je veux supprimer mon compte
+                  {methodLoading
+                    ? <span className="animate-pulse">Chargement...</span>
+                    : "Je veux supprimer mon compte"
+                  }
                 </button>
               </div>
             </GlassCard>
@@ -105,38 +126,62 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="px-4 mt-2">
             <GlassCard className="border-red-900/30 overflow-hidden relative">
               <div className="absolute inset-0 bg-red-950/10 pointer-events-none" />
-              
+
               <div className="p-5">
                 <p className="text-sm font-semibold text-red-400 mb-2">Confirmez votre identité</p>
-                <p className="text-xs text-red-200/70 mb-4">
-                  Pour des raisons de sécurité, veuillez saisir votre mot de passe actuel pour valider la suppression définitive de <strong className="text-red-200">{userEmail}</strong>.
-                </p>
 
-                <div className="space-y-1.5 mb-6">
-                  <label className="text-[10px] uppercase tracking-wider text-red-400/80 font-semibold flex items-center gap-1.5 ml-1">
-                    <Lock className="h-3 w-3" /> Mot de passe
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl bg-black/40 border border-red-900/50 text-sm text-red-100 placeholder:text-red-900/40 focus:outline-none focus:border-red-600/50 transition-colors"
-                    placeholder="Votre mot de passe"
-                  />
-                </div>
+                {verificationMethod === 'password' ? (
+                  <>
+                    <p className="text-xs text-red-200/70 mb-4">
+                      Pour des raisons de sécurité, veuillez saisir votre mot de passe actuel pour valider la suppression de <strong className="text-red-200">{userEmail}</strong>.
+                    </p>
+                    <div className="space-y-1.5 mb-6">
+                      <label className="text-[10px] uppercase tracking-wider text-red-400/80 font-semibold flex items-center gap-1.5 ml-1">
+                        <Lock className="h-3 w-3" /> Mot de passe
+                      </label>
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl bg-black/40 border border-red-900/50 text-sm text-red-100 placeholder:text-red-900/40 focus:outline-none focus:border-red-600/50 transition-colors"
+                        placeholder="Votre mot de passe"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-red-200/70 mb-4">
+                      Un code de vérification a été envoyé à <strong className="text-red-200">{userEmail}</strong>. Saisissez-le pour confirmer la suppression.
+                    </p>
+                    <div className="space-y-1.5 mb-6">
+                      <label className="text-[10px] uppercase tracking-wider text-red-400/80 font-semibold flex items-center gap-1.5 ml-1">
+                        <Mail className="h-3 w-3" /> Code reçu par email
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                        className="w-full px-4 py-3 rounded-xl bg-black/40 border border-red-900/50 text-sm text-red-100 placeholder:text-red-900/40 focus:outline-none focus:border-red-600/50 transition-colors tracking-widest text-center"
+                        placeholder="000000"
+                      />
+                    </div>
+                  </>
+                )}
 
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={handleDelete}
-                    disabled={!password || loading}
+                    disabled={isConfirmDisabled}
                     className={`w-full py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                      password && !loading
+                      !isConfirmDisabled
                         ? "bg-red-600 text-white hover:bg-red-500 shadow-[0_0_15px_rgba(220,38,38,0.3)] active:scale-[0.98]"
                         : "bg-red-950/50 text-red-900/50 cursor-not-allowed"
                     }`}
                   >
                     {loading ? (
-                      <span className="animate-pulse">Suppression en cours...</span>
+                      <span className="animate-pulse">Traitement en cours...</span>
                     ) : (
                       <>
                         <LogOut className="h-4 w-4" strokeWidth={1.5} />
