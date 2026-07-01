@@ -5,8 +5,9 @@ import { motion } from "framer-motion"
 import { SubScreenHeader, GlassCard } from "../tab-settings"
 import { createClient } from "@/lib/supabase/client"
 import { deleteUserAccount } from "@/app/actions/account.actions"
+import { useNox } from "@/components/dashboard/nox-context"
 import { toast } from "sonner"
-import { AlertTriangle, Lock, LogOut, Mail } from "lucide-react"
+import { AlertTriangle, Clock, Lock, LogOut, Mail } from "lucide-react"
 import { Turnstile, TurnstileInstance } from "@marsidev/react-turnstile"
 
 const slideIn = {
@@ -25,6 +26,7 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
   const [userEmail, setUserEmail] = useState("")
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const turnstileRef = useRef<TurnstileInstance>(null)
+  const { accountStatus, deletionRequestedAt, deletionScheduledFor } = useNox()
 
   useEffect(() => {
     async function loadUser() {
@@ -57,10 +59,9 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
 
   function handleTurnstileSuccess(token: string) {
     setCaptchaToken(token)
-    // Pour password : token déjà connu, on garde juste le captchaToken pour signInWithPassword
-    // Pour otp / inconnu : appel API pour déterminer la méthode et envoyer l'OTP
-    if (verificationMethod === 'password') return
-    fetchVerificationMethod(token)
+    if (verificationMethod === null) {
+      fetchVerificationMethod(token)
+    }
   }
 
   async function handleDelete() {
@@ -115,28 +116,63 @@ export function DeleteAccountScreen({ onBack }: { onBack: () => void }) {
 
         {step === 1 && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-4 mt-2">
-            <GlassCard className="border-red-900/30 overflow-hidden relative">
-              <div className="absolute inset-0 bg-red-950/10 pointer-events-none" />
-
-              <div className="p-5 flex flex-col items-center text-center">
-                <div className="w-14 h-14 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4">
-                  <AlertTriangle className="h-6 w-6 text-red-500" strokeWidth={1.5} />
+            {accountStatus === 'pending_deletion' ? (
+              <GlassCard className="border-red-900/30 overflow-hidden relative">
+                <div className="absolute inset-0 bg-red-950/10 pointer-events-none" />
+                <div className="p-5 flex flex-col gap-4">
+                  <div className="flex items-start gap-3">
+                    <Clock className="h-5 w-5 text-red-400 shrink-0 mt-0.5" strokeWidth={1.5} />
+                    <div className="text-xs space-y-1.5">
+                      <p className="text-red-200/70">
+                        Suppression demandée le{" "}
+                        <span className="text-red-200 font-semibold">
+                          {deletionRequestedAt
+                            ? new Date(deletionRequestedAt).toLocaleDateString('fr-FR')
+                            : '—'}
+                        </span>
+                      </p>
+                      <p className="text-red-200/70">
+                        Suppression effective le{" "}
+                        <span className="text-red-200 font-semibold">
+                          {deletionScheduledFor
+                            ? new Date(deletionScheduledFor).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+                            : '—'}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="border-t border-red-900/30" />
+                  <div className="text-xs text-red-200/70 space-y-1">
+                    <p>Pour annuler cette demande, contactez-nous :</p>
+                    <a
+                      href="mailto:support@noxvtc.fr"
+                      className="text-[#C9A84C] underline font-medium"
+                    >
+                      support@noxvtc.fr
+                    </a>
+                  </div>
                 </div>
-
-                <h2 className="text-base font-bold text-red-500 mb-2">Suppression définitive</h2>
-
-                <p className="text-xs text-red-200/70 mb-5 leading-relaxed">
-                  Attention, la suppression de votre compte est irréversible. Toutes vos données personnelles et votre accès à NoX VTC seront perdus.
-                </p>
-
-                <button
-                  onClick={() => setStep(2)}
-                  className="w-full py-3 rounded-xl bg-red-600/20 border border-red-600/30 text-red-400 font-bold hover:bg-red-600/30 active:scale-[0.98] transition-all"
-                >
-                  Je veux supprimer mon compte
-                </button>
-              </div>
-            </GlassCard>
+              </GlassCard>
+            ) : (
+              <GlassCard className="border-red-900/30 overflow-hidden relative">
+                <div className="absolute inset-0 bg-red-950/10 pointer-events-none" />
+                <div className="p-5 flex flex-col items-center text-center">
+                  <div className="w-14 h-14 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4">
+                    <AlertTriangle className="h-6 w-6 text-red-500" strokeWidth={1.5} />
+                  </div>
+                  <h2 className="text-base font-bold text-red-500 mb-2">Suppression définitive</h2>
+                  <p className="text-xs text-red-200/70 mb-5 leading-relaxed">
+                    Attention, la suppression de votre compte est irréversible. Toutes vos données personnelles et votre accès à NoX VTC seront perdus.
+                  </p>
+                  <button
+                    onClick={() => setStep(2)}
+                    className="w-full py-3 rounded-xl bg-red-600/20 border border-red-600/30 text-red-400 font-bold hover:bg-red-600/30 active:scale-[0.98] transition-all"
+                  >
+                    Je veux supprimer mon compte
+                  </button>
+                </div>
+              </GlassCard>
+            )}
           </motion.div>
         )}
 

@@ -16,7 +16,8 @@ import { OnboardingComponent } from "@/components/OnboardingComponent"
 import { Toaster } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 
-import { NoxProvider } from "@/components/dashboard/nox-context"
+import { NoxProvider, useNox } from "@/components/dashboard/nox-context"
+import { AlertTriangle } from "lucide-react"
 
 const tabComponents: Record<TabId, React.ComponentType> = {
   dashboard: DashboardTab,
@@ -29,6 +30,31 @@ const tabComponents: Record<TabId, React.ComponentType> = {
 type AppStep = "welcome" | "onboarding" | "dashboard"
 
 const WELCOME_SESSION_KEY = "nox_welcome_shown"
+
+function DeletionBanner() {
+  const { accountStatus, deletionScheduledFor } = useNox()
+  if (accountStatus !== 'pending_deletion') return null
+  const dateStr = deletionScheduledFor
+    ? new Date(deletionScheduledFor).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null
+  return (
+    <div className="bg-red-950 border-b border-red-600 px-4 py-3 text-white">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+        <div className="text-xs space-y-0.5">
+          <p className="font-bold text-red-200 text-sm">Suppression de compte programmée</p>
+          {dateStr && (
+            <p className="text-red-300/80">Votre compte sera définitivement supprimé le {dateStr}.</p>
+          )}
+          <p className="text-red-300/80">
+            Pour annuler, contactez-nous immédiatement :{" "}
+            <a href="mailto:support@noxvtc.fr" className="text-[#C9A84C] underline">support@noxvtc.fr</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function Page() {
   return (
@@ -136,6 +162,7 @@ function AppPage() {
             <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
 
             <div className="relative max-w-md mx-auto h-screen flex flex-col pb-32 overflow-x-hidden">
+              <DeletionBanner />
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeTab}

@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Zap, CreditCard, Ban, Mail, ShieldCheck, Trash2 } from 'lucide-react'
+import { Zap, CreditCard, Ban, Clock, Mail, ShieldCheck, Trash2 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { useAdminTheme } from '@/lib/theme/admin-theme-context'
-import { addTokens, changePlan, suspendAccount, reactivateAccount, deleteAccount, sendAdminEmail, type UserDetail } from '@/app/admin/actions'
+import { addTokens, cancelUserDeletion, changePlan, suspendAccount, reactivateAccount, deleteAccount, sendAdminEmail, type UserDetail } from '@/app/admin/actions'
 import { StatusBadge } from '../../_components/status-badge'
 import { PLAN_OPTIONS, PLAN_RANK, planLabel, type PlanCode } from '@/lib/plans'
 
@@ -87,7 +87,8 @@ export function UserDetailClient({ user }: Props) {
   const [showPlan, setShowPlan]       = useState(false)
   const [showSuspend, setShowSuspend] = useState(false)
   const [showDelete, setShowDelete]   = useState(false)
-  const [showEmail, setShowEmail]     = useState(false)
+  const [showEmail, setShowEmail]           = useState(false)
+  const [showCancelDeletion, setShowCancelDeletion] = useState(false)
 
   const [tokenAmount, setTokenAmount]           = useState('')
   const [tokenMotifKey, setTokenMotifKey]       = useState('')
@@ -151,6 +152,7 @@ export function UserDetailClient({ user }: Props) {
   const isUpgradeWithDates = newPlanRank > currentPlanRank
 
   const isDeleted = user.account_status === 'deleted'
+  const isPendingDeletion = user.account_status === 'pending_deletion'
 
   const dialogStyle = { backgroundColor: 'var(--admin-card)', borderColor: 'var(--admin-border)', color: 'var(--admin-foreground)' }
   const selectStyle = { backgroundColor: 'var(--admin-background)', borderColor: 'var(--admin-border)', color: 'var(--admin-foreground)' }
@@ -169,7 +171,18 @@ export function UserDetailClient({ user }: Props) {
                 {initials}
               </div>
               <div>
-                <p className="font-semibold" style={{ color: 'var(--admin-foreground)' }}>{displayName}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-semibold" style={{ color: 'var(--admin-foreground)' }}>{displayName}</p>
+                  {isPendingDeletion && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{
+                      backgroundColor: 'rgba(229,62,62,0.12)',
+                      color: 'var(--admin-destructive)',
+                      border: '1px solid rgba(229,62,62,0.3)',
+                    }}>
+                      Suppression programmée
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm" style={{ color: 'var(--admin-muted-foreground)' }}>{user.email}</p>
                 {phone && <p className="text-sm" style={{ color: 'var(--admin-muted-foreground)' }}>{phone}</p>}
               </div>
@@ -266,6 +279,40 @@ export function UserDetailClient({ user }: Props) {
           </Section>
         </div>
       </div>
+
+      {/* Encart suppression programmée */}
+      {isPendingDeletion && (
+        <div className="rounded-xl border p-5 space-y-3" style={{
+          backgroundColor: 'rgba(127,29,29,0.08)',
+          borderColor: 'rgba(220,38,38,0.4)',
+        }}>
+          <div className="flex items-center gap-2">
+            <Clock size={16} style={{ color: 'var(--admin-destructive)' }} />
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--admin-destructive)' }}>
+              Suppression de compte programmée
+            </h3>
+          </div>
+          {user.deletion_requested_at && (
+            <p className="text-sm" style={{ color: 'var(--admin-foreground)' }}>
+              Suppression demandée le{" "}
+              <strong>{new Date(user.deletion_requested_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</strong>
+            </p>
+          )}
+          {user.deletion_scheduled_for && (
+            <p className="text-sm" style={{ color: 'var(--admin-foreground)' }}>
+              Suppression effective le{" "}
+              <strong>{new Date(user.deletion_scheduled_for).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</strong>
+            </p>
+          )}
+          <button
+            onClick={() => setShowCancelDeletion(true)}
+            className="mt-1 text-sm font-medium px-4 py-2 rounded-lg"
+            style={{ backgroundColor: 'var(--admin-destructive)', color: '#fff' }}
+          >
+            Annuler la suppression
+          </button>
+        </div>
+      )}
 
       {/* Actions admin */}
       <div className="rounded-xl border p-5" style={{ backgroundColor: 'var(--admin-card)', borderColor: 'var(--admin-border)' }}>
@@ -477,6 +524,42 @@ export function UserDetailClient({ user }: Props) {
                 'Compte supprimé.'
               )}>
               {busy ? 'En cours…' : 'Confirmer la suppression'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal — Annuler la suppression */}
+      <Dialog open={showCancelDeletion} onOpenChange={setShowCancelDeletion}>
+        <DialogContent {...{ 'data-admin-theme': theme }} style={dialogStyle}>
+          <DialogHeader>
+            <DialogTitle>Annuler la suppression</DialogTitle>
+          </DialogHeader>
+          <FeedbackBanner feedback={feedback} onDismiss={() => setFeedback(null)} />
+          <div className="py-2 space-y-3">
+            <p className="text-sm" style={{ color: 'var(--admin-foreground)' }}>
+              Confirmer l&apos;annulation de la suppression pour <strong>{user.email}</strong> ?
+            </p>
+            <div className="rounded-lg px-3 py-2.5 text-sm" style={{
+              backgroundColor: 'rgba(56,161,105,0.08)', border: '1px solid rgba(56,161,105,0.3)',
+              color: 'var(--admin-success)',
+            }}>
+              Le compte redeviendra actif et un email de confirmation sera envoyé à l&apos;utilisateur.
+            </div>
+          </div>
+          <DialogFooter>
+            <button className="text-sm px-4 py-2 rounded-lg border"
+              style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-muted-foreground)' }}
+              onClick={() => setShowCancelDeletion(false)}>Annuler</button>
+            <button disabled={busy}
+              className="text-sm px-4 py-2 rounded-lg font-medium disabled:opacity-50"
+              style={{ backgroundColor: 'var(--admin-success)', color: '#fff' }}
+              onClick={() => run(
+                () => cancelUserDeletion(user.id),
+                () => setShowCancelDeletion(false),
+                'Suppression annulée. Compte réactivé.'
+              )}>
+              {busy ? 'En cours…' : 'Confirmer'}
             </button>
           </DialogFooter>
         </DialogContent>

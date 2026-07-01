@@ -52,31 +52,27 @@ export async function deleteUserAccount(): Promise<{ success?: boolean; error?: 
   // 3. Chiffrer chaque champ personnel via RPC archive_encrypt
   async function encrypt(value: string | null | undefined): Promise<unknown> {
     if (!value) return null
-    const { data, error } = await db.rpc('archive_encrypt', { text: value, key: encKey })
+    const { data, error } = await db.rpc('archive_encrypt', { p_plain: value, p_key: encKey })
     if (error) throw new Error(`archive_encrypt failed: ${error.message}`)
     return data
   }
 
   let emailEncrypted: unknown
-  let fullNameEncrypted: unknown
-  let phoneEncrypted: unknown
   let prenomEncrypted: unknown
   let nomEncrypted: unknown
   let telephoneEncrypted: unknown
   let adresseEncrypted: unknown
-  let siretEncrypted: unknown
-  let nomEntrepriseEncrypted: unknown
+  let sirenEncrypted: unknown
+  let raisonSocialeEncrypted: unknown
 
   try {
     emailEncrypted        = await encrypt(account?.email ?? userEmail)
-    fullNameEncrypted     = await encrypt(account?.full_name)
-    phoneEncrypted        = await encrypt(account?.phone)
     prenomEncrypted       = await encrypt(account?.prenom ?? profile?.prenom_representant_legal)
     nomEncrypted          = await encrypt(account?.nom ?? profile?.nom_representant_legal)
-    telephoneEncrypted    = await encrypt(profile?.telephone)
+    telephoneEncrypted    = await encrypt(account?.phone ?? profile?.telephone)
     adresseEncrypted      = await encrypt(profile?.adresse)
-    siretEncrypted        = await encrypt(profile?.siret)
-    nomEntrepriseEncrypted = await encrypt(profile?.nom_entreprise)
+    sirenEncrypted        = await encrypt(profile?.siret)
+    raisonSocialeEncrypted = await encrypt(profile?.nom_entreprise)
     console.log('[deleteUserAccount] step 3 OK — fields encrypted')
   } catch (err: unknown) {
     console.error('[deleteUserAccount] step 3 — encrypt error:', err)
@@ -90,18 +86,16 @@ export async function deleteUserAccount(): Promise<{ success?: boolean; error?: 
     .from('deleted_accounts_archive')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .insert({
-      original_user_id:        userId,
-      email_encrypted:         emailEncrypted,
-      full_name_encrypted:     fullNameEncrypted,
-      phone_encrypted:         phoneEncrypted,
-      prenom_encrypted:        prenomEncrypted,
-      nom_encrypted:           nomEncrypted,
-      telephone_encrypted:     telephoneEncrypted,
-      adresse_encrypted:       adresseEncrypted,
-      siret_encrypted:         siretEncrypted,
-      nom_entreprise_encrypted: nomEntrepriseEncrypted,
-      deletion_reason:         'user_request',
-      legal_retention_until:   legalRetentionUntil,
+      original_user_id:         userId,
+      email_encrypted:          emailEncrypted,
+      prenom_encrypted:         prenomEncrypted,
+      nom_encrypted:            nomEncrypted,
+      telephone_encrypted:      telephoneEncrypted,
+      adresse_encrypted:        adresseEncrypted,
+      siren_encrypted:          sirenEncrypted,
+      raison_sociale_encrypted: raisonSocialeEncrypted,
+      deletion_reason:          'user_request',
+      legal_retention_until:    legalRetentionUntil,
     } as Record<string, unknown>)
 
   if (archiveError) {

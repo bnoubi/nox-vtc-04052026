@@ -238,6 +238,8 @@ export interface UserDetail extends UserRow {
   phone: string | null
   is_banned: boolean
   last_sign_in_at: string | null
+  deletion_requested_at: string | null
+  deletion_scheduled_for: string | null
   profile: { nom_entreprise: string | null; statut_juridique: string | null; telephone: string | null } | null
   subscription: {
     status: SubStatus; plan: PlanCode | null; started_at: string | null; ended_at: string | null
@@ -374,7 +376,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
 
   // user_accounts peut être absent (trigger manqué) → maybeSingle, pas single
   const [accRes, profRes, subRes, txRes, walletRes, authUserRes] = await Promise.all([
-    db.from('user_accounts').select('id, email, full_name, plan, tokens, onboarding_status, phone, prenom, nom, created_at, account_status').eq('id', userId).maybeSingle(),
+    db.from('user_accounts').select('id, email, full_name, plan, tokens, onboarding_status, phone, prenom, nom, created_at, account_status, deletion_requested_at, deletion_scheduled_for').eq('id', userId).maybeSingle(),
     db.from('profiles').select('nom_entreprise, statut_juridique, telephone').eq('user_id', userId).maybeSingle(),
     db.from('subscriptions').select('status, plan, current_period_start, current_period_end, trial_started_at, trial_ends_at, pending_plan, pending_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     db.from('token_transactions').select('id, type, amount, description, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(10),
@@ -382,7 +384,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
     sbAdmin.auth.admin.getUserById(userId),
   ])
 
-  type AccRow = { id: string; email: string; full_name: string | null; plan: string | null; tokens: number; onboarding_status: string; phone: string | null; prenom: string | null; nom: string | null; created_at: string; account_status: string | null }
+  type AccRow = { id: string; email: string; full_name: string | null; plan: string | null; tokens: number; onboarding_status: string; phone: string | null; prenom: string | null; nom: string | null; created_at: string; account_status: string | null; deletion_requested_at: string | null; deletion_scheduled_for: string | null }
   type SubRaw = {
     status: string; plan: string | null
     current_period_start: string | null; current_period_end: string | null
@@ -434,6 +436,8 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
     sub_status: effStatus,
     is_banned,
     last_sign_in_at: authUser?.last_sign_in_at ?? null,
+    deletion_requested_at: acc?.deletion_requested_at ?? null,
+    deletion_scheduled_for: acc?.deletion_scheduled_for ?? null,
     profile: profRes.data as UserDetail['profile'],
     subscription,
     tokenHistory: txRes.error ? [] : (txRes.data as UserDetail['tokenHistory']) ?? [],
@@ -605,6 +609,56 @@ export async function deleteAccount(targetUserId: string): Promise<{ success: bo
 
   await setAccountStatus(targetUserId, 'deleted')
   await logAction(auth.adminId, 'delete_account', targetUserId)
+  revalidateAdminWrites(targetUserId)
+  return { success: true }
+}
+
+export async function cancelUserDeletion(targetUserId: string): Promise<{ success: boolean; error?: string }> {
+  const auth = await verifyAdmin()
+  if ('error' in auth) return { success: false, error: auth.error }
+
+  const db = makeAdminClient()
+
+  const { error: accErr } = await db.from('user_accounts')
+    .update({
+      account_status: 'active',
+      deletion_requested_at: null,
+      deletion_scheduled_for: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', targetUserId)
+    .eq('account_status', 'pending_deletion')
+
+  if (accErr) return { success: false, error: 'Erreur lors de la mise à jour du compte.' }
+
+  await db.from('profiles')
+    .update({
+      status: 'active',
+      deletion_requested_at: null,
+      deletion_scheduled_for: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', targetUserId)
+
+  await logAction(auth.adminId, 'cancel_deletion', targetUserId, { cancelled_at: new Date().toISOString() })
+
+  const { data: accEmail } = await db.from('user_accounts').select('email').eq('id', targetUserId).maybeSingle()
+  const recipientEmail = (accEmail as { email: string } | null)?.email ?? null
+  if (recipientEmail) {
+    await sendEmail(
+      recipientEmail,
+      'Votre demande de suppression a été annulée — NoX VTC',
+      `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#333">
+        <p>Bonjour,</p>
+        <p>Votre demande de suppression de compte NoX VTC a été annulée suite à votre demande. Votre compte est de nouveau pleinement actif.</p>
+        <p style="margin-top:24px">
+          <a href="https://app.noxvtc.fr" style="background:#C9A84C;color:#0F0F0F;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">Accéder à mon espace</a>
+        </p>
+        <p style="margin-top:24px;color:#666;font-size:13px">L'équipe NoX VTC</p>
+      </div>`
+    )
+  }
+
   revalidateAdminWrites(targetUserId)
   return { success: true }
 }

@@ -81,6 +81,9 @@ interface NoxContextType {
   subscriptionStatus: string
   trialEndsAt: string | null
   onboardingStatus: string
+  accountStatus: string
+  deletionScheduledFor: string | null
+  deletionRequestedAt: string | null
   driverCount: number
   vehicleCount: number
   upgrade: (target?: Plan) => void
@@ -236,6 +239,9 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   const [subscriptionStatus, setSubscriptionStatus] = useState<string>("active")
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null)
   const [onboardingStatus, setOnboardingStatus] = useState("not_started")
+  const [accountStatus, setAccountStatus] = useState<string>("active")
+  const [deletionScheduledFor, setDeletionScheduledFor] = useState<string | null>(null)
+  const [deletionRequestedAt, setDeletionRequestedAt] = useState<string | null>(null)
   const [tripRequests, setTripRequests] = useState<TripRequest[]>([])
 
   // ─── Étape 1 : Récupérer l'utilisateur connecté, puis charger SES données ───
@@ -279,6 +285,17 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           .eq("user_id", uid)
           .single()
         if (wallet) setTokens(wallet.balance ?? 0)
+      } catch (err) {}
+
+      try {
+        const { data: accStatus } = await supabase
+          .from('user_accounts')
+          .select('account_status, deletion_scheduled_for, deletion_requested_at')
+          .eq('id', uid)
+          .maybeSingle()
+        if (accStatus?.account_status) setAccountStatus(accStatus.account_status)
+        if (accStatus && 'deletion_scheduled_for' in accStatus) setDeletionScheduledFor(accStatus.deletion_scheduled_for ?? null)
+        if (accStatus && 'deletion_requested_at' in accStatus) setDeletionRequestedAt(accStatus.deletion_requested_at ?? null)
       } catch (err) {}
 
       await refreshUserProfile()
@@ -1607,7 +1624,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
   return (
     <NoxContext.Provider value={{
       enterprise, userProfile, refreshUserProfile, refreshInvoices, drivers, vehicles, clients, bcs, invoices, tarifBase, forfaits, supplements,
-      userId, plan, tokens, subscriptionStatus, trialEndsAt, onboardingStatus, driverCount, vehicleCount,
+      userId, plan, tokens, subscriptionStatus, trialEndsAt, onboardingStatus, accountStatus, deletionScheduledFor, deletionRequestedAt, driverCount, vehicleCount,
       upgrade, addTokens, spendToken, refreshTokens,
       updateEnterprise, addDriver, updateDriver, deleteDriver, addVehicle, updateVehicle, deleteVehicle,
       addClient, updateClient, deleteClient, addBC, updateBC, saveDraftBC, deleteBC, addInvoice, updateInvoice, deleteInvoice,
