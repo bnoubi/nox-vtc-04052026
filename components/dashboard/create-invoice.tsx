@@ -660,15 +660,18 @@ function FactureLibreForm({
 
     if (invoiceMode === "libre" && serviceDateError) { toast.error(serviceDateError); return }
 
-    // Supabase RPC pour le numéro
-    let invoiceNumber = `F-${new Date().getFullYear()}-???`
-    try {
-      const { data, error } = await supabase.rpc("generate_fac_numero")
-      if (!error && data) invoiceNumber = data as string
-    } catch {
-      // fallback si RPC indisponible
-      invoiceNumber = `F-${new Date().getFullYear()}-${String(invoices.length + 1).padStart(3, "0")}`
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      toast.error("Session expirée, veuillez vous reconnecter")
+      return
     }
+
+    const { data: invoiceNumberData, error: rpcError } = await supabase.rpc("generate_fac_numero", { p_user_id: user.id })
+    if (rpcError || !invoiceNumberData) {
+      toast.error("Impossible de générer le numéro de facture, veuillez réessayer")
+      return
+    }
+    const invoiceNumber = invoiceNumberData as string
 
     const today = new Date()
     const echeance = new Date(today)

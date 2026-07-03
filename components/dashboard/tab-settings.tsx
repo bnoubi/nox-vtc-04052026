@@ -1071,40 +1071,68 @@ function BankingScreen({ onBack }: { onBack: () => void }) {
 // ── Abonnement Screen ──────────────────────────────────────────
 
 function SubscriptionScreen({ onBack }: { onBack: () => void }) {
-  const { plan, upgrade, tokens } = useNox()
+  const { plan } = useNox()
   const { promo } = usePromo()
   const isTeam = plan === "TEAM"
   const isDuo = plan === "DUO"
-  const [showConfetti, setShowConfetti] = useState(false)
   const [targetPlan, setTargetPlan] = useState<"DUO" | "TEAM" | null>(null)
-  const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+  const [subDetails, setSubDetails] = useState<{ cancel_at: string | null; current_period_end: string | null } | null>(null)
 
-  function handleChoose(target: "SOLO" | "DUO" | "TEAM") {
-    // Downgrade to SOLO requires confirmation
-    if (target === "SOLO" && (plan === "DUO" || plan === "TEAM")) {
-      setShowDowngradeConfirm(true)
-      return
-    }
-    // Upgrade to DUO or TEAM opens payment drawer
-    if (target === "DUO" || target === "TEAM") {
-      setTargetPlan(target)
-    }
-  }
-
-  function confirmDowngrade() {
-    setShowDowngradeConfirm(false)
-    setShowConfetti(true)
-    setTimeout(() => {
-      upgrade("SOLO")
-      toast("Vous êtes de retour en Starter", {
-        description: tokens > 0 ? `Vos ${tokens} jetons ont été réactivés.` : "Rechargez des jetons pour générer des documents.",
-        duration: 3000,
-      })
-    }, 300)
+  function handleChoose(target: "DUO" | "TEAM") {
+    setTargetPlan(target)
   }
 
   function fmtPrice(n: number) {
     return (Math.floor(n * 100) / 100).toFixed(2).replace('.', ',') + '€'
+  }
+
+  function fmtDateFr(iso: string | null): string {
+    if (!iso) return ''
+    return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+  }
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase
+      .from('subscriptions')
+      .select('cancel_at, current_period_end')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          const d = data as { cancel_at: string | null; current_period_end: string | null }
+          setSubDetails({ cancel_at: d.cancel_at, current_period_end: d.current_period_end })
+        }
+      })
+  }, [])
+
+  async function handleConfirmCancel() {
+    setIsCancelling(true)
+    setCancelError(null)
+    try {
+      const res = await fetch('/api/subscription/cancel', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        setCancelError(data.error ?? 'Erreur lors de la résiliation')
+      } else {
+        setSubDetails(prev => ({ ...(prev ?? { current_period_end: null }), cancel_at: data.cancel_at }))
+        toast('Résiliation confirmée', {
+          description: data.cancel_at
+            ? `Votre accès reste actif jusqu'au ${fmtDateFr(data.cancel_at)}`
+            : 'Votre résiliation a bien été enregistrée',
+          duration: 5000,
+        })
+      }
+    } catch {
+      setCancelError('Erreur réseau, veuillez réessayer')
+    } finally {
+      setIsCancelling(false)
+      setShowCancelConfirm(false)
+    }
   }
 
   const planCards = [
@@ -1138,7 +1166,6 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <motion.div key="subscription" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
-      <GoldConfetti trigger={showConfetti} />
       <SubScreenHeader title="Mon Abonnement" onBack={onBack} />
       <div className="flex-1 overflow-y-auto pb-24">
         {/* Current Plan Banner */}
@@ -1265,14 +1292,20 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                     Choisir cette offre
                   </button>
                 )}
-                {/* Show downgrade button for SOLO when user is DUO/TEAM */}
+                {/* Résiliation pour abonnés DUO/TEAM */}
                 {!isCurrent && p.id === "SOLO" && (plan === "DUO" || plan === "TEAM") && (
-                  <button
-                    onClick={() => handleChoose("SOLO")}
-                    className="w-full mt-3 py-2 rounded-xl text-[11px] font-medium text-muted-foreground border border-onyx-border/30 hover:border-gold/30 hover:text-gold/70 active:scale-[0.98] transition-all"
-                  >
-                    Repasser en Starter
-                  </button>
+                  subDetails?.cancel_at ? (
+                    <p className="w-full mt-3 py-2 text-center text-[11px] text-muted-foreground">
+                      Résiliation programmée le {fmtDateFr(subDetails.cancel_at)}
+                    </p>
+                  ) : (
+                    <button
+                      onClick={() => setShowCancelConfirm(true)}
+                      className="w-full mt-3 py-2 rounded-xl text-[11px] font-medium text-red-400 border border-red-500/30 hover:border-red-500/50 hover:bg-red-500/5 active:scale-[0.98] transition-all"
+                    >
+                      Résilier mon abonnement
+                    </button>
+                  )
                 )}
               </div>
             )
@@ -1295,62 +1328,75 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
         onClose={() => setTargetPlan(null)}
       />
 
-      {/* Downgrade Confirmation Modal */}
+      {/* Modale de confirmation de résiliation */}
       <AnimatePresence>
-        {showDowngradeConfirm && (
+        {showCancelConfirm && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100]"
           >
-            <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={() => setShowDowngradeConfirm(false)} />
+            <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={() => { if (!isCancelling) setShowCancelConfirm(false) }} />
             <motion.div
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 40 }}
               transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-              className="absolute bottom-0 left-0 right-0 mx-auto mb-10 w-[calc(100%-2rem)] max-w-md rounded-2xl bg-[#0A0A0A] border border-[#D4AF37]/50 shadow-[0_8px_40px_rgba(0,0,0,0.9),0_0_30px_rgba(212,175,55,0.2)] p-4 pb-safe"
+              className="absolute bottom-0 left-0 right-0 mx-auto mb-10 w-[calc(100%-2rem)] max-w-md rounded-2xl bg-[#0A0A0A] border border-red-500/40 shadow-[0_8px_40px_rgba(0,0,0,0.9)] p-4 pb-safe"
             >
               {/* Close X */}
               <button
-                onClick={() => setShowDowngradeConfirm(false)}
-                className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/10 flex items-center justify-center hover:bg-[#D4AF37]/25 active:scale-[0.95] transition-all"
+                onClick={() => setShowCancelConfirm(false)}
+                disabled={isCancelling}
+                className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full border border-[#333] bg-[#1A1A1A] flex items-center justify-center hover:bg-[#222] active:scale-[0.95] transition-all disabled:opacity-40"
                 aria-label="Fermer"
               >
-                <X className="h-3.5 w-3.5 text-[#D4AF37]" strokeWidth={2.5} />
+                <X className="h-3.5 w-3.5 text-[#A1A1AA]" strokeWidth={2.5} />
               </button>
 
               {/* Alert Icon */}
               <div className="flex justify-center mb-3 mt-1">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-b from-[#D4AF37]/25 to-[#D4AF37]/5 border border-[#D4AF37]/40 flex items-center justify-center shadow-[0_0_20px_rgba(212,175,55,0.2)]">
-                  <AlertTriangle className="h-4.5 w-4.5 text-[#D4AF37]" strokeWidth={1.5} />
+                <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center">
+                  <AlertTriangle className="h-4.5 w-4.5 text-red-400" strokeWidth={1.5} />
                 </div>
               </div>
 
               {/* Title */}
-              <p className="text-xs font-bold text-[#D4AF37] text-center tracking-wider uppercase mb-2">
-                Attention
+              <p className="text-xs font-bold text-red-400 text-center tracking-wider uppercase mb-3">
+                Confirmer la résiliation
               </p>
 
               {/* Message */}
-              <p className="text-[11px] text-[#A1A1AA] text-center leading-relaxed px-1 mb-4">
-                En repassant en Starter, votre capacité sera limitée à 1 véhicule et 1 chauffeur. Pour générer des documents vous devrez acheter des jetons. Confirmer le changement ?
-              </p>
+              <div className="text-[11px] text-[#A1A1AA] text-center leading-relaxed px-1 mb-1 space-y-1.5">
+                <p>Êtes-vous sûr de vouloir résilier votre abonnement <span className="text-foreground font-medium">{planLabel(plan)}</span> ?</p>
+                <p>
+                  {subDetails?.current_period_end
+                    ? <>Votre accès reste actif jusqu&apos;au <span className="text-foreground font-semibold">{fmtDateFr(subDetails.current_period_end)}</span>.</>
+                    : "Votre accès restera actif jusqu'à la fin de votre période actuelle."}
+                </p>
+                <p>Après cette date, vous passerez automatiquement en <span className="text-foreground font-medium">Starter</span>.</p>
+              </div>
+
+              {cancelError && (
+                <p className="text-[10px] text-red-400 text-center mt-2">{cancelError}</p>
+              )}
 
               {/* Buttons */}
-              <div className="flex gap-2">
+              <div className="flex gap-2 mt-4">
                 <button
-                  onClick={() => setShowDowngradeConfirm(false)}
-                  className="flex-1 py-2.5 min-h-[44px] rounded-xl text-[11px] font-semibold text-[#A1A1AA] border border-[#333] hover:border-[#D4AF37]/30 active:scale-[0.97] transition-all"
+                  onClick={() => setShowCancelConfirm(false)}
+                  disabled={isCancelling}
+                  className="flex-1 py-2.5 min-h-[44px] rounded-xl text-[11px] font-semibold text-[#A1A1AA] border border-[#333] hover:border-[#555] active:scale-[0.97] transition-all disabled:opacity-40"
                 >
                   Annuler
                 </button>
                 <button
-                  onClick={confirmDowngrade}
-                  className="flex-1 py-2.5 min-h-[44px] rounded-xl text-[11px] font-bold bg-gradient-to-r from-[#D4AF37] to-[#B8962E] text-[#0A0A0A] tracking-wide uppercase hover:from-[#E5C44D] hover:to-[#D4AF37] active:scale-[0.97] transition-all shadow-[0_2px_12px_rgba(212,175,55,0.3)]"
+                  onClick={handleConfirmCancel}
+                  disabled={isCancelling}
+                  className="flex-1 py-2.5 min-h-[44px] rounded-xl text-[11px] font-bold bg-red-500/90 text-white hover:bg-red-600 active:scale-[0.97] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Confirmer
+                  {isCancelling ? <span className="animate-pulse">En cours...</span> : 'Confirmer la résiliation'}
                 </button>
               </div>
             </motion.div>

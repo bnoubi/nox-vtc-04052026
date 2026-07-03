@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         type: mode === 'payment' ? 'token_pack' : 'subscription',
       },
       ...(mode === 'subscription' && {
-        subscription_data: { metadata: { userId, priceId } },
+        subscription_data: { metadata: { userId, priceId, payment_provider: 'stripe' } },
       }),
     }
 
