@@ -7,14 +7,17 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Turnstile } from "@marsidev/react-turnstile"
 
-export function AuthScreen() {
+export function AuthScreen({ initialError }: { initialError?: string }) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [persistentError, setPersistentError] = useState<string | null>(null)
-  
+
+  // Lien expiré (depuis ?error=link_expired dans l'URL)
+  const [isLinkExpiredMode, setIsLinkExpiredMode] = useState(initialError === "link_expired")
+
   // Nouveaux états pour le flux de reset
   const [isResetMode, setIsResetMode] = useState(false)
   const [forgotSent, setForgotSent] = useState(false)
@@ -144,7 +147,44 @@ export function AuthScreen() {
 
         {/* Forms */}
         <AnimatePresence mode="wait">
-          {isResetMode ? (
+          {isLinkExpiredMode ? (
+            <motion.div
+              key="link-expired"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4"
+            >
+              <div className="flex flex-col items-center mb-2">
+                <div className="w-16 h-16 rounded-full border border-amber-500/40 bg-amber-500/10 flex items-center justify-center mb-4">
+                  <Mail className="w-7 h-7 text-amber-400" strokeWidth={1.5} />
+                </div>
+                <h2 className="text-[18px] font-semibold text-[#F5F5F5] mb-2">Lien expiré</h2>
+                <p className="text-[13px] text-[#888888] leading-relaxed text-center">
+                  Ce lien a expiré ou a déjà été utilisé. Si un email plus récent vous a été envoyé, utilisez ce dernier — sinon, cliquez ci-dessous pour en recevoir un nouveau.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => router.push("/register")}
+                className="w-full h-14 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20"
+              >
+                Recevoir un nouveau lien
+              </button>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsLinkExpiredMode(false)}
+                  className="w-full flex items-center justify-center gap-2 text-[12px] text-[#FFFFFF] hover:text-[#D4AF37] transition-colors duration-300 py-3 px-4"
+                >
+                  <ArrowLeft className="h-3 w-3" /> Retour à la connexion
+                </button>
+              </div>
+            </motion.div>
+          ) : isResetMode ? (
             <motion.form
               key="reset-form"
               initial={{ opacity: 0, x: 20 }}

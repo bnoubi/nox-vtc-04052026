@@ -53,7 +53,14 @@ export async function GET(request: NextRequest) {
 
   if (exchangeError) {
     console.error('[callback] Erreur échange:', exchangeError.message)
-    const redirectUrl = new URL('/login?error=auth', siteUrl).toString()
+    const errMsg = exchangeError.message.toLowerCase()
+    const errCode = (exchangeError as { code?: string }).code
+    const isExpiredLink =
+      errCode === 'otp_expired' ||
+      errMsg.includes('expired') ||
+      (errMsg.includes('invalid') && errMsg.includes('token'))
+    const errorParam = isExpiredLink ? 'link_expired' : 'auth'
+    const redirectUrl = new URL(`/login?error=${errorParam}`, siteUrl).toString()
     console.log('[callback] redirect vers:', redirectUrl)
     return NextResponse.redirect(redirectUrl)
   }
