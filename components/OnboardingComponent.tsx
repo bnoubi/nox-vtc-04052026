@@ -6,14 +6,18 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Building2, ArrowRight, ShieldCheck, User, Save, CheckCircle2, Eye, EyeOff, Search, Car, UserCheck, Lock } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
-import { isValidPhoneNumber, parsePhoneNumber, type CountryCode } from "libphonenumber-js"
+import { isValidPhoneNumber, parsePhoneNumber, getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js"
 
-const PHONE_COUNTRIES: { code: CountryCode; dial: string; label: string }[] = [
-  { code: "FR", dial: "+33", label: "🇫🇷 +33" },
-  { code: "BE", dial: "+32", label: "🇧🇪 +32" },
-  { code: "LU", dial: "+352", label: "🇱🇺 +352" },
-  { code: "CH", dial: "+41", label: "🇨🇭 +41" },
-]
+function flagEmoji(code: string) {
+  return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('')
+}
+const _intlNames = typeof Intl !== 'undefined' && Intl.DisplayNames
+  ? new Intl.DisplayNames(['fr'], { type: 'region' })
+  : null
+const ALL_PHONE_COUNTRIES: { code: CountryCode; dial: string; name: string; flag: string }[] =
+  getCountries()
+    .map(code => ({ code, dial: `+${getCountryCallingCode(code)}`, name: _intlNames?.of(code) ?? code, flag: flagEmoji(code) }))
+    .sort((a, b) => a.code === 'FR' ? -1 : b.code === 'FR' ? 1 : (a.name ?? '').localeCompare(b.name ?? '', 'fr'))
 
 type VehicleModel = {
   marque: string
@@ -145,9 +149,18 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   const [phoneCountry, setPhoneCountry] = useState<CountryCode>("FR")
   const [phoneLocal, setPhoneLocal] = useState("")
   const [phoneTouched, setPhoneTouched] = useState(false)
-  const phoneDialEntry = PHONE_COUNTRIES.find(c => c.code === phoneCountry)!
-  const phoneRawFull = phoneDialEntry.dial + phoneLocal.replace(/[\s\-().]/g, "")
+  const [phoneDropdownOpen, setPhoneDropdownOpen] = useState(false)
+  const [phoneSearch, setPhoneSearch] = useState("")
+  const phoneDialCode = `+${getCountryCallingCode(phoneCountry)}`
+  const phoneRawFull = phoneDialCode + phoneLocal.replace(/[\s\-().]/g, "")
   const phoneIsValid = phoneLocal.length > 0 && isValidPhoneNumber(phoneRawFull, phoneCountry)
+  const filteredCountries = useMemo(() => {
+    if (!phoneSearch) return ALL_PHONE_COUNTRIES
+    const q = phoneSearch.toLowerCase()
+    return ALL_PHONE_COUNTRIES.filter(c =>
+      (c.name ?? '').toLowerCase().includes(q) || c.dial.includes(q) || c.code.toLowerCase() === q
+    )
+  }, [phoneSearch])
 
   // Step 4 (réglementaire)
   const [registreVTC, setRegistreVTC] = useState("")
@@ -427,7 +440,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
         try {
           const parsed = parsePhoneNumber(savedPhone)
           const country = parsed?.country as CountryCode | undefined
-          if (country && PHONE_COUNTRIES.some(c => c.code === country)) {
+          if (country) {
             setPhoneCountry(country)
             setPhoneLocal(parsed.nationalNumber)
           } else {
@@ -986,16 +999,50 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-white/70 ml-1">Téléphone</label>
                 <div className="flex gap-2">
-                  <select
-                    value={phoneCountry}
-                    onChange={(e) => { setPhoneCountry(e.target.value as CountryCode); setPhoneTouched(false) }}
-                    disabled={loadingData || loading}
-                    className="h-[46px] rounded-xl bg-secondary/40 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors px-3 shrink-0"
-                  >
-                    {PHONE_COUNTRIES.map(c => (
-                      <option key={c.code} value={c.code}>{c.label}</option>
-                    ))}
-                  </select>
+                  <div className="relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => { setPhoneDropdownOpen(o => !o); setPhoneSearch("") }}
+                      disabled={loadingData || loading}
+                      className="h-[46px] rounded-xl bg-secondary/40 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors px-3 flex items-center gap-1.5 whitespace-nowrap"
+                    >
+                      <span>{flagEmoji(phoneCountry)}</span>
+                      <span>{phoneDialCode}</span>
+                      <span className="text-white/40 text-xs ml-0.5">▾</span>
+                    </button>
+                    {phoneDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => { setPhoneDropdownOpen(false); setPhoneSearch("") }} />
+                        <div className="absolute z-50 top-full mt-1 left-0 w-60 rounded-xl bg-[#111111] border border-onyx-border/50 shadow-xl overflow-hidden">
+                          <div className="p-2 border-b border-onyx-border/30">
+                            <input
+                              autoFocus
+                              type="text"
+                              value={phoneSearch}
+                              onChange={(e) => setPhoneSearch(e.target.value)}
+                              placeholder="Rechercher un pays..."
+                              className="w-full h-8 rounded-lg bg-secondary/40 border border-onyx-border/50 text-xs text-foreground px-3 focus:outline-none focus:border-gold/50"
+                            />
+                          </div>
+                          <ul className="max-h-52 overflow-y-auto">
+                            {filteredCountries.map(c => (
+                              <li key={c.code}>
+                                <button
+                                  type="button"
+                                  onClick={() => { setPhoneCountry(c.code); setPhoneTouched(false); setPhoneDropdownOpen(false); setPhoneSearch("") }}
+                                  className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-white/5 flex items-center gap-2"
+                                >
+                                  <span>{c.flag}</span>
+                                  <span className="flex-1 truncate">{c.name}</span>
+                                  <span className="text-white/40">{c.dial}</span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </>
+                    )}
+                  </div>
                   <input
                     type="tel"
                     value={phoneLocal}
