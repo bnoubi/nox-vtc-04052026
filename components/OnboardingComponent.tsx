@@ -6,6 +6,14 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Building2, ArrowRight, ShieldCheck, User, Save, CheckCircle2, Eye, EyeOff, Search, Car, UserCheck, Lock } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
+import { isValidPhoneNumber, parsePhoneNumber, type CountryCode } from "libphonenumber-js"
+
+const PHONE_COUNTRIES: { code: CountryCode; dial: string; label: string }[] = [
+  { code: "FR", dial: "+33", label: "🇫🇷 +33" },
+  { code: "BE", dial: "+32", label: "🇧🇪 +32" },
+  { code: "LU", dial: "+352", label: "🇱🇺 +352" },
+  { code: "CH", dial: "+41", label: "🇨🇭 +41" },
+]
 
 type VehicleModel = {
   marque: string
@@ -134,7 +142,12 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   // Step 3 (profil)
   const [prenom, setPrenom] = useState("")
   const [nom, setNom] = useState("")
-  const [phone, setPhone] = useState("")
+  const [phoneCountry, setPhoneCountry] = useState<CountryCode>("FR")
+  const [phoneLocal, setPhoneLocal] = useState("")
+  const [phoneTouched, setPhoneTouched] = useState(false)
+  const phoneDialEntry = PHONE_COUNTRIES.find(c => c.code === phoneCountry)!
+  const phoneRawFull = phoneDialEntry.dial + phoneLocal.replace(/[\s\-().]/g, "")
+  const phoneIsValid = phoneLocal.length > 0 && isValidPhoneNumber(phoneRawFull, phoneCountry)
 
   // Step 4 (réglementaire)
   const [registreVTC, setRegistreVTC] = useState("")
@@ -409,18 +422,40 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       const meta = user.user_metadata ?? {}
       setPrenom((data?.prenom || meta.prenom || meta.given_name || "").trim())
       setNom((data?.nom || meta.nom || meta.family_name || "").trim())
-      setPhone((data?.phone || "").trim())
+      const savedPhone = (data?.phone || "").trim()
+      if (savedPhone.startsWith("+")) {
+        try {
+          const parsed = parsePhoneNumber(savedPhone)
+          const country = parsed?.country as CountryCode | undefined
+          if (country && PHONE_COUNTRIES.some(c => c.code === country)) {
+            setPhoneCountry(country)
+            setPhoneLocal(parsed.nationalNumber)
+          } else {
+            setPhoneLocal(savedPhone)
+          }
+        } catch {
+          setPhoneLocal(savedPhone)
+        }
+      } else if (savedPhone) {
+        setPhoneLocal(savedPhone)
+      }
     }
     setLoadingData(false)
   }
 
   async function handleSaveProfile() {
+    setPhoneTouched(true)
+    if (!phoneIsValid) {
+      setSaveError("Numéro de téléphone invalide pour ce pays.")
+      return
+    }
     setLoading(true); setSaveError(null)
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("no user")
-      await supabase.from("user_accounts").update({ prenom: prenom || null, nom: nom || null, phone: phone || null }).eq("id", user.id)
+      const e164 = parsePhoneNumber(phoneRawFull, phoneCountry).format("E.164")
+      await supabase.from("user_accounts").update({ prenom: prenom || null, nom: nom || null, phone: e164 }).eq("id", user.id)
       await goToStep(4)
     } catch (e) {
       console.error("[Onboarding] Profil:", e)
@@ -950,11 +985,35 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-white/70 ml-1">Téléphone</label>
-                <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={loadingData || loading} placeholder="+33 6 00 00 00 00" className={INPUT_CLS} />
+                <div className="flex gap-2">
+                  <select
+                    value={phoneCountry}
+                    onChange={(e) => { setPhoneCountry(e.target.value as CountryCode); setPhoneTouched(false) }}
+                    disabled={loadingData || loading}
+                    className="h-[46px] rounded-xl bg-secondary/40 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors px-3 shrink-0"
+                  >
+                    {PHONE_COUNTRIES.map(c => (
+                      <option key={c.code} value={c.code}>{c.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="tel"
+                    value={phoneLocal}
+                    onChange={(e) => { setPhoneLocal(e.target.value); setPhoneTouched(true) }}
+                    onBlur={() => setPhoneTouched(true)}
+                    disabled={loadingData || loading}
+                    placeholder="6 12 34 56 78"
+                    className={`${INPUT_CLS} flex-1`}
+                  />
+                </div>
+                {phoneTouched && phoneLocal.length > 0 && !phoneIsValid && (
+                  <p className="text-xs text-red-400 ml-1 mt-1">Numéro invalide pour ce pays.</p>
+                )}
               </div>
             </div>
 
-            <button onClick={handleSaveProfile} disabled={loading || loadingData || !prenom || !nom || !phone} className={PRIMARY_BTN}>
+            {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
+            <button onClick={handleSaveProfile} disabled={loading || loadingData || !prenom || !nom || !phoneIsValid} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Enregistrement...</span> : <><Save className="h-4 w-4" strokeWidth={2} />Enregistrer et continuer</>}
             </button>
             {logoutBtn}
