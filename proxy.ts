@@ -74,8 +74,10 @@ async function handleAdminRoute(request: NextRequest): Promise<NextResponse> {
   }
 
   if (!user) {
+    console.warn(`[proxy/admin] no_session — ${request.nextUrl.pathname}`)
     const url = request.nextUrl.clone()
     url.pathname = '/admin/login'
+    url.searchParams.set('error', 'unauthorized')
     return NextResponse.redirect(url)
   }
 
@@ -88,30 +90,19 @@ async function handleAdminRoute(request: NextRequest): Promise<NextResponse> {
     }
   )
 
-  const { data: adminRoles } = await supabaseAdmin
-    .from('admin_roles')
-    .select('id')
-    .in('code', ['admin', 'super_admin'])
-
-  if (!adminRoles || adminRoles.length === 0) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/'
-    return NextResponse.redirect(url)
-  }
-
-  const adminRoleIds = (adminRoles as { id: string }[]).map((r) => r.id)
-
+  // Vérifie la présence dans user_roles — accepte TOUS les rôles (admin, super_admin, support, finance)
   const { data: userRole } = await supabaseAdmin
     .from('user_roles')
     .select('id')
     .eq('user_id', user.id)
-    .in('admin_role_id', adminRoleIds)
     .limit(1)
     .maybeSingle()
 
   if (!userRole) {
+    console.warn(`[proxy/admin] not_admin — ${request.nextUrl.pathname} — user: ${user.id}`)
     const url = request.nextUrl.clone()
-    url.pathname = '/'
+    url.pathname = '/admin/login'
+    url.searchParams.set('error', 'unauthorized')
     return NextResponse.redirect(url)
   }
 
