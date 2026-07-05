@@ -8,10 +8,23 @@ export async function GET(request: NextRequest) {
   console.log('[callback] url complète:', requestUrl.toString())
   console.log('[callback] searchParams:', Object.fromEntries(requestUrl.searchParams))
 
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.noxvtc.fr'
+
+  // Cas 0 : Supabase a rejeté le lien AVANT l'échange et envoie l'erreur
+  // directement en query params (?error=access_denied&error_code=otp_expired).
+  // Dans ce cas il n'y a ni code ni token_hash — à court-circuiter immédiatement.
+  const urlError = requestUrl.searchParams.get('error')
+  const urlErrorCode = requestUrl.searchParams.get('error_code')
+  if (urlError) {
+    const isExpired = urlErrorCode === 'otp_expired' || urlError === 'access_denied'
+    const redirectUrl = new URL(`/login?error=${isExpired ? 'link_expired' : 'auth'}`, siteUrl).toString()
+    console.log('[callback] erreur détectée en query params, redirect vers:', redirectUrl)
+    return NextResponse.redirect(redirectUrl)
+  }
+
   const code = requestUrl.searchParams.get('code')
   const tokenHash = requestUrl.searchParams.get('token_hash') || requestUrl.searchParams.get('token')
   const type = requestUrl.searchParams.get('type')
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.noxvtc.fr'
 
   console.log('[callback] code présent:', !!code)
   console.log('[callback] token_hash présent:', !!tokenHash)
