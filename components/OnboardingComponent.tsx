@@ -11,6 +11,9 @@ import { isValidPhoneNumber, parsePhoneNumber, getCountries, getCountryCallingCo
 function flagEmoji(code: string) {
   return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('')
 }
+function normalizeSearch(str: string): string {
+  return str.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+}
 const _intlNames = typeof Intl !== 'undefined' && Intl.DisplayNames
   ? new Intl.DisplayNames(['fr'], { type: 'region' })
   : null
@@ -156,9 +159,9 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   const phoneIsValid = phoneLocal.length > 0 && isValidPhoneNumber(phoneRawFull, phoneCountry)
   const filteredCountries = useMemo(() => {
     if (!phoneSearch) return ALL_PHONE_COUNTRIES
-    const q = phoneSearch.toLowerCase()
+    const q = normalizeSearch(phoneSearch)
     return ALL_PHONE_COUNTRIES.filter(c =>
-      (c.name ?? '').toLowerCase().includes(q) || c.dial.includes(q) || c.code.toLowerCase() === q
+      normalizeSearch(c.name ?? '').includes(q) || c.dial.includes(q) || c.code.toLowerCase() === q
     )
   }, [phoneSearch])
 
