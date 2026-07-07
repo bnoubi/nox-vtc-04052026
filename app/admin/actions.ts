@@ -1,9 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createServerClient } from '@supabase/ssr'
 import { createClient as createSbClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, verifyAdminPermission } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/email/resend'
 import { templateMessage } from '@/lib/email/templates'
 import {
@@ -51,11 +50,7 @@ export interface AdminKPIs {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function makeAdminClient() {
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { cookies: { getAll: () => [], setAll: () => {} } }
-  )
+  return createAdminClient()
 }
 
 function sumAmount(rows: { amount: number | null }[] | null): number {
@@ -177,41 +172,8 @@ export async function getAdminKPIs(): Promise<AdminKPIs> {
 }
 
 export async function checkAdminRole(): Promise<boolean> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  console.log('[checkAdminRole] UID récupéré:', user?.id ?? 'null (non authentifié)')
-
-  if (!user) return false
-
-  const supabaseAdmin = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { cookies: { getAll: () => [], setAll: () => {} } }
-  )
-
-  const { data: adminRoles } = await supabaseAdmin
-    .from('admin_roles')
-    .select('id')
-    .in('code', ['admin', 'super_admin'])
-
-  if (!adminRoles?.length) return false
-
-  const adminRoleIds = adminRoles.map((r: { id: string }) => r.id)
-
-  const { data: userRole, error: userRoleError } = await supabaseAdmin
-    .from('user_roles')
-    .select('id')
-    .eq('user_id', user.id)
-    .in('admin_role_id', adminRoleIds)
-    .limit(1)
-    .maybeSingle()
-
-  console.log('[checkAdminRole] Résultat requête user_roles:', { userRole, error: userRoleError })
-
-  return !!userRole
+  const check = await verifyAdminPermission()
+  return check.authorized
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -256,21 +218,12 @@ export interface GetUsersParams {
   sortDir?: 'asc' | 'desc'
 }
 
-type AdminCheck = { adminId: string } | { error: string }
+type AdminCheck = { adminId: string; permissions: string[] } | { error: string }
 
-async function verifyAdmin(): Promise<AdminCheck> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Non autorisé.' }
-
-  const db = makeAdminClient()
-  const { data: roles } = await db.from('admin_roles').select('id').in('code', ['admin', 'super_admin'])
-  if (!roles?.length) return { error: 'Non autorisé.' }
-
-  const ids = (roles as { id: string }[]).map(r => r.id)
-  const { data: role } = await db.from('user_roles').select('id').eq('user_id', user.id).in('admin_role_id', ids).limit(1).maybeSingle()
-  if (!role) return { error: 'Non autorisé.' }
-  return { adminId: user.id }
+async function verifyAdmin(requiredPermission?: string): Promise<AdminCheck> {
+  const check = await verifyAdminPermission(requiredPermission)
+  if (!check.authorized) return { error: 'Non autorisé.' }
+  return { adminId: check.adminId, permissions: check.permissions }
 }
 
 async function logAction(adminId: string, action: string, targetUserId: string, details?: Record<string, unknown>) {
@@ -280,7 +233,7 @@ async function logAction(adminId: string, action: string, targetUserId: string, 
 const PAGE_SIZE = 20
 
 export async function getUsers(params: GetUsersParams = {}): Promise<{ users: UserRow[]; total: number }> {
-  const auth = await verifyAdmin()
+  const auth = await verifyAdmin('users.read')
   if ('error' in auth) return { users: [], total: 0 }
 
   const db = makeAdminClient()
@@ -368,7 +321,7 @@ export async function getUsers(params: GetUsersParams = {}): Promise<{ users: Us
 }
 
 export async function getUserDetail(userId: string): Promise<UserDetail | null> {
-  const auth = await verifyAdmin()
+  const auth = await verifyAdmin('users.read')
   if ('error' in auth) return null
 
   const db = makeAdminClient()
@@ -446,7 +399,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
 
 export async function addTokens(targetUserId: string, amount: number, motif: string): Promise<{ success: boolean; error?: string }> {
   if (!Number.isInteger(amount) || amount < 1 || amount > 50) return { success: false, error: 'Montant invalide (1–50).' }
-  const auth = await verifyAdmin()
+  const auth = await verifyAdmin('tokens.write')
   if ('error' in auth) return { success: false, error: auth.error }
 
   const db = makeAdminClient()
@@ -492,7 +445,7 @@ export async function changePlan(targetUserId: string, newPlan: string, startDat
   // Tolère MAJUSCULES (legacy) et minuscules ; rejette tout le reste avant toute écriture.
   const lc = (newPlan ?? '').toString().trim().toLowerCase()
   if (!['solo', 'duo', 'team'].includes(lc)) return { success: false, error: 'Plan invalide.' }
-  const auth = await verifyAdmin()
+  const auth = await verifyAdmin('subscriptions.write')
   if ('error' in auth) return { success: false, error: auth.error }
 
   const normalizedNew: PlanCode = normalizePlanCode(newPlan)
@@ -572,7 +525,7 @@ async function setAccountStatus(targetUserId: string, status: string): Promise<v
 }
 
 export async function suspendAccount(targetUserId: string): Promise<{ success: boolean; error?: string }> {
-  const auth = await verifyAdmin()
+  const auth = await verifyAdmin('users.write')
   if ('error' in auth) return { success: false, error: auth.error }
 
   const sbAdmin = createSbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -586,7 +539,7 @@ export async function suspendAccount(targetUserId: string): Promise<{ success: b
 }
 
 export async function reactivateAccount(targetUserId: string): Promise<{ success: boolean; error?: string }> {
-  const auth = await verifyAdmin()
+  const auth = await verifyAdmin('users.write')
   if ('error' in auth) return { success: false, error: auth.error }
 
   const sbAdmin = createSbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -600,7 +553,7 @@ export async function reactivateAccount(targetUserId: string): Promise<{ success
 }
 
 export async function deleteAccount(targetUserId: string): Promise<{ success: boolean; error?: string }> {
-  const auth = await verifyAdmin()
+  const auth = await verifyAdmin('users.write')
   if ('error' in auth) return { success: false, error: auth.error }
 
   const sbAdmin = createSbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -614,7 +567,7 @@ export async function deleteAccount(targetUserId: string): Promise<{ success: bo
 }
 
 export async function cancelUserDeletion(targetUserId: string): Promise<{ success: boolean; error?: string }> {
-  const auth = await verifyAdmin()
+  const auth = await verifyAdmin('users.write')
   if ('error' in auth) return { success: false, error: auth.error }
 
   const db = makeAdminClient()
@@ -665,7 +618,7 @@ export async function cancelUserDeletion(targetUserId: string): Promise<{ succes
 
 export async function sendAdminEmail(targetUserId: string, subject: string, message: string): Promise<{ success: boolean; error?: string }> {
   if (!subject.trim() || !message.trim()) return { success: false, error: 'Sujet et message requis.' }
-  const auth = await verifyAdmin()
+  const auth = await verifyAdmin('users.write')
   if ('error' in auth) return { success: false, error: auth.error }
 
   if (!process.env.RESEND_API_KEY) {
@@ -717,7 +670,7 @@ export interface GetSubsParams {
 const SUBS_PAGE_SIZE = 20
 
 export async function getSubscriptions(params: GetSubsParams = {}): Promise<{ subs: SubscriptionRow[]; total: number }> {
-  const auth = await verifyAdmin()
+  const auth = await verifyAdmin('subscriptions.read')
   if ('error' in auth) return { subs: [], total: 0 }
 
   const db = makeAdminClient()
@@ -812,7 +765,7 @@ export interface GetTokensParams {
 const TOKENS_PAGE_SIZE = 20
 
 export async function getTokensData(params: GetTokensParams = {}): Promise<{ rows: TokenRow[]; total: number }> {
-  const auth = await verifyAdmin()
+  const auth = await verifyAdmin('tokens.read')
   if ('error' in auth) return { rows: [], total: 0 }
 
   const db = makeAdminClient()
@@ -906,7 +859,7 @@ export type TokenHistoryTx = {
 }
 
 export async function getTokenHistory(userId: string): Promise<TokenHistoryTx[]> {
-  const auth = await verifyAdmin()
+  const auth = await verifyAdmin('tokens.read')
   if ('error' in auth) return []
 
   const { data } = await makeAdminClient()
@@ -927,7 +880,7 @@ export async function changeSubscriptionPlan(
 ): Promise<{ success: boolean; error?: string }> {
   const lc = (newPlan ?? '').toString().trim().toLowerCase()
   if (!['solo', 'duo', 'team'].includes(lc)) return { success: false, error: 'Plan invalide.' }
-  const auth = await verifyAdmin()
+  const auth = await verifyAdmin('subscriptions.write')
   if ('error' in auth) return { success: false, error: auth.error }
 
   const db = makeAdminClient()

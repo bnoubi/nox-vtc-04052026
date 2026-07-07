@@ -3,6 +3,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { sendEmail } from '@/lib/email/resend'
+import { verifyAdminPermission } from '@/lib/supabase/admin'
 
 function adminClient() {
   return createClient(
@@ -12,6 +13,8 @@ function adminClient() {
 }
 
 export async function updateTicketStatus(ticketId: string, status: string) {
+  const auth = await verifyAdminPermission('tickets.write')
+  if (!auth.authorized) throw new Error('Non autorisé')
   const supabase = adminClient()
   const update: Record<string, string> = { status, updated_at: new Date().toISOString() }
   if (status === 'resolved') update.resolved_at = new Date().toISOString()
@@ -22,6 +25,8 @@ export async function updateTicketStatus(ticketId: string, status: string) {
 }
 
 export async function updateTicketPriority(ticketId: string, priority: string) {
+  const auth = await verifyAdminPermission('tickets.write')
+  if (!auth.authorized) throw new Error('Non autorisé')
   const supabase = adminClient()
   const { error } = await supabase
     .from('support_tickets')
@@ -32,6 +37,8 @@ export async function updateTicketPriority(ticketId: string, priority: string) {
 }
 
 export async function sendAdminReply(ticketId: string, content: string, userEmail: string, subject: string) {
+  const auth = await verifyAdminPermission('tickets.write')
+  if (!auth.authorized) throw new Error('Non autorisé')
   const supabase = adminClient()
 
   const { data: ticket, error: fetchError } = await supabase

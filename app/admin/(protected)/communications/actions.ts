@@ -3,6 +3,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { sendEmail } from '@/lib/email/resend'
+import { verifyAdminPermission } from '@/lib/supabase/admin'
 
 export interface Recipient {
   userId: string
@@ -24,6 +25,8 @@ export async function sendCommunication(
   body: string,
   segment: string
 ): Promise<{ sent: number; failed: number }> {
+  const auth = await verifyAdminPermission('users.write')
+  if (!auth.authorized) throw new Error('Non autorisé')
   let sent = 0
   let failed = 0
 

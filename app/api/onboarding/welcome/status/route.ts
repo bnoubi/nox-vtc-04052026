@@ -1,33 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
-import { createServerClient } from "@supabase/ssr"
+import { verifyAdminPermission, createAdminClient } from "@/lib/supabase/admin"
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+  const auth = await verifyAdminPermission("users.read")
+  if (!auth.authorized) return NextResponse.json({ error: "Non autorisé" }, { status: auth.status })
 
-  const adminDb = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { cookies: { getAll: () => [], setAll: () => {} } },
-  )
-
-  const { data: adminRoles } = await adminDb
-    .from("admin_roles")
-    .select("id")
-    .in("code", ["admin", "super_admin"])
-  if (!adminRoles?.length) return NextResponse.json({ error: "Non autorisé" }, { status: 403 })
-
-  const adminRoleIds = (adminRoles as { id: string }[]).map((r) => r.id)
-  const { data: role } = await adminDb
-    .from("user_roles")
-    .select("id")
-    .eq("user_id", user.id)
-    .in("admin_role_id", adminRoleIds)
-    .limit(1)
-    .maybeSingle()
-  if (!role) return NextResponse.json({ error: "Non autorisé" }, { status: 403 })
+  const adminDb = createAdminClient()
 
   const email = request.nextUrl.searchParams.get("email")?.trim().toLowerCase()
   const userId = request.nextUrl.searchParams.get("user_id")?.trim()
