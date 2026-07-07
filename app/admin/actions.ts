@@ -176,6 +176,12 @@ export async function checkAdminRole(): Promise<boolean> {
   return check.authorized
 }
 
+// Utilisé par app/page.tsx (client component) pour détecter les admins
+export async function checkIsAdmin(): Promise<boolean> {
+  const check = await verifyAdminPermission()
+  return check.authorized
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Gestion des utilisateurs
 // ═══════════════════════════════════════════════════════════════════════════════

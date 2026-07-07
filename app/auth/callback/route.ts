@@ -141,6 +141,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(redirectUrl)
     }
 
+    // Invitation admin → définition du mot de passe obligatoire avant tout accès.
+    // generateLink type:'invite' établit une session mais ne crée pas de mot de passe.
+    // On redirige vers /auth/reset-password (session active = updateUser fonctionne),
+    // qui après succès renvoie vers / → le bypass admin prend le relais vers /admin/dashboard.
+    if (type === 'invite') {
+      const redirectUrl = new URL('/auth/reset-password', siteUrl).toString()
+      console.log('[callback] invite admin détecté, redirect vers:', redirectUrl)
+      return NextResponse.redirect(redirectUrl)
+    }
+
+    // Admin bypass → back-office directement, jamais onboarding chauffeur
+    const { data: adminRole } = await adminClient
+      .from('user_roles')
+      .select('id')
+      .eq('user_id', userId)
+      .limit(1)
+      .maybeSingle()
+    if (adminRole) {
+      const redirectUrl = new URL('/admin/dashboard', siteUrl).toString()
+      console.log('[callback] admin détecté, redirect vers:', redirectUrl)
+      return NextResponse.redirect(redirectUrl)
+    }
+
     // Reprise onboarding ou dashboard selon onboarding_status
     let { data: account, error: accountErr } = await adminClient
       .from('user_accounts')

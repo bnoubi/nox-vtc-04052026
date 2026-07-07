@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LifeBuoy,
+  ShieldCheck,
 } from 'lucide-react'
 import { useAdminTheme } from '@/lib/theme/admin-theme-context'
 import { createClient } from '@/lib/supabase/client'
@@ -42,6 +43,7 @@ const navItems = [
   { href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/admin/settings', label: 'Configuration', icon: Settings },
   { href: '/admin/support', label: 'Support', icon: LifeBuoy },
+  { href: '/admin/team', label: 'Équipe', icon: ShieldCheck },
 ]
 
 const pageTitles: Record<string, string> = {
@@ -52,6 +54,7 @@ const pageTitles: Record<string, string> = {
   '/admin/analytics': 'Analytics',
   '/admin/settings': 'Configuration',
   '/admin/support': 'Support',
+  '/admin/team': 'Équipe Admin',
 }
 
 interface AdminShellProps {
