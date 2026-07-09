@@ -4,7 +4,9 @@ import { createClient as createSbClient } from '@supabase/supabase-js'
 import { createAdminClient, verifyAdminPermission } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/email/resend'
 import { adminInvitationEmail } from '@/emails/admin-invitation'
+import { adminRoleChangedEmail } from '@/emails/admin-role-changed'
 import { revalidatePath } from 'next/cache'
+import { ROLE_CONFIG } from './role-config'
 
 export interface AdminMember {
   id: string
@@ -24,29 +26,6 @@ export interface AdminRole {
   code: string
   name: string
   permissions: string[]
-}
-
-export const ROLE_CONFIG: Record<string, { label: string; description: string; color: string }> = {
-  super_admin: {
-    label: 'Super Admin',
-    description: 'Accès total à toutes les fonctionnalités du back-office',
-    color: '#a855f7',
-  },
-  admin: {
-    label: 'Admin',
-    description: 'Gestion complète — utilisateurs, abonnements, jetons, analytics, tickets',
-    color: '#C9A84C',
-  },
-  support: {
-    label: 'Support',
-    description: 'Consultation des utilisateurs et abonnements, gestion des tickets',
-    color: '#3b82f6',
-  },
-  finance: {
-    label: 'Finance',
-    description: 'Consultation des abonnements, paiements et analytics',
-    color: '#22c55e',
-  },
 }
 
 export async function getAdminRoles(): Promise<AdminRole[]> {
@@ -79,7 +58,9 @@ export async function getAdminTeam(): Promise<{ members: AdminMember[]; roles: A
 
   const [{ data: accounts }, ...authResults] = await Promise.all([
     db.from('user_accounts').select('id, email, prenom, nom').in('id', userIds),
-    ...userIds.map(id => sbAdmin.auth.admin.getUserById(id)),
+    ...userIds.map(id =>
+      sbAdmin.auth.admin.getUserById(id).catch(() => ({ data: { user: null }, error: null }))
+    ),
   ])
 
   const accountMap: Record<string, { email: string; prenom: string | null; nom: string | null }> = {}
@@ -136,20 +117,17 @@ export async function createAdminMember(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // Guard : seul super_admin peut créer un super_admin
   const { data: targetRole } = await db.from('admin_roles').select('code').eq('id', roleId).single()
   if (targetRole?.code === 'super_admin' && !auth.permissions.includes('*')) {
     return { success: false, error: 'Seul un super_admin peut attribuer le rôle super_admin.' }
   }
 
-  // Email de l'admin qui invite (pour l'email d'invitation)
   const { data: inviterAcc } = await db
     .from('user_accounts').select('email').eq('id', auth.adminId).maybeSingle()
   const invitedByEmail = (inviterAcc as { email: string } | null)?.email ?? auth.adminId
 
   const fullName = [prenom, nom].filter(Boolean).join(' ').trim()
 
-  // Génération du lien d'invitation (crée l'utilisateur dans auth.users)
   const { data: linkData, error: linkError } = await sbAdmin.auth.admin.generateLink({
     type: 'invite',
     email,
@@ -166,7 +144,6 @@ export async function createAdminMember(
   const userId = linkData.user.id
   const inviteLink = linkData.properties.action_link
 
-  // Forcer onboarding_status='completed' pour éviter la redirection onboarding
   await Promise.all([
     db.from('user_accounts').upsert(
       {
@@ -189,7 +166,6 @@ export async function createAdminMember(
     ),
   ])
 
-  // Attribution du rôle
   const { error: roleError } = await db.from('user_roles').insert({
     user_id: userId,
     admin_role_id: roleId,
@@ -197,7 +173,6 @@ export async function createAdminMember(
   })
   if (roleError) return { success: false, error: `Erreur attribution rôle : ${roleError.message}` }
 
-  // Log
   await db.from('admin_logs').insert({
     admin_id: auth.adminId,
     action: 'create_admin',
@@ -205,7 +180,6 @@ export async function createAdminMember(
     new_values: { email, role_id: roleId, role_code: targetRole?.code },
   })
 
-  // Email brandé Resend
   const roleConf = ROLE_CONFIG[targetRole?.code ?? '']
   const { subject, html } = adminInvitationEmail({
     prenom: prenom || email.split('@')[0],
@@ -221,6 +195,82 @@ export async function createAdminMember(
   return { success: true }
 }
 
+export async function resendAdminInvitation(
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  const auth = await verifyAdminPermission('admins.write')
+  if (!auth.authorized) return { success: false, error: 'Non autorisé.' }
+
+  const db = createAdminClient()
+  const sbAdmin = createSbClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  const { data: acc } = await db
+    .from('user_accounts').select('email, prenom, nom').eq('id', userId).maybeSingle()
+  if (!acc) return { success: false, error: 'Utilisateur introuvable.' }
+
+  const { data: roleRow } = await db
+    .from('user_roles')
+    .select('admin_roles!admin_role_id(code)')
+    .eq('user_id', userId)
+    .maybeSingle()
+  const roleCode = (roleRow as unknown as { admin_roles: { code: string } | null })?.admin_roles?.code ?? ''
+
+  const memberAcc = acc as { email: string; prenom: string | null; nom: string | null }
+  const fullName = [memberAcc.prenom, memberAcc.nom].filter(Boolean).join(' ').trim()
+
+  const { data: linkData, error: linkError } = await sbAdmin.auth.admin.generateLink({
+    type: 'invite',
+    email: memberAcc.email,
+    options: {
+      data: { full_name: fullName || undefined },
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?type=invite`,
+    },
+  })
+
+  if (linkError || !linkData) {
+    return { success: false, error: linkError?.message ?? 'Erreur lors de la génération du lien.' }
+  }
+
+  const inviteLink = linkData.properties.action_link
+
+  const { data: inviterAcc } = await db
+    .from('user_accounts').select('email').eq('id', auth.adminId).maybeSingle()
+  const invitedByEmail = (inviterAcc as { email: string } | null)?.email ?? auth.adminId
+
+  const roleConf = ROLE_CONFIG[roleCode]
+  const { subject, html } = adminInvitationEmail({
+    prenom: memberAcc.prenom || memberAcc.email.split('@')[0],
+    nom: memberAcc.nom || '',
+    roleLabel: roleConf?.label ?? roleCode,
+    roleDescription: roleConf?.description ?? '',
+    invitedByEmail,
+    inviteLink,
+  })
+  await sendEmail(memberAcc.email, subject, html)
+
+  await db.from('admin_logs').insert({
+    admin_id: auth.adminId,
+    action: 'resend_admin_invitation',
+    target_user_id: userId,
+    new_values: { email: memberAcc.email, role_code: roleCode },
+  })
+
+  return { success: true }
+}
+
+async function countSuperAdmins(db: ReturnType<typeof createAdminClient>): Promise<number> {
+  const { data: saRole } = await db.from('admin_roles').select('id').eq('code', 'super_admin').maybeSingle()
+  if (!saRole) return 0
+  const { count } = await db
+    .from('user_roles')
+    .select('id', { count: 'exact', head: true })
+    .eq('admin_role_id', (saRole as { id: string }).id)
+  return count ?? 0
+}
+
 export async function updateMemberRole(
   userRoleId: string,
   newRoleId: string
@@ -230,7 +280,6 @@ export async function updateMemberRole(
 
   const db = createAdminClient()
 
-  // Guard : seul super_admin peut attribuer ou retirer le rôle super_admin
   const { data: newRole } = await db.from('admin_roles').select('code').eq('id', newRoleId).single()
   if (newRole?.code === 'super_admin' && !auth.permissions.includes('*')) {
     return { success: false, error: 'Seul un super_admin peut attribuer le rôle super_admin.' }
@@ -241,6 +290,14 @@ export async function updateMemberRole(
   const existingCode = (existing as { admin_roles: { code: string } | null } | null)?.admin_roles?.code
   if (existingCode === 'super_admin' && !auth.permissions.includes('*')) {
     return { success: false, error: 'Seul un super_admin peut modifier un compte super_admin.' }
+  }
+
+  // BUG 4a: dernier super_admin
+  if (existingCode === 'super_admin' && newRole?.code !== 'super_admin') {
+    const remaining = await countSuperAdmins(db)
+    if (remaining <= 1) {
+      return { success: false, error: 'Impossible : ce compte est le dernier super_admin. Promouvez un autre admin en super_admin avant de rétrograder celui-ci.' }
+    }
   }
 
   const { error } = await db.from('user_roles').update({ admin_role_id: newRoleId }).eq('id', userRoleId)
@@ -254,6 +311,29 @@ export async function updateMemberRole(
       target_user_id: targetUserId,
       new_values: { old_role_code: existingCode, new_role_id: newRoleId, new_role_code: newRole?.code },
     })
+
+    // BUG 4c: notification email
+    const [{ data: memberAcc }, { data: inviterAcc }] = await Promise.all([
+      db.from('user_accounts').select('email, prenom, nom').eq('id', targetUserId).maybeSingle(),
+      db.from('user_accounts').select('email').eq('id', auth.adminId).maybeSingle(),
+    ])
+    if (memberAcc) {
+      const m = memberAcc as { email: string; prenom: string | null; nom: string | null }
+      const changedByEmail = (inviterAcc as { email: string } | null)?.email ?? auth.adminId
+      const oldConf = ROLE_CONFIG[existingCode ?? '']
+      const newConf = ROLE_CONFIG[newRole?.code ?? '']
+      const { subject, html } = adminRoleChangedEmail({
+        event: 'role_change',
+        prenom: m.prenom ?? '',
+        nom: m.nom ?? '',
+        memberEmail: m.email,
+        oldRoleLabel: oldConf?.label ?? existingCode ?? '',
+        newRoleLabel: newConf?.label ?? newRole?.code ?? '',
+        newRoleColor: newConf?.color ?? '#A1A1AA',
+        changedByEmail,
+      })
+      await sendEmail(m.email, subject, html)
+    }
   }
 
   revalidatePath('/admin/team')
@@ -276,6 +356,14 @@ export async function revokeAdminMember(
     return { success: false, error: 'Seul un super_admin peut révoquer un compte super_admin.' }
   }
 
+  // BUG 4a: dernier super_admin
+  if (existingCode === 'super_admin') {
+    const remaining = await countSuperAdmins(db)
+    if (remaining <= 1) {
+      return { success: false, error: 'Impossible : ce compte est le dernier super_admin. Promouvez un autre admin en super_admin avant de révoquer celui-ci.' }
+    }
+  }
+
   const { error } = await db.from('user_roles').delete().eq('id', userRoleId)
   if (error) return { success: false, error: error.message }
 
@@ -287,6 +375,26 @@ export async function revokeAdminMember(
       target_user_id: targetUserId,
       new_values: { revoked_role_code: existingCode },
     })
+
+    // BUG 4c: notification email
+    const [{ data: memberAcc }, { data: inviterAcc }] = await Promise.all([
+      db.from('user_accounts').select('email, prenom, nom').eq('id', targetUserId).maybeSingle(),
+      db.from('user_accounts').select('email').eq('id', auth.adminId).maybeSingle(),
+    ])
+    if (memberAcc) {
+      const m = memberAcc as { email: string; prenom: string | null; nom: string | null }
+      const revokedByEmail = (inviterAcc as { email: string } | null)?.email ?? auth.adminId
+      const roleConf = ROLE_CONFIG[existingCode ?? '']
+      const { subject, html } = adminRoleChangedEmail({
+        event: 'revoke',
+        prenom: m.prenom ?? '',
+        nom: m.nom ?? '',
+        memberEmail: m.email,
+        revokedRoleLabel: roleConf?.label ?? existingCode ?? '',
+        revokedByEmail,
+      })
+      await sendEmail(m.email, subject, html)
+    }
   }
 
   revalidatePath('/admin/team')

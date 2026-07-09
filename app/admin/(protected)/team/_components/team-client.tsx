@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, RefreshCw, ShieldOff, UserCog, X, AlertTriangle, Shield } from 'lucide-react'
+import { Plus, RefreshCw, ShieldOff, UserCog, X, AlertTriangle, Shield, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  getAdminTeam, createAdminMember, updateMemberRole, revokeAdminMember,
-  ROLE_CONFIG, type AdminMember, type AdminRole,
+  getAdminTeam, createAdminMember, updateMemberRole, revokeAdminMember, resendAdminInvitation,
+  type AdminMember, type AdminRole,
 } from '../actions'
+import { ROLE_CONFIG } from '../role-config'
 
 type Modal =
   | null
@@ -120,6 +121,24 @@ function ModalWrapper({ title, onClose, children }: { title: string; onClose: ()
   )
 }
 
+function ConfirmField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="p-3 rounded-lg space-y-2" style={{ backgroundColor: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)' }}>
+      <p className="text-xs font-medium" style={{ color: '#ef4444' }}>
+        Action irréversible sur un compte super_admin. Tapez <strong>CONFIRMER</strong> pour continuer.
+      </p>
+      <input
+        type="text"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="CONFIRMER"
+        className="w-full px-3 py-2 rounded-lg text-sm font-mono"
+        style={{ background: 'var(--admin-background)', border: '1px solid rgba(239,68,68,0.4)', color: 'var(--admin-foreground)' }}
+      />
+    </div>
+  )
+}
+
 export function TeamClient({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const router = useRouter()
   const [members, setMembers] = useState<AdminMember[]>([])
@@ -137,6 +156,9 @@ export function TeamClient({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
   // Change role state
   const [changeRoleId, setChangeRoleId] = useState('')
+
+  // BUG 4b: confirmation text for super_admin operations
+  const [confirmText, setConfirmText] = useState('')
 
   const fetchTeam = useCallback(async () => {
     setLoading(true)
@@ -169,7 +191,13 @@ export function TeamClient({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
   function openChangeRole(member: AdminMember) {
     setChangeRoleId(member.roleId)
+    setConfirmText('')
     setModal({ type: 'changeRole', member })
+  }
+
+  function openRevoke(member: AdminMember) {
+    setConfirmText('')
+    setModal({ type: 'revoke', member })
   }
 
   async function handleCreate() {
@@ -203,6 +231,14 @@ export function TeamClient({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     toast.success('Accès révoqué')
     setModal(null)
     fetchTeam()
+  }
+
+  async function handleResend(member: AdminMember) {
+    setSaving(true)
+    const res = await resendAdminInvitation(member.userId)
+    setSaving(false)
+    if (!res.success) { toast.error(res.error ?? 'Erreur'); return }
+    toast.success('Invitation renvoyée')
   }
 
   function formatDate(iso: string | null) {
@@ -276,6 +312,19 @@ export function TeamClient({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                   <td className="py-3 px-4 text-xs" style={{ color: 'var(--admin-muted-foreground)' }}>{formatDate(m.lastSignIn)}</td>
                   <td className="py-3 px-4">
                     <div className="flex gap-2 justify-end">
+                      {/* BUG 3: Renvoyer invitation (jamais connecté) */}
+                      {m.lastSignIn === null && (
+                        <button
+                          onClick={() => handleResend(m)}
+                          disabled={saving}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs border disabled:opacity-50"
+                          style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-muted-foreground)' }}
+                          title="Renvoyer l'invitation"
+                        >
+                          <Send size={12} />
+                          Renvoyer
+                        </button>
+                      )}
                       <button
                         onClick={() => openChangeRole(m)}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs border"
@@ -286,7 +335,7 @@ export function TeamClient({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                         Rôle
                       </button>
                       <button
-                        onClick={() => setModal({ type: 'revoke', member: m })}
+                        onClick={() => openRevoke(m)}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs"
                         style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444' }}
                         title="Révoquer l'accès"
@@ -366,57 +415,74 @@ export function TeamClient({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       )}
 
       {/* Modal : Modifier le rôle */}
-      {modal?.type === 'changeRole' && (
-        <ModalWrapper title={`Modifier le rôle — ${modal.member.email}`} onClose={() => setModal(null)}>
-          <div className="space-y-4">
-            <RoleSelect roles={roles} value={changeRoleId} onChange={setChangeRoleId} isSuperAdmin={isSuperAdmin} />
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setModal(null)} className="flex-1 py-2 rounded-lg text-sm border" style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-muted-foreground)' }}>
-                Annuler
-              </button>
-              <button
-                onClick={handleChangeRole}
-                disabled={saving || changeRoleId === modal.member.roleId}
-                className="flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-60"
-                style={{ backgroundColor: 'var(--admin-primary)', color: '#0F0F0F' }}
-              >
-                {saving ? 'Enregistrement…' : 'Confirmer'}
-              </button>
-            </div>
-          </div>
-        </ModalWrapper>
-      )}
-
-      {/* Modal : Révoquer */}
-      {modal?.type === 'revoke' && (
-        <ModalWrapper title="Révoquer l'accès admin" onClose={() => setModal(null)}>
-          <div className="space-y-4">
-            <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
-              <AlertTriangle size={16} className="shrink-0 mt-0.5" style={{ color: '#ef4444' }} />
-              <div className="text-sm" style={{ color: 'var(--admin-foreground)' }}>
-                <p className="font-semibold">Vous allez révoquer l'accès de :</p>
-                <p className="mt-1" style={{ color: '#ef4444' }}>{modal.member.email}</p>
-                <p className="mt-2 text-xs" style={{ color: 'var(--admin-muted-foreground)' }}>
-                  Le compte auth n'est pas supprimé — seul l'accès admin est retiré. Effet immédiat à la prochaine requête.
-                </p>
+      {modal?.type === 'changeRole' && (() => {
+        const isDemotingSuperAdmin = modal.member.roleCode === 'super_admin' && changeRoleId !== modal.member.roleId
+        const confirmRequired = isDemotingSuperAdmin
+        const canSubmit = !saving && changeRoleId !== modal.member.roleId && (!confirmRequired || confirmText === 'CONFIRMER')
+        return (
+          <ModalWrapper title={`Modifier le rôle — ${modal.member.email}`} onClose={() => setModal(null)}>
+            <div className="space-y-4">
+              <RoleSelect roles={roles} value={changeRoleId} onChange={v => { setChangeRoleId(v); setConfirmText('') }} isSuperAdmin={isSuperAdmin} />
+              {/* BUG 4b: CONFIRMER pour rétrogradation super_admin */}
+              {isDemotingSuperAdmin && (
+                <ConfirmField value={confirmText} onChange={setConfirmText} />
+              )}
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setModal(null)} className="flex-1 py-2 rounded-lg text-sm border" style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-muted-foreground)' }}>
+                  Annuler
+                </button>
+                <button
+                  onClick={handleChangeRole}
+                  disabled={!canSubmit}
+                  className="flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-60"
+                  style={{ backgroundColor: 'var(--admin-primary)', color: '#0F0F0F' }}
+                >
+                  {saving ? 'Enregistrement…' : 'Confirmer'}
+                </button>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button onClick={() => setModal(null)} className="flex-1 py-2 rounded-lg text-sm border" style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-muted-foreground)' }}>
-                Annuler
-              </button>
-              <button
-                onClick={handleRevoke}
-                disabled={saving}
-                className="flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-60"
-                style={{ backgroundColor: '#ef4444', color: '#fff' }}
-              >
-                {saving ? 'Révocation…' : 'Confirmer la révocation'}
-              </button>
+          </ModalWrapper>
+        )
+      })()}
+
+      {/* Modal : Révoquer */}
+      {modal?.type === 'revoke' && (() => {
+        const isSuperAdminTarget = modal.member.roleCode === 'super_admin'
+        const canSubmit = !saving && (!isSuperAdminTarget || confirmText === 'CONFIRMER')
+        return (
+          <ModalWrapper title="Révoquer l'accès admin" onClose={() => setModal(null)}>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 p-3 rounded-lg" style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
+                <AlertTriangle size={16} className="shrink-0 mt-0.5" style={{ color: '#ef4444' }} />
+                <div className="text-sm" style={{ color: 'var(--admin-foreground)' }}>
+                  <p className="font-semibold">Vous allez révoquer l'accès de :</p>
+                  <p className="mt-1" style={{ color: '#ef4444' }}>{modal.member.email}</p>
+                  <p className="mt-2 text-xs" style={{ color: 'var(--admin-muted-foreground)' }}>
+                    Le compte auth n'est pas supprimé — seul l'accès admin est retiré. Effet immédiat à la prochaine requête.
+                  </p>
+                </div>
+              </div>
+              {/* BUG 4b: CONFIRMER pour révocation super_admin */}
+              {isSuperAdminTarget && (
+                <ConfirmField value={confirmText} onChange={setConfirmText} />
+              )}
+              <div className="flex gap-3">
+                <button onClick={() => setModal(null)} className="flex-1 py-2 rounded-lg text-sm border" style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-muted-foreground)' }}>
+                  Annuler
+                </button>
+                <button
+                  onClick={handleRevoke}
+                  disabled={!canSubmit}
+                  className="flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-60"
+                  style={{ backgroundColor: '#ef4444', color: '#fff' }}
+                >
+                  {saving ? 'Révocation…' : 'Confirmer la révocation'}
+                </button>
+              </div>
             </div>
-          </div>
-        </ModalWrapper>
-      )}
+          </ModalWrapper>
+        )
+      })()}
     </>
   )
 }

@@ -28,6 +28,21 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
   const supabase = createClient()
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "")
 
+  // BUG 1 fallback: si Supabase redirige vers /login#access_token=...&type=invite
+  // (redirect URL non whitelistée dans le dashboard Supabase), on échange le token côté client
+  useEffect(() => {
+    const hash = window.location.hash
+    if (!hash.includes('access_token') || !hash.includes('type=invite')) return
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        subscription.unsubscribe()
+        router.replace('/auth/reset-password')
+      }
+    })
+    return () => subscription.unsubscribe()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setIsLoading(true)

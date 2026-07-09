@@ -21,15 +21,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // Vérifie la présence dans user_roles — tous rôles acceptés (admin, super_admin, support, finance)
-  const { data: role } = await adminClient
+  // Vérifie la présence dans user_roles et récupère les permissions pour le filtrage sidebar
+  const { data: roleWithPerms } = await adminClient
     .from('user_roles')
-    .select('id')
+    .select('id, admin_roles!admin_role_id(permissions)')
     .eq('user_id', user.id)
     .limit(1)
     .maybeSingle()
 
-  if (!role) {
+  if (!roleWithPerms) {
     // Journalise la tentative (admin_id = ID de l'acteur non-admin, contrainte NOT NULL oblige)
     await adminClient.from('admin_logs').insert({
       admin_id: user.id,
@@ -38,6 +38,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     })
     redirect('/admin/login?error=unauthorized')
   }
+
+  const rawRole = roleWithPerms as unknown as { admin_roles: { permissions: string[] } | null }
+  const permissions: string[] = rawRole.admin_roles?.permissions ?? []
 
   let initialTheme: 'dark' | 'light' = 'dark'
   const { data: prefs } = await supabase
@@ -59,7 +62,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <AdminThemeProvider initialTheme={initialTheme}>
-      <AdminShell userEmail={email} userInitials={initials} openTicketCount={openTicketCount ?? 0}>
+      <AdminShell userEmail={email} userInitials={initials} openTicketCount={openTicketCount ?? 0} permissions={permissions}>
         {children}
       </AdminShell>
     </AdminThemeProvider>

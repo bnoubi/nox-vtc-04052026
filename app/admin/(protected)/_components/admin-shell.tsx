@@ -35,15 +35,15 @@ const MAX_WIDTH = 320
 const STORAGE_WIDTH = 'admin_sidebar_width'
 const STORAGE_COLLAPSED = 'admin_sidebar_collapsed'
 
-const navItems = [
-  { href: '/admin/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
-  { href: '/admin/users', label: 'Utilisateurs', icon: Users },
-  { href: '/admin/subscriptions', label: 'Abonnements', icon: CreditCard },
-  { href: '/admin/tokens', label: 'Jetons', icon: Coins },
-  { href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/admin/settings', label: 'Configuration', icon: Settings },
-  { href: '/admin/support', label: 'Support', icon: LifeBuoy },
-  { href: '/admin/team', label: 'Équipe', icon: ShieldCheck },
+const ALL_NAV_ITEMS = [
+  { href: '/admin/dashboard', label: 'Tableau de bord', icon: LayoutDashboard, permission: null },
+  { href: '/admin/users', label: 'Utilisateurs', icon: Users, permission: 'users.read' },
+  { href: '/admin/subscriptions', label: 'Abonnements', icon: CreditCard, permission: 'subscriptions.read' },
+  { href: '/admin/tokens', label: 'Jetons', icon: Coins, permission: 'tokens.read' },
+  { href: '/admin/analytics', label: 'Analytics', icon: BarChart3, permission: 'analytics.read' },
+  { href: '/admin/settings', label: 'Configuration', icon: Settings, permission: 'users.write' },
+  { href: '/admin/support', label: 'Support', icon: LifeBuoy, permission: 'tickets.write' },
+  { href: '/admin/team', label: 'Équipe', icon: ShieldCheck, permission: 'admins.read' },
 ]
 
 const pageTitles: Record<string, string> = {
@@ -62,9 +62,15 @@ interface AdminShellProps {
   userEmail: string
   userInitials: string
   openTicketCount: number
+  permissions: string[]
 }
 
-export function AdminShell({ children, userEmail, userInitials, openTicketCount }: AdminShellProps) {
+export function AdminShell({ children, userEmail, userInitials, openTicketCount, permissions }: AdminShellProps) {
+  const navItems = ALL_NAV_ITEMS.filter(item => {
+    if (!item.permission) return true
+    if (permissions.includes('*')) return true
+    return permissions.includes(item.permission)
+  })
   const pathname = usePathname()
   const router = useRouter()
   const { theme, toggleTheme } = useAdminTheme()
