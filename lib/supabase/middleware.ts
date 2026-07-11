@@ -54,8 +54,12 @@ export async function updateSession(request: NextRequest) {
 
   const isApiRoute = pathname.startsWith('/api')
 
-  // Routes publiques : auth + callback → jamais de redirection vers /login
-  if (!user && !isAuthRoute && !isApiRoute) {
+  const isPublicRoute =
+    pathname.startsWith('/politique-de-confidentialite') ||
+    pathname.startsWith('/politique-de-cookies')
+
+  // Routes publiques : auth + callback + pages légales → jamais de redirection vers /login
+  if (!user && !isAuthRoute && !isApiRoute && !isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
