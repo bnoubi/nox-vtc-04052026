@@ -312,27 +312,33 @@ export async function updateMemberRole(
       new_values: { old_role_code: existingCode, new_role_id: newRoleId, new_role_code: newRole?.code },
     })
 
-    // BUG 4c: notification email
-    const [{ data: memberAcc }, { data: inviterAcc }] = await Promise.all([
-      db.from('user_accounts').select('email, prenom, nom').eq('id', targetUserId).maybeSingle(),
-      db.from('user_accounts').select('email').eq('id', auth.adminId).maybeSingle(),
-    ])
-    if (memberAcc) {
-      const m = memberAcc as { email: string; prenom: string | null; nom: string | null }
-      const changedByEmail = (inviterAcc as { email: string } | null)?.email ?? auth.adminId
-      const oldConf = ROLE_CONFIG[existingCode ?? '']
-      const newConf = ROLE_CONFIG[newRole?.code ?? '']
-      const { subject, html } = adminRoleChangedEmail({
-        event: 'role_change',
-        prenom: m.prenom ?? '',
-        nom: m.nom ?? '',
-        memberEmail: m.email,
-        oldRoleLabel: oldConf?.label ?? existingCode ?? '',
-        newRoleLabel: newConf?.label ?? newRole?.code ?? '',
-        newRoleColor: newConf?.color ?? '#A1A1AA',
-        changedByEmail,
-      })
-      await sendEmail(m.email, subject, html)
+    try {
+      const [{ data: memberAcc }, { data: inviterAcc }] = await Promise.all([
+        db.from('user_accounts').select('email, prenom, nom').eq('id', targetUserId).maybeSingle(),
+        db.from('user_accounts').select('email').eq('id', auth.adminId).maybeSingle(),
+      ])
+      if (memberAcc) {
+        const m = memberAcc as { email: string; prenom: string | null; nom: string | null }
+        const changedByEmail = (inviterAcc as { email: string } | null)?.email ?? auth.adminId
+        const oldConf = ROLE_CONFIG[existingCode ?? '']
+        const newConf = ROLE_CONFIG[newRole?.code ?? '']
+        const { subject, html } = adminRoleChangedEmail({
+          event: 'role_change',
+          prenom: m.prenom ?? '',
+          nom: m.nom ?? '',
+          memberEmail: m.email,
+          oldRoleLabel: oldConf?.label ?? existingCode ?? '',
+          newRoleLabel: newConf?.label ?? newRole?.code ?? '',
+          newRoleColor: newConf?.color ?? '#A1A1AA',
+          changedByEmail,
+        })
+        const emailResult = await sendEmail(m.email, subject, html)
+        if (!emailResult.success) {
+          console.error('[team/updateMemberRole] email notification erreur:', emailResult.error)
+        }
+      }
+    } catch (emailErr) {
+      console.error('[team/updateMemberRole] email notification exception (mise à jour en base OK):', emailErr)
     }
   }
 
@@ -376,24 +382,30 @@ export async function revokeAdminMember(
       new_values: { revoked_role_code: existingCode },
     })
 
-    // BUG 4c: notification email
-    const [{ data: memberAcc }, { data: inviterAcc }] = await Promise.all([
-      db.from('user_accounts').select('email, prenom, nom').eq('id', targetUserId).maybeSingle(),
-      db.from('user_accounts').select('email').eq('id', auth.adminId).maybeSingle(),
-    ])
-    if (memberAcc) {
-      const m = memberAcc as { email: string; prenom: string | null; nom: string | null }
-      const revokedByEmail = (inviterAcc as { email: string } | null)?.email ?? auth.adminId
-      const roleConf = ROLE_CONFIG[existingCode ?? '']
-      const { subject, html } = adminRoleChangedEmail({
-        event: 'revoke',
-        prenom: m.prenom ?? '',
-        nom: m.nom ?? '',
-        memberEmail: m.email,
-        revokedRoleLabel: roleConf?.label ?? existingCode ?? '',
-        revokedByEmail,
-      })
-      await sendEmail(m.email, subject, html)
+    try {
+      const [{ data: memberAcc }, { data: inviterAcc }] = await Promise.all([
+        db.from('user_accounts').select('email, prenom, nom').eq('id', targetUserId).maybeSingle(),
+        db.from('user_accounts').select('email').eq('id', auth.adminId).maybeSingle(),
+      ])
+      if (memberAcc) {
+        const m = memberAcc as { email: string; prenom: string | null; nom: string | null }
+        const revokedByEmail = (inviterAcc as { email: string } | null)?.email ?? auth.adminId
+        const roleConf = ROLE_CONFIG[existingCode ?? '']
+        const { subject, html } = adminRoleChangedEmail({
+          event: 'revoke',
+          prenom: m.prenom ?? '',
+          nom: m.nom ?? '',
+          memberEmail: m.email,
+          revokedRoleLabel: roleConf?.label ?? existingCode ?? '',
+          revokedByEmail,
+        })
+        const emailResult = await sendEmail(m.email, subject, html)
+        if (!emailResult.success) {
+          console.error('[team/revokeAdminMember] email notification erreur:', emailResult.error)
+        }
+      }
+    } catch (emailErr) {
+      console.error('[team/revokeAdminMember] email notification exception (révocation en base OK):', emailErr)
     }
   }
 

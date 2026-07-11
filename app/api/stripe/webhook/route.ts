@@ -179,7 +179,7 @@ async function upsertSubscription(userId: string, priceId: string, status: strin
     }
   } else {
     const { error: insertSubError } = await db.from('subscriptions').insert({
-      user_id: userId, plan, target_plan: 'solo', status, stripe_subscription_id: stripeSubId, current_period_start: new Date().toISOString(), payment_provider: 'stripe',
+      user_id: userId, plan, target_plan: plan.toLowerCase(), status, stripe_subscription_id: stripeSubId, current_period_start: new Date().toISOString(), payment_provider: 'stripe',
     })
     if (insertSubError) {
       console.error('[webhook] upsertSubscription — erreur INSERT subscriptions:', insertSubError)
