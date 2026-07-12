@@ -87,12 +87,12 @@ export async function POST(request: NextRequest) {
           // Basculer l'abonnement et le compte en solo
           await adminDb
             .from('subscriptions')
-            .update({ status: 'expired', plan: 'solo', target_plan: 'solo', updated_at: now })
+            .update({ status: 'expired', plan: 'SOLO', target_plan: 'SOLO', updated_at: now })
             .eq('id', sub.id)
 
           await adminDb
             .from('user_accounts')
-            .update({ plan: 'solo', updated_at: now })
+            .update({ plan: 'SOLO', updated_at: now })
             .eq('id', sub.user_id)
 
           // Récupérer email + nom

@@ -10,7 +10,7 @@ import { CreateBCFlow } from "./create-bc"
 import { CreateInvoiceFlow } from "./create-invoice"
 import { SupportTicketModal } from "./support-ticket-modal"
 import { useNox } from "./nox-context"
-import { PLAN_LIMITS } from "./data"
+import { getPlanLimits } from "@/lib/plans"
 import { useNav } from "./nav-context"
 import { LimitAlertModal } from "./limit-alert-modal"
 import { SubscriptionDrawer } from "./subscription-drawer"
@@ -82,7 +82,7 @@ export function QuickActions() {
   const [subDrawerPlan, setSubDrawerPlan] = useState<"DUO" | "TEAM">("DUO")
   const { plan, driverCount, vehicleCount, addDriver, addVehicle } = useNox()
   const { navigateToSubscription } = useNav()
-  const limits = PLAN_LIMITS[plan]
+  const limits = getPlanLimits(plan)
   const driversFull = driverCount >= limits.drivers
   const vehiclesFull = vehicleCount >= limits.vehicles
 

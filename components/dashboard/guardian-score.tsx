@@ -4,7 +4,8 @@ import { useState, useMemo } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { X, AlertTriangle, CheckCircle2, Clock, ShieldCheck, User, Car, Building2, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { type MotorType, PLAN_LIMITS } from "./data"
+import { type MotorType } from "./data"
+import { getPlanLimits } from "@/lib/plans"
 import { useNox } from "./nox-context"
 
 interface DocumentIssue {
@@ -69,7 +70,7 @@ interface GuardianScoreProps {
 export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
   const [showDetails, setShowDetails] = useState(false)
   const { drivers, vehicles, plan, enterprise, userProfile } = useNox()
-  const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.SOLO
+  const limits = getPlanLimits(plan)
 
   const visibleDrivers = drivers.slice(0, limits.drivers)
   const visibleVehicles = vehicles.slice(0, limits.vehicles)

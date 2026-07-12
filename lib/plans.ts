@@ -122,6 +122,16 @@ export function displayName(
   return '—'
 }
 
+const PLAN_DRIVER_VEHICLE_LIMITS: Record<PlanCode, { drivers: number; vehicles: number }> = {
+  solo: { drivers: 1, vehicles: 1 },
+  duo:  { drivers: 2, vehicles: 2 },
+  team: { drivers: 10, vehicles: 10 },
+}
+
+export function getPlanLimits(plan: string | null | undefined): { drivers: number; vehicles: number } {
+  return PLAN_DRIVER_VEHICLE_LIMITS[normalizePlanCode(plan)]
+}
+
 export interface EffectiveTrialDatesSub {
   current_period_start?: string | null
   current_period_end?: string | null

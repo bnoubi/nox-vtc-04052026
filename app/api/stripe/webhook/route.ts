@@ -371,17 +371,17 @@ export async function POST(req: NextRequest) {
           const now = new Date().toISOString()
           const { error } = await db
             .from('subscriptions')
-            .update({ status: 'expired', plan: 'solo', target_plan: 'solo', cancel_at: null, updated_at: now })
+            .update({ status: 'expired', plan: 'SOLO', target_plan: 'SOLO', cancel_at: null, updated_at: now })
             .eq('id', (existing as { id: string }).id)
           if (error) {
             console.error('[webhook] customer.subscription.deleted — erreur UPDATE subscriptions:', error)
           } else {
-            console.log('[webhook] subscription.deleted — userId:', userId, ', status: expired, plan → solo')
+            console.log('[webhook] subscription.deleted — userId:', userId, ', status: expired, plan → SOLO')
           }
 
           const { error: accErr } = await db
             .from('user_accounts')
-            .update({ plan: 'solo', updated_at: now })
+            .update({ plan: 'SOLO', updated_at: now })
             .eq('id', userId)
           if (accErr) console.error('[webhook] customer.subscription.deleted — erreur UPDATE user_accounts:', accErr)
         }

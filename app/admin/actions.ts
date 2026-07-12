@@ -474,14 +474,15 @@ export async function changePlan(targetUserId: string, newPlan: string, startDat
     return { success: false, error: "Il n'est pas possible de rétrograder un abonné depuis le back-office." }
   }
 
-  // Upgrade (ou même rang) : MAJ synchrone subscriptions.plan + user_accounts.plan (normalisé).
+  // Upgrade (ou même rang) : MAJ synchrone subscriptions.plan + user_accounts.plan (UPPERCASE).
+  const dbPlan = normalizedNew.toUpperCase()
   const { error: accError } = await db.from('user_accounts')
-    .update({ plan: normalizedNew, updated_at: new Date().toISOString() })
+    .update({ plan: dbPlan, updated_at: new Date().toISOString() })
     .eq('id', targetUserId)
   if (accError) return { success: false, error: 'Erreur lors de la mise à jour du compte.' }
 
   if (subRow) {
-    const subUpdate: Record<string, string> = { plan: normalizedNew }
+    const subUpdate: Record<string, string> = { plan: dbPlan }
     if (startDate) subUpdate.current_period_start = startDate
     if (endDate)   subUpdate.current_period_end   = endDate
     // Trial qui upgrade au-dessus du plan d'essai → bascule en 'active'.
@@ -494,7 +495,7 @@ export async function changePlan(targetUserId: string, newPlan: string, startDat
   } else if (startDate && endDate) {
     // Aucune ligne subscriptions : UNE ligne propre (cas migration legacy).
     const { error: insError } = await db.from('subscriptions').insert({
-      user_id: targetUserId, plan: normalizedNew, status: 'active',
+      user_id: targetUserId, plan: dbPlan, status: 'active',
       current_period_start: startDate, current_period_end: endDate,
     })
     if (insError) return { success: false, error: 'Erreur lors de la création de l\'abonnement.' }
@@ -908,7 +909,7 @@ export async function changeSubscriptionPlan(
     return { success: false, error: "Il n'est pas possible de rétrograder un abonné depuis le back-office." }
   }
 
-  const subUpdate: Record<string, string> = { plan: normalized }
+  const subUpdate: Record<string, string> = { plan: normalized.toUpperCase() }
   if (startDate) subUpdate.current_period_start = startDate
   if (endDate)   subUpdate.current_period_end   = endDate
   // Trial qui upgrade au-dessus du plan d'essai → bascule en 'active'.

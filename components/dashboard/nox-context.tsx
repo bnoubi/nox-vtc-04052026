@@ -7,7 +7,6 @@ import {
   Driver, Vehicle, Client, EnterpriseProfile, TarifBase, TarifForfait, TarifSupplement, TrancheHoraire, TariffGrid,
   BCDocument, InvoiceDocument, InvoiceStatus, Plan,
   defaultTarifBase, defaultForfaits, defaultSupplements, defaultTranches,
-  PLAN_LIMITS,
   TaxConfig, getTaxConfig, getVatMention, isVatApplicable, getLegalSellerIdentity,
 } from "./data"
 
@@ -272,7 +271,7 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle()
-        if (sub?.plan) setPlan(sub.plan as Plan)
+        if (sub?.plan) setPlan(sub.plan.toUpperCase() as Plan)
         if (sub?.status) setSubscriptionStatus(sub.status)
         if (sub?.trial_ends_at) setTrialEndsAt(sub.trial_ends_at)
       } catch (err) {}
@@ -652,8 +651,8 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle()
       if (sub?.status) setSubscriptionStatus(sub.status)
       if (sub?.trial_ends_at) setTrialEndsAt(sub.trial_ends_at)
-      if (sub?.plan && sub.plan !== 'SOLO') {
-        setPlan(sub.plan as Plan)
+      if (sub?.plan && sub.plan.toUpperCase() !== 'SOLO') {
+        setPlan(sub.plan.toUpperCase() as Plan)
         const { data: wallet } = await supabase
           .from('wallets')
           .select('balance')
