@@ -162,15 +162,15 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const { data } = await supabase
-        .from("profiles")
-        .select("prenom_representant_legal, nom_representant_legal, telephone")
-        .eq("user_id", user.id)
+        .from("user_accounts")
+        .select("prenom, nom, phone")
+        .eq("id", user.id)
         .single()
       setUserProfile({
         email: user.email || "",
-        prenom: data?.prenom_representant_legal || "",
-        nom: data?.nom_representant_legal || "",
-        phone: data?.telephone || ""
+        prenom: data?.prenom || "",
+        nom: data?.nom || "",
+        phone: data?.phone || ""
       })
     }
   }

@@ -34,6 +34,12 @@ export function DashboardHeader() {
   const [walletOpen, setWalletOpen] = useState(false)
   const [displayName, setDisplayName] = useState("")
   const [initials, setInitials] = useState("—")
+  const [salutation, setSalutation] = useState("")
+
+  useEffect(() => {
+    const h = new Date().getHours()
+    setSalutation(h >= 5 && h < 18 ? "Bonjour" : "Bonsoir")
+  }, [])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [showNotifs, setShowNotifs] = useState(false)
 
@@ -135,7 +141,9 @@ export function DashboardHeader() {
           <AvatarImage src="/placeholder-avatar.jpg" alt="User" />
           <AvatarFallback className="bg-onyx-card text-foreground text-xs font-medium">{initials}</AvatarFallback>
         </Avatar>
-        <span className="text-sm font-semibold text-foreground truncate">{displayName || "Mon compte"}</span>
+        <span className="text-sm font-semibold text-foreground truncate">
+          {displayName ? (salutation ? `${salutation}, ${displayName}` : displayName) : "Mon compte"}
+        </span>
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
