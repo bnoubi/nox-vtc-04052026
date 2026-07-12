@@ -1,4 +1,4 @@
-import { AuthScreen } from "@/components/AuthScreen"
+import { AuthScreenClient } from "./auth-screen-client"
 
 export default async function LoginPage({
   searchParams,
@@ -6,5 +6,5 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string }>
 }) {
   const params = await searchParams
-  return <AuthScreen initialError={params.error} />
+  return <AuthScreenClient initialError={params.error} />
 }
