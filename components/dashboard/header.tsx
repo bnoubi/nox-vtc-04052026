@@ -2,14 +2,43 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Coins, Bell, CheckCircle2, XCircle } from "lucide-react"
+import { Coins, Gem, Crown, Bell, CheckCircle2, XCircle } from "lucide-react"
 import { useNox } from "./nox-context"
 import { useNav } from "./nav-context"
 import { cn } from "@/lib/utils"
 import { WalletDrawer } from "./wallet-drawer"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { planLabel } from "@/lib/plans"
+
+const PLAN_UI = {
+  SOLO: {
+    Icon: Coins,
+    label: 'Starter',
+    color: '#9CA3AF',
+    badgeBg: '#1F2224',
+    borderColor: '#9CA3AF4D',
+    avatarGradient: 'linear-gradient(135deg, #B0B6BD, #6B7280)',
+    greetingColor: '#9CA3AF',
+  },
+  DUO: {
+    Icon: Gem,
+    label: 'Pro',
+    color: '#3B82F6',
+    badgeBg: '#10192B',
+    borderColor: '#3B82F64D',
+    avatarGradient: 'linear-gradient(135deg, #60A5FA, #2563EB)',
+    greetingColor: '#3B82F6',
+  },
+  TEAM: {
+    Icon: Crown,
+    label: 'Premium',
+    color: '#EAB308',
+    badgeBg: '#241D0A',
+    borderColor: '#EAB3084D',
+    avatarGradient: 'linear-gradient(135deg, #EAB308, #B8860B)',
+    greetingColor: '#EAB308',
+  },
+} as const
 
 interface Notification {
   id: string
@@ -24,27 +53,32 @@ interface Notification {
 export function DashboardHeader() {
   const { plan, tokens, userProfile, subscriptionStatus, trialEndsAt } = useNox()
   const { registerWalletOpener } = useNav()
-  const isTeam = plan === "TEAM"
   const isTrial = subscriptionStatus === "trial"
   const trialDaysLeft = trialEndsAt
     ? Math.max(0, Math.ceil(
         (new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       ))
     : 0
+
+  const planKey = (plan === 'DUO' ? 'DUO' : plan === 'TEAM' ? 'TEAM' : 'SOLO') as keyof typeof PLAN_UI
+  const planUi = PLAN_UI[planKey]
+  const PlanIcon = planUi.Icon
+  const badgeValue = plan === 'SOLO' ? String(tokens) : '∞'
+
   const [walletOpen, setWalletOpen] = useState(false)
   const [displayName, setDisplayName] = useState("")
   const [initials, setInitials] = useState("—")
   const [salutation, setSalutation] = useState("")
-
-  useEffect(() => {
-    const h = new Date().getHours()
-    setSalutation(h >= 5 && h < 18 ? "Bonjour" : "Bonsoir")
-  }, [])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [showNotifs, setShowNotifs] = useState(false)
 
   const supabase = createClient()
   const unreadCount = notifications.filter(n => !n.read).length
+
+  useEffect(() => {
+    const h = new Date().getHours()
+    setSalutation(h >= 5 && h < 18 ? "Bonjour" : "Bonsoir")
+  }, [])
 
   useEffect(() => {
     if (userProfile?.prenom || userProfile?.nom) {
@@ -83,7 +117,6 @@ export function DashboardHeader() {
 
   useEffect(() => {
     let userId: string | null = null
-
     async function loadNotifications() {
       if (!userId) {
         const { data: { user } } = await supabase.auth.getUser()
@@ -98,7 +131,6 @@ export function DashboardHeader() {
         .limit(20)
       if (data) setNotifications(data as Notification[])
     }
-
     void loadNotifications()
     const interval = setInterval(() => { void loadNotifications() }, 60 * 1000)
     return () => clearInterval(interval)
@@ -135,14 +167,25 @@ export function DashboardHeader() {
 
   return (
     <header className="flex items-center justify-between px-4 py-2">
-      {/* Avatar + Name */}
+      {/* Avatar + Formule de politesse */}
       <div className="flex items-center gap-2 min-w-0">
-        <Avatar className={cn("h-8 w-8 border flex-shrink-0", isTeam ? "border-gold/50" : "border-gold/30")}>
+        <Avatar
+          className="h-8 w-8 border-2 flex-shrink-0"
+          style={{ borderColor: planUi.color }}
+        >
           <AvatarImage src="/placeholder-avatar.jpg" alt="User" />
-          <AvatarFallback className="bg-onyx-card text-foreground text-xs font-medium">{initials}</AvatarFallback>
+          <AvatarFallback
+            className="text-white text-xs font-bold"
+            style={{ background: planUi.avatarGradient }}
+          >
+            {initials}
+          </AvatarFallback>
         </Avatar>
-        <span className="text-sm font-semibold text-foreground truncate">
-          {displayName ? (salutation ? `${salutation}, ${displayName}` : displayName) : "Mon compte"}
+        <span
+          className="text-sm font-semibold truncate whitespace-nowrap"
+          style={{ color: planUi.greetingColor }}
+        >
+          {displayName ? (salutation ? `${salutation}, ${displayName} 👋` : displayName) : "Mon compte"}
         </span>
       </div>
 
@@ -216,44 +259,38 @@ export function DashboardHeader() {
           )}
         </div>
 
-        {/* Plan Badge */}
+        {/* Badge unifié plan + valeur */}
         {isTrial ? (
-          <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gold/15 border border-gold/30">
-            <span className="text-[11px] font-bold text-gold">Essai Premium</span>
-            <span className="text-[10px] text-gold/60">{trialDaysLeft}j</span>
+          <div
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border"
+            style={{ background: '#241D0A', borderColor: '#EAB3084D' }}
+          >
+            <Crown className="h-3.5 w-3.5 text-[#EAB308]" strokeWidth={1.5} />
+            <span className="text-[11px] font-bold text-[#EAB308]">Essai</span>
+            <span className="h-3 w-px" style={{ background: '#EAB3084D' }} />
+            <span className="text-[11px] font-bold text-[#EAB308]">{trialDaysLeft}j</span>
           </div>
-        ) : (
-          <div className={cn(
-            "px-3 py-1.5 rounded-xl border",
-            isTeam
-              ? "bg-gradient-to-r from-gold/25 via-gold/15 to-gold/25 border-gold/50 gold-badge-glow"
-              : plan === "DUO"
-                ? "bg-gradient-to-r from-gold/20 via-gold/10 to-gold/20 border-gold/40"
-                : "bg-gradient-to-r from-[#D4AF37]/12 via-transparent to-[#D4AF37]/12 border-[#D4AF37]/35 shadow-[0_0_10px_rgba(212,175,55,0.08)]"
-          )}>
-            <span className={cn(
-              "text-[10px] font-bold tracking-[0.15em]",
-              isTeam ? "gold-gradient-text" : plan === "DUO" ? "text-gold" : "text-[#D4AF37]"
-            )}>
-              {planLabel(plan)}
-            </span>
-          </div>
-        )}
-
-        {/* Wallet Pill */}
-        {plan === "SOLO" ? (
+        ) : plan === 'SOLO' ? (
           <button
             onClick={() => setWalletOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-[#D4AF37]/30 shadow-[0_0_8px_rgba(212,175,55,0.1)] hover:border-[#D4AF37]/50 active:scale-95 transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border active:scale-95 transition-transform"
+            style={{ background: planUi.badgeBg, borderColor: planUi.borderColor }}
           >
-            <Coins className="h-3.5 w-3.5 text-[#D4AF37]" strokeWidth={1.5} />
-            <span className="text-[11px] font-bold text-[#D4AF37]">{tokens}</span>
-            <span className="text-[9px] font-medium text-[#D4AF37]/50">Jetons</span>
+            <PlanIcon className="h-3.5 w-3.5" style={{ color: planUi.color }} strokeWidth={1.5} />
+            <span className="text-[11px] font-bold" style={{ color: planUi.color }}>{planUi.label}</span>
+            <span className="h-3 w-px" style={{ background: planUi.borderColor }} />
+            <Coins className="h-3 w-3" style={{ color: planUi.color }} strokeWidth={1.5} />
+            <span className="text-[11px] font-bold" style={{ color: planUi.color }}>{badgeValue}</span>
           </button>
         ) : (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-[#D4AF37]/15 shadow-[0_0_8px_rgba(212,175,55,0.05)]">
-            <Coins className="h-3.5 w-3.5 text-[#D4AF37]/50" strokeWidth={1.5} />
-            <span className="text-[9px] font-medium text-[#D4AF37]/40">Illimité</span>
+          <div
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border"
+            style={{ background: planUi.badgeBg, borderColor: planUi.borderColor }}
+          >
+            <PlanIcon className="h-3.5 w-3.5" style={{ color: planUi.color }} strokeWidth={1.5} />
+            <span className="text-[11px] font-bold" style={{ color: planUi.color }}>{planUi.label}</span>
+            <span className="h-3 w-px" style={{ background: planUi.borderColor }} />
+            <span className="text-[11px] font-bold" style={{ color: planUi.color }}>∞</span>
           </div>
         )}
       </div>
