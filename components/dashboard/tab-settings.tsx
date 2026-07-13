@@ -1995,25 +1995,29 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
     if (twoFaCode.length !== 6) return
     setTwoFaLoading(true)
     setTwoFaError(null)
-    const result = await verifyTwoFactorCodeAction(twoFaCode)
-    if (!result.success) {
-      setTwoFaError(result.error ?? 'Code incorrect.')
+    try {
+      const result = await verifyTwoFactorCodeAction(twoFaCode)
+      if (!result.success) {
+        setTwoFaError(result.error ?? 'Code incorrect.')
+        setTwoFaCode('')
+        return
+      }
+      if (twoFaStep === 'activate-verify') {
+        await enableTwoFactorAction()
+        setTwoFaEnabled(true)
+        toast.success('Double authentification activée ✓')
+      } else {
+        await disableTwoFactorAction()
+        setTwoFaEnabled(false)
+        toast.success('Double authentification désactivée')
+      }
+      setTwoFaStep('idle')
       setTwoFaCode('')
+    } catch {
+      setTwoFaError('Erreur réseau, veuillez réessayer.')
+    } finally {
       setTwoFaLoading(false)
-      return
     }
-    if (twoFaStep === 'activate-verify') {
-      await enableTwoFactorAction()
-      setTwoFaEnabled(true)
-      toast.success('Double authentification activée ✓')
-    } else {
-      await disableTwoFactorAction()
-      setTwoFaEnabled(false)
-      toast.success('Double authentification désactivée')
-    }
-    setTwoFaStep('idle')
-    setTwoFaCode('')
-    setTwoFaLoading(false)
   }
 
   function cancelVerify2FA() {
@@ -2702,6 +2706,27 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
               description: "Consulter l'historique de vos tickets",
             }}
             onPress={() => setHistoryOpen(true)}
+          />
+        </GlassCard>
+
+        {/* Légal */}
+        <SectionLabel>Légal</SectionLabel>
+        <GlassCard className="mb-5">
+          <SettingRow
+            item={{
+              icon: <FileText className="h-4 w-4" strokeWidth={1.5} />,
+              label: "Politique de confidentialité",
+              description: "Données personnelles & RGPD",
+            }}
+            onPress={() => window.open('/politique-de-confidentialite', '_blank')}
+          />
+          <SettingRow
+            item={{
+              icon: <FileText className="h-4 w-4" strokeWidth={1.5} />,
+              label: "Politique de cookies",
+              description: "Gestion des traceurs",
+            }}
+            onPress={() => window.open('/politique-de-cookies', '_blank')}
           />
         </GlassCard>
 

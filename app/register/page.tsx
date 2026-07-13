@@ -453,6 +453,13 @@ export default function RegisterPage() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Legal Links */}
+      <div className="absolute bottom-5 left-0 right-0 flex items-center justify-center gap-2">
+        <a href="/politique-de-confidentialite" className="text-[10px] text-[#555555] hover:text-[#D4AF37] transition-colors">Politique de confidentialité</a>
+        <span className="text-[#555555] text-[10px]">·</span>
+        <a href="/politique-de-cookies" className="text-[10px] text-[#555555] hover:text-[#D4AF37] transition-colors">Politique de cookies</a>
+      </div>
     </div>
   )
 }

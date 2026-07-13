@@ -115,6 +115,7 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
       setIsLoading(false)
       return
     }
+    setIsLoading(false)
     router.push("/")
     router.refresh()
   }
@@ -559,6 +560,13 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
 
       {/* Decorative bottom line */}
       <div className="absolute bottom-20 left-1/2 -translate-x-1/2 w-20 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/30 to-transparent" />
+
+      {/* Legal Links */}
+      <div className="absolute bottom-5 left-0 right-0 flex items-center justify-center gap-2">
+        <a href="/politique-de-confidentialite" className="text-[10px] text-[#555555] hover:text-[#D4AF37] transition-colors">Politique de confidentialité</a>
+        <span className="text-[#555555] text-[10px]">·</span>
+        <a href="/politique-de-cookies" className="text-[10px] text-[#555555] hover:text-[#D4AF37] transition-colors">Politique de cookies</a>
+      </div>
     </motion.div>
   )
 }
