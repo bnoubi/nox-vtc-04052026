@@ -18,7 +18,7 @@ function buildCspHeaders(request: NextRequest): { nonce: string; csp: string } {
   return { nonce, csp }
 }
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const { nonce, csp } = buildCspHeaders(request)
 
