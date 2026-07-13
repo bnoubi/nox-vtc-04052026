@@ -151,15 +151,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(redirectUrl)
     }
 
-    // MFA : si l'utilisateur a un facteur TOTP vérifié et que la session est AAL1,
-    // on le renvoie sur /mfa-verify avant tout accès (sauf flows de récupération/invitation)
-    if (type !== 'recovery' && type !== 'signup' && type !== 'invite') {
-      const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-      if (aalData?.nextLevel === 'aal2' && aalData.currentLevel !== 'aal2') {
-        return NextResponse.redirect(new URL('/mfa-verify', siteUrl).toString())
-      }
-    }
-
     // Admin bypass → back-office directement, jamais onboarding chauffeur
     const { data: adminRole } = await adminClient
       .from('user_roles')
@@ -176,7 +167,7 @@ export async function GET(request: NextRequest) {
     // Reprise onboarding ou dashboard selon onboarding_status
     let { data: account, error: accountErr } = await adminClient
       .from('user_accounts')
-      .select('onboarding_status, onboarding_step')
+      .select('onboarding_status, onboarding_step, two_factor_email_enabled')
       .eq('id', session.user.id)
       .maybeSingle()
 
@@ -202,7 +193,7 @@ export async function GET(request: NextRequest) {
       }
       const reselect = await adminClient
         .from('user_accounts')
-        .select('onboarding_status, onboarding_step')
+        .select('onboarding_status, onboarding_step, two_factor_email_enabled')
         .eq('id', session.user.id)
         .maybeSingle()
       account = reselect.data
@@ -214,14 +205,20 @@ export async function GET(request: NextRequest) {
     if (accountErr) console.error('[callback] user_accounts lookup err:', accountErr.message)
 
     const status = account?.onboarding_status ?? 'not_started'
-    if (status !== 'completed') {
-      const stepParam = account?.onboarding_step ?? 0
-      const redirectUrl = new URL(`/?resume_step=${stepParam}`, siteUrl).toString()
-      console.log('[callback] redirect vers:', redirectUrl)
+    const finalDest = status !== 'completed'
+      ? `/?resume_step=${account?.onboarding_step ?? 0}`
+      : '/'
+
+    // Email 2FA : rediriger vers la page de vérification en passant la destination finale
+    const a2fa = account as { two_factor_email_enabled?: boolean } | null
+    if (a2fa?.two_factor_email_enabled) {
+      const next = encodeURIComponent(new URL(finalDest, siteUrl).toString())
+      const redirectUrl = new URL(`/verify-email-code?next=${next}`, siteUrl).toString()
+      console.log('[callback] email 2FA activée, redirect vers:', redirectUrl)
       return NextResponse.redirect(redirectUrl)
     }
 
-    const redirectUrl = new URL('/', siteUrl).toString()
+    const redirectUrl = new URL(finalDest, siteUrl).toString()
     console.log('[callback] redirect vers:', redirectUrl)
     return NextResponse.redirect(redirectUrl)
   }

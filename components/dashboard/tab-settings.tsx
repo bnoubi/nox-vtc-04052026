@@ -69,6 +69,13 @@ import { SupportHistory } from "./support-history"
 import { planLabel } from "@/lib/plans"
 import { isPasswordStrong, PasswordStrengthIndicator } from "@/lib/password"
 import { sendPasswordChangedEmailAction } from "@/app/actions/security"
+import {
+  getTwoFactorStatusAction,
+  requestTwoFactorCodeAction,
+  verifyTwoFactorCodeAction,
+  enableTwoFactorAction,
+  disableTwoFactorAction,
+} from "@/app/actions/two-factor"
 
 // ── Helpers : expiration la plus proche ───────────────────────
 
@@ -1914,23 +1921,14 @@ function NotificationsScreen({ onBack }: { onBack: () => void }) {
 function SecurityScreen({ onBack }: { onBack: () => void }) {
   const supabase = createClient()
 
-  // ── 2FA state ──
-  const [mfaStatus, setMfaStatus] = useState<{ loaded: boolean; enabled: boolean; factorId: string | null }>(
-    { loaded: false, enabled: false, factorId: null }
-  )
-  const [enrollStep, setEnrollStep] = useState<'idle' | 'active'>('idle')
-  const [qrCode, setQrCode] = useState<string | null>(null)
-  const [totpSecret, setTotpSecret] = useState<string | null>(null)
-  const [pendingFactorId, setPendingFactorId] = useState<string | null>(null)
-  const [totpCode, setTotpCode] = useState('')
-  const [mfaError, setMfaError] = useState<string | null>(null)
-  const [mfaLoading, setMfaLoading] = useState(false)
-  // Désactivation 2FA — re-vérification d'identité obligatoire
-  const [showUnenrollConfirm, setShowUnenrollConfirm] = useState(false)
-  const [unenrollMode, setUnenrollMode] = useState<'totp' | 'password'>('totp')
-  const [unenrollCode, setUnenrollCode] = useState('')
-  const [unenrollPwd, setUnenrollPwd] = useState('')
-  const [showUnenrollPwd, setShowUnenrollPwd] = useState(false)
+  // ── 2FA email state ──
+  const [twoFaEnabled, setTwoFaEnabled] = useState<boolean | null>(null)
+  const [twoFaStep, setTwoFaStep] = useState<'idle' | 'activate-verify' | 'deactivate-verify'>('idle')
+  const [twoFaCode, setTwoFaCode] = useState('')
+  const [twoFaError, setTwoFaError] = useState<string | null>(null)
+  const [twoFaLoading, setTwoFaLoading] = useState(false)
+  const [twoFaSending, setTwoFaSending] = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
 
   // ── Password state ──
   const [biometric, setBiometric] = useState(false)
@@ -1950,13 +1948,8 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     void (async () => {
-      const { data, error } = await supabase.auth.mfa.listFactors()
-      if (!error && data) {
-        const verified = data.totp.find(f => f.status === 'verified')
-        setMfaStatus({ loaded: true, enabled: !!verified, factorId: verified?.id ?? null })
-      } else {
-        setMfaStatus(prev => ({ ...prev, loaded: true }))
-      }
+      const { enabled } = await getTwoFactorStatusAction()
+      setTwoFaEnabled(enabled)
     })()
     const stored = localStorage.getItem('nox_pwd_changed_at')
     if (stored) {
@@ -1968,133 +1961,66 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── 2FA handlers ──
-  async function handleToggle2FA() {
-    if (mfaStatus.enabled) { setShowUnenrollConfirm(true); return }
-    setMfaLoading(true)
-    setMfaError(null)
-    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' })
-    if (error || !data) {
-      setMfaError(error?.message ?? "Erreur lors de l'activation")
-      setMfaLoading(false)
-      return
-    }
-    setQrCode(data.totp.qr_code)
-    setTotpSecret(data.totp.secret)
-    setPendingFactorId(data.id)
-    setEnrollStep('active')
-    setMfaLoading(false)
-  }
-
-  async function handleVerifyEnroll() {
-    if (!pendingFactorId || totpCode.length !== 6) return
-    setMfaLoading(true)
-    setMfaError(null)
-    const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({ factorId: pendingFactorId })
-    if (challengeErr || !challenge) {
-      setMfaError(challengeErr?.message ?? 'Erreur de challenge')
-      setMfaLoading(false)
-      return
-    }
-    const { error: verifyErr } = await supabase.auth.mfa.verify({ factorId: pendingFactorId, challengeId: challenge.id, code: totpCode })
-    if (verifyErr) {
-      setMfaError('Code incorrect, veuillez réessayer.')
-      setTotpCode('')
-      setMfaLoading(false)
-      return
-    }
-    setMfaStatus({ loaded: true, enabled: true, factorId: pendingFactorId })
-    setEnrollStep('idle')
-    setTotpCode('')
-    setQrCode(null)
-    setTotpSecret(null)
-    setPendingFactorId(null)
-    toast.success('Double authentification activée ✓')
-    setMfaLoading(false)
-  }
-
-  function handleCancelEnroll() {
-    if (pendingFactorId) void supabase.auth.mfa.unenroll({ factorId: pendingFactorId })
-    setEnrollStep('idle')
-    setQrCode(null)
-    setTotpSecret(null)
-    setPendingFactorId(null)
-    setTotpCode('')
-    setMfaError(null)
-    setMfaLoading(false)
-  }
-
-  function resetUnenrollForm() {
-    setShowUnenrollConfirm(false)
-    setUnenrollMode('totp')
-    setUnenrollCode('')
-    setUnenrollPwd('')
-    setShowUnenrollPwd(false)
-    setMfaError(null)
-  }
-
-  async function handleUnenroll() {
-    if (!mfaStatus.factorId) return
-    setMfaLoading(true)
-    setMfaError(null)
-
-    if (unenrollMode === 'totp') {
-      if (unenrollCode.length !== 6) {
-        setMfaError('Entrez le code à 6 chiffres.')
-        setMfaLoading(false)
-        return
-      }
-      // Vérifier le code TOTP avant de désactiver
-      const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({ factorId: mfaStatus.factorId })
-      if (challengeErr || !challenge) {
-        setMfaError(challengeErr?.message ?? 'Erreur de challenge, réessayez.')
-        setMfaLoading(false)
-        return
-      }
-      const { error: verifyErr } = await supabase.auth.mfa.verify({
-        factorId: mfaStatus.factorId,
-        challengeId: challenge.id,
-        code: unenrollCode,
+  // ── 2FA email handlers ──
+  function startResendCooldown() {
+    setResendCooldown(60)
+    const timer = setInterval(() => {
+      setResendCooldown(prev => {
+        if (prev <= 1) { clearInterval(timer); return 0 }
+        return prev - 1
       })
-      if (verifyErr) {
-        setMfaError('Code TOTP incorrect, veuillez réessayer.')
-        setUnenrollCode('')
-        setMfaLoading(false)
-        return
-      }
-    } else {
-      // Vérifier le mot de passe avant de désactiver
-      if (!unenrollPwd) {
-        setMfaError('Entrez votre mot de passe.')
-        setMfaLoading(false)
-        return
-      }
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user?.email) {
-        setMfaError('Session expirée, veuillez vous reconnecter.')
-        setMfaLoading(false)
-        return
-      }
-      const { error: signInErr } = await supabase.auth.signInWithPassword({ email: user.email, password: unenrollPwd })
-      if (signInErr) {
-        setMfaError('Mot de passe incorrect.')
-        setUnenrollPwd('')
-        setMfaLoading(false)
-        return
-      }
-    }
+    }, 1000)
+  }
 
-    // Identité confirmée — désactiver le facteur
-    const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaStatus.factorId })
-    if (error) {
-      setMfaError(error.message)
-      setMfaLoading(false)
+  async function handleToggle2FA() {
+    setTwoFaError(null)
+    setTwoFaCode('')
+    setTwoFaSending(true)
+    setTwoFaStep(twoFaEnabled ? 'deactivate-verify' : 'activate-verify')
+    await requestTwoFactorCodeAction()
+    setTwoFaSending(false)
+    startResendCooldown()
+  }
+
+  async function handleResendCode() {
+    if (resendCooldown > 0) return
+    setTwoFaSending(true)
+    setTwoFaError(null)
+    await requestTwoFactorCodeAction()
+    setTwoFaSending(false)
+    startResendCooldown()
+  }
+
+  async function handleVerify2FA() {
+    if (twoFaCode.length !== 6) return
+    setTwoFaLoading(true)
+    setTwoFaError(null)
+    const result = await verifyTwoFactorCodeAction(twoFaCode)
+    if (!result.success) {
+      setTwoFaError(result.error ?? 'Code incorrect.')
+      setTwoFaCode('')
+      setTwoFaLoading(false)
       return
     }
-    setMfaStatus({ loaded: true, enabled: false, factorId: null })
-    resetUnenrollForm()
-    toast.success('Double authentification désactivée')
-    setMfaLoading(false)
+    if (twoFaStep === 'activate-verify') {
+      await enableTwoFactorAction()
+      setTwoFaEnabled(true)
+      toast.success('Double authentification activée ✓')
+    } else {
+      await disableTwoFactorAction()
+      setTwoFaEnabled(false)
+      toast.success('Double authentification désactivée')
+    }
+    setTwoFaStep('idle')
+    setTwoFaCode('')
+    setTwoFaLoading(false)
+  }
+
+  function cancelVerify2FA() {
+    setTwoFaStep('idle')
+    setTwoFaCode('')
+    setTwoFaError(null)
+    setResendCooldown(0)
   }
 
   // ── Password handler ──
@@ -2149,148 +2075,69 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
 
         <SectionLabel>Authentification</SectionLabel>
         <GlassCard className="mb-5">
-          {/* 2FA */}
+          {/* 2FA email */}
           <AnimatePresence mode="wait">
-            {enrollStep === 'active' ? (
+            {twoFaStep !== 'idle' ? (
               <motion.div
-                key="enroll"
+                key="verify"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="p-4 space-y-4"
               >
-                <p className="text-xs font-semibold text-foreground">Activer la double authentification</p>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Scannez ce QR code avec <strong className="text-foreground">Google Authenticator</strong>, <strong className="text-foreground">Authy</strong> ou <strong className="text-foreground">1Password</strong>, puis entrez le code à 6 chiffres.
+                <p className="text-xs font-semibold text-foreground">
+                  {twoFaStep === 'activate-verify' ? 'Activer la double authentification' : 'Désactiver la double authentification'}
                 </p>
-                {qrCode && (
-                  <div className="flex justify-center">
-                    <div className="bg-white p-3 rounded-xl inline-block">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={qrCode} alt="QR Code 2FA" className="w-44 h-44" />
-                    </div>
-                  </div>
-                )}
-                {totpSecret && (
-                  <div className="px-3 py-2 rounded-xl bg-secondary/50 border border-onyx-border/40">
-                    <p className="text-[9px] text-muted-foreground mb-1 uppercase tracking-wider">Code manuel</p>
-                    <p className="text-[11px] font-mono text-gold tracking-widest break-all">{totpSecret}</p>
-                  </div>
-                )}
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="000000"
-                  value={totpCode}
-                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  autoComplete="one-time-code"
-                  className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-foreground text-center text-lg tracking-[0.3em] placeholder:text-muted-foreground/40 focus:outline-none focus:border-gold/50 transition-colors"
-                />
-                {mfaError && <p className="text-[11px] text-red-400 text-center">{mfaError}</p>}
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleCancelEnroll}
-                    className="flex-1 py-2.5 rounded-xl bg-secondary/40 border border-onyx-border/30 text-xs font-medium text-muted-foreground hover:bg-secondary/60 active:scale-[0.98] transition-all"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    onClick={handleVerifyEnroll}
-                    disabled={mfaLoading || totpCode.length !== 6}
-                    className="flex-1 py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-semibold hover:bg-gold-light active:scale-[0.98] transition-all gold-glow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {mfaLoading ? 'Vérification...' : 'Activer'}
-                  </button>
-                </div>
-              </motion.div>
-            ) : showUnenrollConfirm ? (
-              <motion.div
-                key="unenroll"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="p-4 space-y-3"
-              >
-                <p className="text-sm font-semibold text-foreground">Confirmer la désactivation</p>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Pour votre sécurité, confirmez votre identité avant de désactiver la 2FA.
-                </p>
-
-                {/* Sélecteur de méthode */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => { setUnenrollMode('totp'); setMfaError(null) }}
-                    className={cn(
-                      "flex-1 py-1.5 rounded-lg text-[11px] font-medium transition-colors",
-                      unenrollMode === 'totp'
-                        ? "bg-gold/20 text-gold border border-gold/40"
-                        : "bg-secondary/40 text-muted-foreground border border-onyx-border/30"
-                    )}
-                  >
-                    Code TOTP
-                  </button>
-                  <button
-                    onClick={() => { setUnenrollMode('password'); setMfaError(null) }}
-                    className={cn(
-                      "flex-1 py-1.5 rounded-lg text-[11px] font-medium transition-colors",
-                      unenrollMode === 'password'
-                        ? "bg-gold/20 text-gold border border-gold/40"
-                        : "bg-secondary/40 text-muted-foreground border border-onyx-border/30"
-                    )}
-                  >
-                    Mot de passe
-                  </button>
-                </div>
-
-                {unenrollMode === 'totp' ? (
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="Code à 6 chiffres"
-                    value={unenrollCode}
-                    onChange={(e) => setUnenrollCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    autoComplete="one-time-code"
-                    autoFocus
-                    className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-foreground text-center text-base tracking-[0.25em] placeholder:text-muted-foreground/40 focus:outline-none focus:border-gold/50 transition-colors"
-                  />
+                {twoFaSending ? (
+                  <p className="text-[11px] text-muted-foreground text-center py-2">Envoi du code en cours...</p>
                 ) : (
-                  <div className="relative">
+                  <>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Un code à 6 chiffres a été envoyé à votre adresse email. Il est valable 10 minutes.
+                    </p>
                     <input
-                      type={showUnenrollPwd ? "text" : "password"}
-                      placeholder="Votre mot de passe actuel"
-                      value={unenrollPwd}
-                      onChange={(e) => setUnenrollPwd(e.target.value)}
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="000000"
+                      value={twoFaCode}
+                      onChange={(e) => setTwoFaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      autoComplete="one-time-code"
                       autoFocus
-                      className="w-full px-4 py-3 pr-11 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
+                      className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-foreground text-center text-lg font-mono placeholder:text-muted-foreground/40 focus:outline-none focus:border-gold/50 transition-colors"
+                      style={{ letterSpacing: "0.15em" }}
                     />
+                    {twoFaError && <p className="text-[11px] text-red-400 text-center">{twoFaError}</p>}
                     <button
                       type="button"
-                      onClick={() => setShowUnenrollPwd(v => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground"
+                      onClick={handleResendCode}
+                      disabled={resendCooldown > 0 || twoFaSending}
+                      className="w-full text-[11px] text-muted-foreground hover:text-gold transition-colors disabled:opacity-50"
                     >
-                      {showUnenrollPwd ? <EyeOff className="h-4 w-4" strokeWidth={1.5} /> : <Eye className="h-4 w-4" strokeWidth={1.5} />}
+                      {resendCooldown > 0 ? `Renvoyer dans ${resendCooldown}s` : 'Renvoyer le code'}
                     </button>
-                  </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={cancelVerify2FA}
+                        disabled={twoFaLoading}
+                        className="flex-1 py-2.5 rounded-xl bg-secondary/40 border border-onyx-border/30 text-xs font-medium text-muted-foreground hover:bg-secondary/60 active:scale-[0.98] transition-all"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        onClick={handleVerify2FA}
+                        disabled={twoFaLoading || twoFaCode.length !== 6}
+                        className={cn(
+                          "flex-1 py-2.5 rounded-xl text-xs font-semibold active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                          twoFaStep === 'activate-verify'
+                            ? "bg-gold text-primary-foreground hover:bg-gold-light gold-glow-sm"
+                            : "bg-red-500/80 text-white hover:bg-red-500"
+                        )}
+                      >
+                        {twoFaLoading ? 'Vérification...' : twoFaStep === 'activate-verify' ? 'Activer' : 'Désactiver'}
+                      </button>
+                    </div>
+                  </>
                 )}
-
-                {mfaError && <p className="text-[11px] text-red-400 text-center">{mfaError}</p>}
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={resetUnenrollForm}
-                    disabled={mfaLoading}
-                    className="flex-1 py-2.5 rounded-xl bg-secondary/40 border border-onyx-border/30 text-xs font-medium text-muted-foreground hover:bg-secondary/60 active:scale-[0.98] transition-all"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    onClick={handleUnenroll}
-                    disabled={mfaLoading || (unenrollMode === 'totp' ? unenrollCode.length !== 6 : !unenrollPwd)}
-                    className="flex-1 py-2.5 rounded-xl bg-red-500/80 text-white text-xs font-semibold hover:bg-red-500 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {mfaLoading ? 'Vérification...' : 'Désactiver'}
-                  </button>
-                </div>
               </motion.div>
             ) : (
               <motion.div
@@ -2301,25 +2148,25 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
                 className="flex items-center gap-3 px-4 py-3.5"
               >
                 <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
-                  <Shield className="h-4 w-4 text-gold" strokeWidth={1.5} />
+                  <Mail className="h-4 w-4 text-gold" strokeWidth={1.5} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground">Double authentification (2FA)</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {!mfaStatus.loaded ? 'Chargement...' : mfaStatus.enabled ? 'Activée — application Authenticator' : 'Application Authenticator (TOTP)'}
+                    {twoFaEnabled === null ? 'Chargement...' : twoFaEnabled ? 'Activée — code par email' : 'Code par email à chaque connexion'}
                   </p>
                 </div>
                 <button
                   onClick={handleToggle2FA}
-                  disabled={!mfaStatus.loaded || mfaLoading}
+                  disabled={twoFaEnabled === null || twoFaSending}
                   className={cn(
                     "relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 disabled:opacity-50",
-                    mfaStatus.enabled ? "bg-gold" : "bg-secondary/80 border border-onyx-border/50"
+                    twoFaEnabled ? "bg-gold" : "bg-secondary/80 border border-onyx-border/50"
                   )}
                 >
                   <motion.div
-                    className={cn("absolute top-0.5 w-5 h-5 rounded-full shadow-sm", mfaStatus.enabled ? "bg-primary-foreground" : "bg-muted-foreground/60")}
-                    animate={{ left: mfaStatus.enabled ? 22 : 2 }}
+                    className={cn("absolute top-0.5 w-5 h-5 rounded-full shadow-sm", twoFaEnabled ? "bg-primary-foreground" : "bg-muted-foreground/60")}
+                    animate={{ left: twoFaEnabled ? 22 : 2 }}
                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
                   />
                 </button>

@@ -1,33 +1,53 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Shield } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { Mail } from "lucide-react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import {
+  getTwoFactorStatusAction,
+  requestTwoFactorCodeAction,
+  verifyTwoFactorCodeAction,
+} from "@/app/actions/two-factor"
 
-export default function MfaVerifyPage() {
+function VerifyEmailCodeContent() {
   const [code, setCode] = useState('')
-  const [factorId, setFactorId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isSending, setIsSending] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [resendCooldown, setResendCooldown] = useState(0)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+
+  function startResendCooldown() {
+    setResendCooldown(60)
+    const timer = setInterval(() => {
+      setResendCooldown(prev => {
+        if (prev <= 1) { clearInterval(timer); return 0 }
+        return prev - 1
+      })
+    }, 1000)
+  }
 
   useEffect(() => {
     void (async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/login'); return }
 
-      const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-      if (aalData?.currentLevel === 'aal2') { router.push('/'); return }
+      const { enabled } = await getTwoFactorStatusAction()
+      if (!enabled) {
+        const next = searchParams.get('next') || '/'
+        router.push(next)
+        return
+      }
 
-      const { data: factors } = await supabase.auth.mfa.listFactors()
-      const factor = factors?.totp.find(f => f.status === 'verified')
-      if (!factor) { router.push('/'); return }
-
-      setFactorId(factor.id)
+      setIsSending(true)
+      await requestTwoFactorCodeAction()
+      setIsSending(false)
+      startResendCooldown()
       setIsLoading(false)
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -35,35 +55,33 @@ export default function MfaVerifyPage() {
 
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault()
-    if (!factorId || code.length !== 6) return
+    if (code.length !== 6) return
     setIsVerifying(true)
     setError(null)
 
-    const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({ factorId })
-    if (challengeErr || !challenge) {
-      setError(challengeErr?.message ?? 'Erreur de challenge, veuillez réessayer.')
-      setIsVerifying(false)
-      return
-    }
-
-    const { error: verifyErr } = await supabase.auth.mfa.verify({
-      factorId,
-      challengeId: challenge.id,
-      code,
-    })
-
-    if (verifyErr) {
-      setError('Code incorrect, veuillez réessayer.')
+    const result = await verifyTwoFactorCodeAction(code)
+    if (!result.success) {
+      setError(result.error ?? 'Code incorrect, veuillez réessayer.')
       setCode('')
       setIsVerifying(false)
       return
     }
 
-    router.push('/')
+    const next = searchParams.get('next') || '/'
+    router.push(next)
     router.refresh()
   }
 
-  if (isLoading) {
+  async function handleResend() {
+    if (resendCooldown > 0) return
+    setIsSending(true)
+    setError(null)
+    await requestTwoFactorCodeAction()
+    setIsSending(false)
+    startResendCooldown()
+  }
+
+  if (isLoading || isSending) {
     return (
       <div className="min-h-screen bg-[#000000] flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-2 border-transparent border-t-[#D4AF37] animate-spin" />
@@ -86,11 +104,11 @@ export default function MfaVerifyPage() {
 
         <div className="flex flex-col items-center mb-6">
           <div className="w-14 h-14 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/30 flex items-center justify-center mb-4">
-            <Shield className="w-6 h-6 text-[#D4AF37]" strokeWidth={1.5} />
+            <Mail className="w-6 h-6 text-[#D4AF37]" strokeWidth={1.5} />
           </div>
           <h2 className="text-[18px] font-semibold text-[#F5F5F5] mb-2">Vérification en 2 étapes</h2>
           <p className="text-[13px] text-[#888888] text-center leading-relaxed">
-            Entrez le code à 6 chiffres généré par votre application d&apos;authentification.
+            Un code à 6 chiffres a été envoyé à votre adresse email. Il est valable 10 minutes.
           </p>
         </div>
 
@@ -103,8 +121,8 @@ export default function MfaVerifyPage() {
             onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
             autoComplete="one-time-code"
             autoFocus
-            className="w-full h-14 px-4 rounded-xl bg-[#0A0A0A] border border-[#D4AF37]/30 text-[#F5F5F5] text-center tracking-[0.3em] placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors"
-            style={{ fontSize: "22px" }}
+            className="w-full h-14 px-4 rounded-xl bg-[#0A0A0A] border border-[#D4AF37]/30 text-[#F5F5F5] text-center font-mono placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors"
+            style={{ fontSize: "22px", letterSpacing: "0.15em" }}
           />
 
           <AnimatePresence>
@@ -127,8 +145,31 @@ export default function MfaVerifyPage() {
           >
             {isVerifying ? 'Vérification...' : 'Vérifier'}
           </button>
+
+          <button
+            type="button"
+            onClick={handleResend}
+            disabled={resendCooldown > 0 || isSending}
+            className="w-full text-[12px] text-[#888888] hover:text-[#D4AF37] transition-colors py-2 disabled:opacity-50"
+          >
+            {resendCooldown > 0 ? `Renvoyer dans ${resendCooldown}s` : 'Renvoyer le code'}
+          </button>
         </form>
       </motion.div>
     </div>
+  )
+}
+
+export default function VerifyEmailCodePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#000000] flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full border-2 border-transparent border-t-[#D4AF37] animate-spin" />
+        </div>
+      }
+    >
+      <VerifyEmailCodeContent />
+    </Suspense>
   )
 }

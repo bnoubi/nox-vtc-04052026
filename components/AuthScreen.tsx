@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Mail, Lock, Eye, EyeOff, ArrowLeft, Shield } from "lucide-react"
+import { Mail, Lock, Eye, EyeOff, ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Turnstile } from "@marsidev/react-turnstile"
+import { sendTwoFactorCodeAction, verifyTwoFactorCodeAction } from "@/app/actions/two-factor"
 
 export function AuthScreen({ initialError }: { initialError?: string }) {
   const [email, setEmail] = useState("")
@@ -24,11 +25,11 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [turnstileKey, setTurnstileKey] = useState(0)
 
-  // États MFA
-  const [showMfaStep, setShowMfaStep] = useState(false)
-  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null)
-  const [mfaCode, setMfaCode] = useState('')
-  const [mfaError, setMfaError] = useState<string | null>(null)
+  // États 2FA email
+  const [showEmailMfaStep, setShowEmailMfaStep] = useState(false)
+  const [emailMfaCode, setEmailMfaCode] = useState('')
+  const [emailMfaError, setEmailMfaError] = useState<string | null>(null)
+  const [emailResendCooldown, setEmailResendCooldown] = useState(0)
 
   const router = useRouter()
   const supabase = createClient()
@@ -79,42 +80,38 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
       return
     }
 
-    // Vérifier si l'utilisateur a la 2FA active
-    const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    if (aalData?.nextLevel === 'aal2' && aalData.currentLevel !== 'aal2') {
-      const { data: factorsData } = await supabase.auth.mfa.listFactors()
-      const verifiedFactor = factorsData?.totp.find(f => f.status === 'verified')
-      if (verifiedFactor) {
-        setMfaFactorId(verifiedFactor.id)
-        setShowMfaStep(true)
-        setIsLoading(false)
-        return
-      }
+    // Vérifier si l'utilisateur a la 2FA email active
+    const tf = await sendTwoFactorCodeAction()
+    if (tf.twoFactorRequired) {
+      setShowEmailMfaStep(true)
+      setIsLoading(false)
+      startEmailResendCooldown()
+      return
     }
 
     router.push("/")
     router.refresh()
   }
 
-  async function handleMfaVerify(e: React.FormEvent) {
+  function startEmailResendCooldown() {
+    setEmailResendCooldown(60)
+    const timer = setInterval(() => {
+      setEmailResendCooldown(prev => {
+        if (prev <= 1) { clearInterval(timer); return 0 }
+        return prev - 1
+      })
+    }, 1000)
+  }
+
+  async function handleEmailMfaVerify(e: React.FormEvent) {
     e.preventDefault()
-    if (!mfaFactorId || mfaCode.length !== 6) return
+    if (emailMfaCode.length !== 6) return
     setIsLoading(true)
-    setMfaError(null)
-    const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId })
-    if (challengeErr || !challenge) {
-      setMfaError(challengeErr?.message ?? 'Erreur de challenge, veuillez réessayer.')
-      setIsLoading(false)
-      return
-    }
-    const { error: verifyErr } = await supabase.auth.mfa.verify({
-      factorId: mfaFactorId,
-      challengeId: challenge.id,
-      code: mfaCode,
-    })
-    if (verifyErr) {
-      setMfaError('Code incorrect, veuillez réessayer.')
-      setMfaCode('')
+    setEmailMfaError(null)
+    const result = await verifyTwoFactorCodeAction(emailMfaCode)
+    if (!result.success) {
+      setEmailMfaError(result.error ?? 'Code incorrect, veuillez réessayer.')
+      setEmailMfaCode('')
       setIsLoading(false)
       return
     }
@@ -207,51 +204,63 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
 
         {/* Forms */}
         <AnimatePresence mode="wait">
-          {showMfaStep ? (
+          {showEmailMfaStep ? (
             <motion.form
-              key="mfa-form"
+              key="email-mfa-form"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
-              onSubmit={handleMfaVerify}
+              onSubmit={handleEmailMfaVerify}
               className="space-y-4"
             >
               <div className="flex flex-col items-center mb-2">
                 <div className="w-14 h-14 rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/10 flex items-center justify-center mb-4">
-                  <Shield className="w-6 h-6 text-[#D4AF37]" strokeWidth={1.5} />
+                  <Mail className="w-6 h-6 text-[#D4AF37]" strokeWidth={1.5} />
                 </div>
                 <h2 className="text-[18px] font-semibold text-[#F5F5F5] mb-2">Vérification en 2 étapes</h2>
                 <p className="text-[13px] text-[#888888] text-center leading-relaxed">
-                  Entrez le code à 6 chiffres de votre application d&apos;authentification.
+                  Un code à 6 chiffres a été envoyé à votre adresse email.
                 </p>
               </div>
               <input
                 type="text"
                 inputMode="numeric"
                 placeholder="000000"
-                value={mfaCode}
-                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                value={emailMfaCode}
+                onChange={(e) => setEmailMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 autoComplete="one-time-code"
                 autoFocus
-                className="w-full h-14 px-4 rounded-xl bg-[#0A0A0A] border border-[#D4AF37]/30 text-[#F5F5F5] text-center tracking-[0.3em] placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors"
-                style={{ fontSize: "22px" }}
+                className="w-full h-14 px-4 rounded-xl bg-[#0A0A0A] border border-[#D4AF37]/30 text-[#F5F5F5] text-center font-mono placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors"
+                style={{ fontSize: "22px", letterSpacing: "0.15em" }}
               />
-              {mfaError && (
+              {emailMfaError && (
                 <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-center text-[12px] text-red-400">
-                  {mfaError}
+                  {emailMfaError}
                 </div>
               )}
               <button
                 type="submit"
-                disabled={isLoading || mfaCode.length !== 6}
+                disabled={isLoading || emailMfaCode.length !== 6}
                 className="w-full h-14 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 disabled:opacity-60"
               >
                 {isLoading ? 'Vérification...' : 'Vérifier'}
               </button>
               <button
                 type="button"
-                onClick={() => { setShowMfaStep(false); setMfaCode(''); setMfaError(null) }}
+                onClick={async () => {
+                  if (emailResendCooldown > 0) return
+                  const tf = await sendTwoFactorCodeAction()
+                  if (tf.twoFactorRequired) startEmailResendCooldown()
+                }}
+                disabled={emailResendCooldown > 0}
+                className="w-full text-[12px] text-[#888888] hover:text-[#D4AF37] transition-colors py-2 disabled:opacity-50"
+              >
+                {emailResendCooldown > 0 ? `Renvoyer dans ${emailResendCooldown}s` : 'Renvoyer le code'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowEmailMfaStep(false); setEmailMfaCode(''); setEmailMfaError(null) }}
                 className="w-full flex items-center justify-center gap-2 text-[12px] text-[#FFFFFF] hover:text-[#D4AF37] transition-colors py-3"
               >
                 <ArrowLeft className="h-3 w-3" /> Retour à la connexion
