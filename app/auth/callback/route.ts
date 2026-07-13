@@ -151,6 +151,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(redirectUrl)
     }
 
+    // MFA : si l'utilisateur a un facteur TOTP vérifié et que la session est AAL1,
+    // on le renvoie sur /mfa-verify avant tout accès (sauf flows de récupération/invitation)
+    if (type !== 'recovery' && type !== 'signup' && type !== 'invite') {
+      const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      if (aalData?.nextLevel === 'aal2' && aalData.currentLevel !== 'aal2') {
+        return NextResponse.redirect(new URL('/mfa-verify', siteUrl).toString())
+      }
+    }
+
     // Admin bypass → back-office directement, jamais onboarding chauffeur
     const { data: adminRole } = await adminClient
       .from('user_roles')

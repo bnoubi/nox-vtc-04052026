@@ -67,6 +67,8 @@ import { usePromo } from "@/lib/hooks/usePromo"
 import { SupportTicketModal } from "./support-ticket-modal"
 import { SupportHistory } from "./support-history"
 import { planLabel } from "@/lib/plans"
+import { isPasswordStrong, PasswordStrengthIndicator } from "@/lib/password"
+import { sendPasswordChangedEmailAction } from "@/app/actions/security"
 
 // ── Helpers : expiration la plus proche ───────────────────────
 
@@ -1910,9 +1912,159 @@ function NotificationsScreen({ onBack }: { onBack: () => void }) {
 // ── Security Screen ───────────────────────────────────────────
 
 function SecurityScreen({ onBack }: { onBack: () => void }) {
-  const [twoFA, setTwoFA] = useState(true)
+  const supabase = createClient()
+
+  // ── 2FA state ──
+  const [mfaStatus, setMfaStatus] = useState<{ loaded: boolean; enabled: boolean; factorId: string | null }>(
+    { loaded: false, enabled: false, factorId: null }
+  )
+  const [enrollStep, setEnrollStep] = useState<'idle' | 'active'>('idle')
+  const [qrCode, setQrCode] = useState<string | null>(null)
+  const [totpSecret, setTotpSecret] = useState<string | null>(null)
+  const [pendingFactorId, setPendingFactorId] = useState<string | null>(null)
+  const [totpCode, setTotpCode] = useState('')
+  const [mfaError, setMfaError] = useState<string | null>(null)
+  const [mfaLoading, setMfaLoading] = useState(false)
+  const [showUnenrollConfirm, setShowUnenrollConfirm] = useState(false)
+
+  // ── Password state ──
   const [biometric, setBiometric] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const [pwForm, setPwForm] = useState({ current: '', newPwd: '', confirm: '' })
+  const [pwLoading, setPwLoading] = useState(false)
+  const [pwError, setPwError] = useState<string | null>(null)
+  const [pwSuccess, setPwSuccess] = useState(false)
+  const [showCurrentPw, setShowCurrentPw] = useState(false)
+  const [showNewPw, setShowNewPw] = useState(false)
+  const [showConfirmPw, setShowConfirmPw] = useState(false)
+  const [pwChangedLabel, setPwChangedLabel] = useState<string | null>(null)
+
+  const passwordsMatch = pwForm.confirm.length > 0 && pwForm.newPwd === pwForm.confirm
+  const isNewStrong = isPasswordStrong(pwForm.newPwd)
+  const canSubmitPwd = pwForm.current.length > 0 && isNewStrong && passwordsMatch
+
+  useEffect(() => {
+    void (async () => {
+      const { data, error } = await supabase.auth.mfa.listFactors()
+      if (!error && data) {
+        const verified = data.totp.find(f => f.status === 'verified')
+        setMfaStatus({ loaded: true, enabled: !!verified, factorId: verified?.id ?? null })
+      } else {
+        setMfaStatus(prev => ({ ...prev, loaded: true }))
+      }
+    })()
+    const stored = localStorage.getItem('nox_pwd_changed_at')
+    if (stored) {
+      const days = Math.floor((Date.now() - parseInt(stored, 10)) / 86400000)
+      if (days === 0) setPwChangedLabel("Modifié aujourd'hui")
+      else if (days === 1) setPwChangedLabel('Modifié hier')
+      else setPwChangedLabel(`Modifié il y a ${days} jours`)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── 2FA handlers ──
+  async function handleToggle2FA() {
+    if (mfaStatus.enabled) { setShowUnenrollConfirm(true); return }
+    setMfaLoading(true)
+    setMfaError(null)
+    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' })
+    if (error || !data) {
+      setMfaError(error?.message ?? "Erreur lors de l'activation")
+      setMfaLoading(false)
+      return
+    }
+    setQrCode(data.totp.qr_code)
+    setTotpSecret(data.totp.secret)
+    setPendingFactorId(data.id)
+    setEnrollStep('active')
+    setMfaLoading(false)
+  }
+
+  async function handleVerifyEnroll() {
+    if (!pendingFactorId || totpCode.length !== 6) return
+    setMfaLoading(true)
+    setMfaError(null)
+    const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({ factorId: pendingFactorId })
+    if (challengeErr || !challenge) {
+      setMfaError(challengeErr?.message ?? 'Erreur de challenge')
+      setMfaLoading(false)
+      return
+    }
+    const { error: verifyErr } = await supabase.auth.mfa.verify({ factorId: pendingFactorId, challengeId: challenge.id, code: totpCode })
+    if (verifyErr) {
+      setMfaError('Code incorrect, veuillez réessayer.')
+      setTotpCode('')
+      setMfaLoading(false)
+      return
+    }
+    setMfaStatus({ loaded: true, enabled: true, factorId: pendingFactorId })
+    setEnrollStep('idle')
+    setTotpCode('')
+    setQrCode(null)
+    setTotpSecret(null)
+    setPendingFactorId(null)
+    toast.success('Double authentification activée ✓')
+    setMfaLoading(false)
+  }
+
+  function handleCancelEnroll() {
+    if (pendingFactorId) void supabase.auth.mfa.unenroll({ factorId: pendingFactorId })
+    setEnrollStep('idle')
+    setQrCode(null)
+    setTotpSecret(null)
+    setPendingFactorId(null)
+    setTotpCode('')
+    setMfaError(null)
+    setMfaLoading(false)
+  }
+
+  async function handleUnenroll() {
+    if (!mfaStatus.factorId) return
+    setMfaLoading(true)
+    const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaStatus.factorId })
+    if (error) {
+      setMfaError(error.message)
+      setMfaLoading(false)
+      return
+    }
+    setMfaStatus({ loaded: true, enabled: false, factorId: null })
+    setShowUnenrollConfirm(false)
+    toast.success('Double authentification désactivée')
+    setMfaLoading(false)
+  }
+
+  // ── Password handler ──
+  async function handleChangePassword() {
+    setPwLoading(true)
+    setPwError(null)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.email) {
+      setPwError('Session expirée, veuillez vous reconnecter.')
+      setPwLoading(false)
+      return
+    }
+    const { error: signInErr } = await supabase.auth.signInWithPassword({ email: user.email, password: pwForm.current })
+    if (signInErr) {
+      setPwError('Mot de passe actuel incorrect.')
+      setPwLoading(false)
+      return
+    }
+    const { error: updateErr } = await supabase.auth.updateUser({ password: pwForm.newPwd })
+    if (updateErr) {
+      setPwError(updateErr.message)
+      setPwLoading(false)
+      return
+    }
+    localStorage.setItem('nox_pwd_changed_at', Date.now().toString())
+    setPwChangedLabel("Modifié aujourd'hui")
+    setPwSuccess(true)
+    setPwForm({ current: '', newPwd: '', confirm: '' })
+    setPwLoading(false)
+    toast.success('Mot de passe mis à jour ✓')
+    setTimeout(() => { setShowChangePassword(false); setPwSuccess(false) }, 1500)
+    try { await sendPasswordChangedEmailAction() } catch {}
+  }
 
   return (
     <motion.div key="security" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
@@ -1935,30 +2087,124 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
         <SectionLabel>Authentification</SectionLabel>
         <GlassCard className="mb-5">
           {/* 2FA */}
-          <div className="flex items-center gap-3 px-4 py-3.5">
-            <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
-              <Shield className="h-4 w-4 text-gold" strokeWidth={1.5} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground">Double authentification (2FA)</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Code SMS ou application Authenticator</p>
-            </div>
-            <button
-              onClick={() => setTwoFA(!twoFA)}
-              className={cn(
-                "relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0",
-                twoFA ? "bg-gold" : "bg-secondary/80 border border-onyx-border/50"
-              )}
-            >
+          <AnimatePresence mode="wait">
+            {enrollStep === 'active' ? (
               <motion.div
-                className={cn("absolute top-0.5 w-5 h-5 rounded-full shadow-sm", twoFA ? "bg-primary-foreground" : "bg-muted-foreground/60")}
-                animate={{ left: twoFA ? 22 : 2 }}
-                transition={{ type: "spring", stiffness: 500, damping: 30 }}
-              />
-            </button>
-          </div>
+                key="enroll"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="p-4 space-y-4"
+              >
+                <p className="text-xs font-semibold text-foreground">Activer la double authentification</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Scannez ce QR code avec <strong className="text-foreground">Google Authenticator</strong>, <strong className="text-foreground">Authy</strong> ou <strong className="text-foreground">1Password</strong>, puis entrez le code à 6 chiffres.
+                </p>
+                {qrCode && (
+                  <div className="flex justify-center">
+                    <div className="bg-white p-3 rounded-xl inline-block">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={qrCode} alt="QR Code 2FA" className="w-44 h-44" />
+                    </div>
+                  </div>
+                )}
+                {totpSecret && (
+                  <div className="px-3 py-2 rounded-xl bg-secondary/50 border border-onyx-border/40">
+                    <p className="text-[9px] text-muted-foreground mb-1 uppercase tracking-wider">Code manuel</p>
+                    <p className="text-[11px] font-mono text-gold tracking-widest break-all">{totpSecret}</p>
+                  </div>
+                )}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="000000"
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  autoComplete="one-time-code"
+                  className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-foreground text-center text-lg tracking-[0.3em] placeholder:text-muted-foreground/40 focus:outline-none focus:border-gold/50 transition-colors"
+                />
+                {mfaError && <p className="text-[11px] text-red-400 text-center">{mfaError}</p>}
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleCancelEnroll}
+                    className="flex-1 py-2.5 rounded-xl bg-secondary/40 border border-onyx-border/30 text-xs font-medium text-muted-foreground hover:bg-secondary/60 active:scale-[0.98] transition-all"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={handleVerifyEnroll}
+                    disabled={mfaLoading || totpCode.length !== 6}
+                    className="flex-1 py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-semibold hover:bg-gold-light active:scale-[0.98] transition-all gold-glow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {mfaLoading ? 'Vérification...' : 'Activer'}
+                  </button>
+                </div>
+              </motion.div>
+            ) : showUnenrollConfirm ? (
+              <motion.div
+                key="unenroll"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="p-4 space-y-3"
+              >
+                <p className="text-sm font-medium text-foreground">Désactiver la 2FA ?</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Votre compte sera moins sécurisé. Vous pourrez la réactiver à tout moment.
+                </p>
+                {mfaError && <p className="text-[11px] text-red-400">{mfaError}</p>}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setShowUnenrollConfirm(false); setMfaError(null) }}
+                    className="flex-1 py-2.5 rounded-xl bg-secondary/40 border border-onyx-border/30 text-xs font-medium text-muted-foreground hover:bg-secondary/60 active:scale-[0.98] transition-all"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={handleUnenroll}
+                    disabled={mfaLoading}
+                    className="flex-1 py-2.5 rounded-xl bg-red-500/80 text-white text-xs font-semibold hover:bg-red-500 active:scale-[0.98] transition-all disabled:opacity-50"
+                  >
+                    {mfaLoading ? 'Désactivation...' : 'Désactiver'}
+                  </button>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="toggle"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center gap-3 px-4 py-3.5"
+              >
+                <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
+                  <Shield className="h-4 w-4 text-gold" strokeWidth={1.5} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">Double authentification (2FA)</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {!mfaStatus.loaded ? 'Chargement...' : mfaStatus.enabled ? 'Activée — application Authenticator' : 'Application Authenticator (TOTP)'}
+                  </p>
+                </div>
+                <button
+                  onClick={handleToggle2FA}
+                  disabled={!mfaStatus.loaded || mfaLoading}
+                  className={cn(
+                    "relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 disabled:opacity-50",
+                    mfaStatus.enabled ? "bg-gold" : "bg-secondary/80 border border-onyx-border/50"
+                  )}
+                >
+                  <motion.div
+                    className={cn("absolute top-0.5 w-5 h-5 rounded-full shadow-sm", mfaStatus.enabled ? "bg-primary-foreground" : "bg-muted-foreground/60")}
+                    animate={{ left: mfaStatus.enabled ? 22 : 2 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {/* Biometric */}
+          {/* Biometric (façade) */}
           <div className="flex items-center gap-3 px-4 py-3.5">
             <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
               <BadgeCheck className="h-4 w-4 text-gold" strokeWidth={1.5} />
@@ -1994,35 +2240,81 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
                 exit={{ opacity: 0, height: 0 }}
                 className="p-4 space-y-3 overflow-hidden"
               >
-                <input
-                  type="password"
-                  placeholder="Mot de passe actuel"
-                  className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
-                />
-                <input
-                  type="password"
-                  placeholder="Nouveau mot de passe"
-                  className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
-                />
-                <input
-                  type="password"
-                  placeholder="Confirmer le nouveau mot de passe"
-                  className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
-                />
-                <div className="flex gap-3 pt-1">
-                  <button
-                    onClick={() => setShowChangePassword(false)}
-                    className="flex-1 py-2.5 rounded-xl bg-secondary/40 border border-onyx-border/30 text-xs font-medium text-muted-foreground hover:bg-secondary/60 active:scale-[0.98] transition-all"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    onClick={() => setShowChangePassword(false)}
-                    className="flex-1 py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-semibold hover:bg-gold-light active:scale-[0.98] transition-all gold-glow-sm"
-                  >
-                    Valider
-                  </button>
-                </div>
+                {pwSuccess ? (
+                  <div className="py-4 text-center">
+                    <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto mb-2" strokeWidth={1.5} />
+                    <p className="text-sm font-semibold text-emerald-400">Mot de passe mis à jour</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Current password */}
+                    <div className="relative">
+                      <input
+                        type={showCurrentPw ? "text" : "password"}
+                        placeholder="Mot de passe actuel"
+                        value={pwForm.current}
+                        onChange={(e) => setPwForm(f => ({ ...f, current: e.target.value }))}
+                        className="w-full px-4 py-3 pr-11 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
+                      />
+                      <button type="button" onClick={() => setShowCurrentPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground">
+                        {showCurrentPw ? <EyeOff className="h-4 w-4" strokeWidth={1.5} /> : <Eye className="h-4 w-4" strokeWidth={1.5} />}
+                      </button>
+                    </div>
+                    {/* New password */}
+                    <div className="relative">
+                      <input
+                        type={showNewPw ? "text" : "password"}
+                        placeholder="Nouveau mot de passe"
+                        value={pwForm.newPwd}
+                        onChange={(e) => setPwForm(f => ({ ...f, newPwd: e.target.value }))}
+                        className={cn(
+                          "w-full px-4 py-3 pr-11 rounded-xl bg-secondary/60 border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none transition-colors",
+                          pwForm.newPwd && !isNewStrong ? "border-red-500/50 focus:border-red-500/70" : "border-onyx-border/50 focus:border-gold/50"
+                        )}
+                      />
+                      <button type="button" onClick={() => setShowNewPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground">
+                        {showNewPw ? <EyeOff className="h-4 w-4" strokeWidth={1.5} /> : <Eye className="h-4 w-4" strokeWidth={1.5} />}
+                      </button>
+                    </div>
+                    <PasswordStrengthIndicator password={pwForm.newPwd} show={pwForm.newPwd.length > 0} />
+                    {/* Confirm */}
+                    <div className="relative">
+                      <input
+                        type={showConfirmPw ? "text" : "password"}
+                        placeholder="Confirmer le nouveau mot de passe"
+                        value={pwForm.confirm}
+                        onChange={(e) => setPwForm(f => ({ ...f, confirm: e.target.value }))}
+                        className={cn(
+                          "w-full px-4 py-3 pr-11 rounded-xl bg-secondary/60 border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none transition-colors",
+                          pwForm.confirm && !passwordsMatch ? "border-red-500/50 focus:border-red-500/70" : "border-onyx-border/50 focus:border-gold/50"
+                        )}
+                      />
+                      <button type="button" onClick={() => setShowConfirmPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground">
+                        {showConfirmPw ? <EyeOff className="h-4 w-4" strokeWidth={1.5} /> : <Eye className="h-4 w-4" strokeWidth={1.5} />}
+                      </button>
+                    </div>
+                    {pwForm.confirm && !passwordsMatch && (
+                      <p className="text-[10px] text-red-400 font-semibold ml-1">Les mots de passe ne correspondent pas.</p>
+                    )}
+                    {pwError && <p className="text-[11px] text-red-400 text-center px-1">{pwError}</p>}
+                    <div className="flex gap-3 pt-1">
+                      <button
+                        onClick={() => { setShowChangePassword(false); setPwForm({ current: '', newPwd: '', confirm: '' }); setPwError(null) }}
+                        disabled={pwLoading}
+                        className="flex-1 py-2.5 rounded-xl bg-secondary/40 border border-onyx-border/30 text-xs font-medium text-muted-foreground hover:bg-secondary/60 active:scale-[0.98] transition-all"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        onClick={handleChangePassword}
+                        disabled={pwLoading || !canSubmitPwd}
+                        className="flex-1 py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-semibold hover:bg-gold-light active:scale-[0.98] transition-all gold-glow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {pwLoading ? 'Mise à jour...' : 'Valider'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </motion.div>
             ) : (
               <motion.button
@@ -2037,7 +2329,7 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
                 </div>
                 <div className="flex-1 text-left min-w-0">
                   <p className="text-sm font-medium text-foreground group-hover:text-gold transition-colors">Changer mon mot de passe</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">Dernière modification il y a 45 jours</p>
+                  {pwChangedLabel && <p className="text-[11px] text-muted-foreground mt-0.5">{pwChangedLabel}</p>}
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0 group-hover:translate-x-0.5 group-hover:text-gold/50 transition-all" strokeWidth={1.5} />
               </motion.button>
@@ -2045,7 +2337,7 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
           </AnimatePresence>
         </GlassCard>
 
-        {/* Sessions */}
+        {/* Sessions (façade) */}
         <SectionLabel>Sessions actives</SectionLabel>
         <GlassCard className="mb-5">
           {[
