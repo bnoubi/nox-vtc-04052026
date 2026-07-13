@@ -1925,7 +1925,12 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
   const [totpCode, setTotpCode] = useState('')
   const [mfaError, setMfaError] = useState<string | null>(null)
   const [mfaLoading, setMfaLoading] = useState(false)
+  // Désactivation 2FA — re-vérification d'identité obligatoire
   const [showUnenrollConfirm, setShowUnenrollConfirm] = useState(false)
+  const [unenrollMode, setUnenrollMode] = useState<'totp' | 'password'>('totp')
+  const [unenrollCode, setUnenrollCode] = useState('')
+  const [unenrollPwd, setUnenrollPwd] = useState('')
+  const [showUnenrollPwd, setShowUnenrollPwd] = useState(false)
 
   // ── Password state ──
   const [biometric, setBiometric] = useState(false)
@@ -2019,9 +2024,67 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
     setMfaLoading(false)
   }
 
+  function resetUnenrollForm() {
+    setShowUnenrollConfirm(false)
+    setUnenrollMode('totp')
+    setUnenrollCode('')
+    setUnenrollPwd('')
+    setShowUnenrollPwd(false)
+    setMfaError(null)
+  }
+
   async function handleUnenroll() {
     if (!mfaStatus.factorId) return
     setMfaLoading(true)
+    setMfaError(null)
+
+    if (unenrollMode === 'totp') {
+      if (unenrollCode.length !== 6) {
+        setMfaError('Entrez le code à 6 chiffres.')
+        setMfaLoading(false)
+        return
+      }
+      // Vérifier le code TOTP avant de désactiver
+      const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({ factorId: mfaStatus.factorId })
+      if (challengeErr || !challenge) {
+        setMfaError(challengeErr?.message ?? 'Erreur de challenge, réessayez.')
+        setMfaLoading(false)
+        return
+      }
+      const { error: verifyErr } = await supabase.auth.mfa.verify({
+        factorId: mfaStatus.factorId,
+        challengeId: challenge.id,
+        code: unenrollCode,
+      })
+      if (verifyErr) {
+        setMfaError('Code TOTP incorrect, veuillez réessayer.')
+        setUnenrollCode('')
+        setMfaLoading(false)
+        return
+      }
+    } else {
+      // Vérifier le mot de passe avant de désactiver
+      if (!unenrollPwd) {
+        setMfaError('Entrez votre mot de passe.')
+        setMfaLoading(false)
+        return
+      }
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user?.email) {
+        setMfaError('Session expirée, veuillez vous reconnecter.')
+        setMfaLoading(false)
+        return
+      }
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email: user.email, password: unenrollPwd })
+      if (signInErr) {
+        setMfaError('Mot de passe incorrect.')
+        setUnenrollPwd('')
+        setMfaLoading(false)
+        return
+      }
+    }
+
+    // Identité confirmée — désactiver le facteur
     const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaStatus.factorId })
     if (error) {
       setMfaError(error.message)
@@ -2029,7 +2092,7 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
       return
     }
     setMfaStatus({ loaded: true, enabled: false, factorId: null })
-    setShowUnenrollConfirm(false)
+    resetUnenrollForm()
     toast.success('Double authentification désactivée')
     setMfaLoading(false)
   }
@@ -2148,24 +2211,84 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
                 exit={{ opacity: 0 }}
                 className="p-4 space-y-3"
               >
-                <p className="text-sm font-medium text-foreground">Désactiver la 2FA ?</p>
+                <p className="text-sm font-semibold text-foreground">Confirmer la désactivation</p>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Votre compte sera moins sécurisé. Vous pourrez la réactiver à tout moment.
+                  Pour votre sécurité, confirmez votre identité avant de désactiver la 2FA.
                 </p>
-                {mfaError && <p className="text-[11px] text-red-400">{mfaError}</p>}
+
+                {/* Sélecteur de méthode */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setUnenrollMode('totp'); setMfaError(null) }}
+                    className={cn(
+                      "flex-1 py-1.5 rounded-lg text-[11px] font-medium transition-colors",
+                      unenrollMode === 'totp'
+                        ? "bg-gold/20 text-gold border border-gold/40"
+                        : "bg-secondary/40 text-muted-foreground border border-onyx-border/30"
+                    )}
+                  >
+                    Code TOTP
+                  </button>
+                  <button
+                    onClick={() => { setUnenrollMode('password'); setMfaError(null) }}
+                    className={cn(
+                      "flex-1 py-1.5 rounded-lg text-[11px] font-medium transition-colors",
+                      unenrollMode === 'password'
+                        ? "bg-gold/20 text-gold border border-gold/40"
+                        : "bg-secondary/40 text-muted-foreground border border-onyx-border/30"
+                    )}
+                  >
+                    Mot de passe
+                  </button>
+                </div>
+
+                {unenrollMode === 'totp' ? (
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Code à 6 chiffres"
+                    value={unenrollCode}
+                    onChange={(e) => setUnenrollCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    autoComplete="one-time-code"
+                    autoFocus
+                    className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-foreground text-center text-base tracking-[0.25em] placeholder:text-muted-foreground/40 focus:outline-none focus:border-gold/50 transition-colors"
+                  />
+                ) : (
+                  <div className="relative">
+                    <input
+                      type={showUnenrollPwd ? "text" : "password"}
+                      placeholder="Votre mot de passe actuel"
+                      value={unenrollPwd}
+                      onChange={(e) => setUnenrollPwd(e.target.value)}
+                      autoFocus
+                      className="w-full px-4 py-3 pr-11 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowUnenrollPwd(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground"
+                    >
+                      {showUnenrollPwd ? <EyeOff className="h-4 w-4" strokeWidth={1.5} /> : <Eye className="h-4 w-4" strokeWidth={1.5} />}
+                    </button>
+                  </div>
+                )}
+
+                {mfaError && <p className="text-[11px] text-red-400 text-center">{mfaError}</p>}
+
                 <div className="flex gap-3">
                   <button
-                    onClick={() => { setShowUnenrollConfirm(false); setMfaError(null) }}
+                    onClick={resetUnenrollForm}
+                    disabled={mfaLoading}
                     className="flex-1 py-2.5 rounded-xl bg-secondary/40 border border-onyx-border/30 text-xs font-medium text-muted-foreground hover:bg-secondary/60 active:scale-[0.98] transition-all"
                   >
                     Annuler
                   </button>
                   <button
                     onClick={handleUnenroll}
-                    disabled={mfaLoading}
-                    className="flex-1 py-2.5 rounded-xl bg-red-500/80 text-white text-xs font-semibold hover:bg-red-500 active:scale-[0.98] transition-all disabled:opacity-50"
+                    disabled={mfaLoading || (unenrollMode === 'totp' ? unenrollCode.length !== 6 : !unenrollPwd)}
+                    className="flex-1 py-2.5 rounded-xl bg-red-500/80 text-white text-xs font-semibold hover:bg-red-500 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {mfaLoading ? 'Désactivation...' : 'Désactiver'}
+                    {mfaLoading ? 'Vérification...' : 'Désactiver'}
                   </button>
                 </div>
               </motion.div>
