@@ -5,6 +5,8 @@ import { createClient as createSbClient } from '@supabase/supabase-js'
 import { createAdminClient, verifyAdminPermission } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/email/resend'
 import { templateMessage } from '@/lib/email/templates'
+import { tokensGiftedEmail } from '@/emails/tokens-gifted'
+import { planChangedEmail } from '@/emails/plan-changed'
 import {
   PLAN_RANK,
   TRIAL_PLAN_CODE,
@@ -444,6 +446,19 @@ export async function addTokens(targetUserId: string, amount: number, motif: str
 
   await logAction(auth.adminId, 'add_tokens', targetUserId, { amount, motif })
   revalidateAdminWrites(targetUserId)
+
+  try {
+    const { data: accForEmail } = await db.from('user_accounts')
+      .select('email, prenom, nom, full_name').eq('id', targetUserId).maybeSingle()
+    const a = accForEmail as { email: string | null; prenom: string | null; nom: string | null; full_name: string | null } | null
+    if (a?.email) {
+      const prenom = a.prenom?.trim() || a.full_name?.split(' ')[0]?.trim() || ''
+      const nom = a.nom?.trim() || ''
+      const { subject, html } = tokensGiftedEmail({ prenom, nom, amount, balanceAfter, motif })
+      await sendEmail(a.email, subject, html)
+    }
+  } catch { /* email failure must not surface */ }
+
   return { success: true }
 }
 
@@ -505,6 +520,19 @@ export async function changePlan(targetUserId: string, newPlan: string, startDat
     current_plan: currentPlan, new_plan: normalizedNew, start_date: startDate, end_date: endDate,
   })
   revalidateAdminWrites(targetUserId)
+
+  try {
+    const { data: accForEmail } = await db.from('user_accounts')
+      .select('email, prenom, nom, full_name').eq('id', targetUserId).maybeSingle()
+    const a = accForEmail as { email: string | null; prenom: string | null; nom: string | null; full_name: string | null } | null
+    if (a?.email) {
+      const prenom = a.prenom?.trim() || a.full_name?.split(' ')[0]?.trim() || ''
+      const nom = a.nom?.trim() || ''
+      const { subject, html } = planChangedEmail({ prenom, nom, oldPlan: currentPlan, newPlan: dbPlan, endDate: endDate ?? null })
+      await sendEmail(a.email, subject, html)
+    }
+  } catch { /* email failure must not surface */ }
+
   return { success: true }
 }
 
@@ -928,5 +956,18 @@ export async function changeSubscriptionPlan(
 
   await logAction(auth.adminId, 'change_plan', userId, { new_plan: normalized, source: 'subscriptions', start_date: startDate, end_date: endDate })
   revalidateAdminWrites(userId)
+
+  try {
+    const { data: accForEmail } = await db.from('user_accounts')
+      .select('email, prenom, nom, full_name').eq('id', userId).maybeSingle()
+    const a = accForEmail as { email: string | null; prenom: string | null; nom: string | null; full_name: string | null } | null
+    if (a?.email) {
+      const prenom = a.prenom?.trim() || a.full_name?.split(' ')[0]?.trim() || ''
+      const nom = a.nom?.trim() || ''
+      const { subject, html } = planChangedEmail({ prenom, nom, oldPlan: currentPlan, newPlan: normalized.toUpperCase(), endDate: endDate ?? null })
+      await sendEmail(a.email, subject, html)
+    }
+  } catch { /* email failure must not surface */ }
+
   return { success: true }
 }
