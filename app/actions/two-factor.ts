@@ -119,7 +119,20 @@ export async function verifyTwoFactorCodeAction(code: string): Promise<{ success
     }
   }
 
-  await db.from('two_factor_codes').update({ used_at: now }).eq('id', row.id)
+  console.log('[2FA] UPDATE used_at: start', row.id)
+  const t0 = Date.now()
+  try {
+    await Promise.race([
+      db.from('two_factor_codes').update({ used_at: now }).eq('id', row.id),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 10_000)
+      ),
+    ])
+    console.log('[2FA] UPDATE used_at: done in', Date.now() - t0, 'ms')
+  } catch (err) {
+    console.error('[2FA] UPDATE used_at: failed in', Date.now() - t0, 'ms —', err)
+    return { success: false, error: 'Erreur réseau, veuillez réessayer.' }
+  }
   return { success: true }
 }
 

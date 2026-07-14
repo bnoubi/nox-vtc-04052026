@@ -111,8 +111,7 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
     }, 1000)
   }
 
-  async function handleEmailMfaVerify(e: React.FormEvent) {
-    e.preventDefault()
+  async function doEmailMfaVerify() {
     if (emailMfaCode.length !== 6) return
     setIsLoading(true)
     setEmailMfaError(null)
@@ -127,9 +126,14 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
       router.push("/")
       router.refresh()
     } catch {
-      setEmailMfaError('Une erreur est survenue. Veuillez réessayer.')
+      setEmailMfaError('Erreur réseau, veuillez réessayer.')
       setIsLoading(false)
     }
+  }
+
+  async function handleEmailMfaVerify(e: React.FormEvent) {
+    e.preventDefault()
+    await doEmailMfaVerify()
   }
 
   async function handleGoogleLogin() {
@@ -248,8 +252,17 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
                 style={{ fontSize: "22px", letterSpacing: "0.15em" }}
               />
               {emailMfaError && (
-                <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-center text-[12px] text-red-400">
-                  {emailMfaError}
+                <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-center text-[12px] text-red-400 space-y-2">
+                  <p>{emailMfaError}</p>
+                  {emailMfaCode.length === 6 && (
+                    <button
+                      type="button"
+                      onClick={doEmailMfaVerify}
+                      className="text-[11px] text-red-300 underline underline-offset-2 hover:text-red-200 transition-colors"
+                    >
+                      Réessayer
+                    </button>
+                  )}
                 </div>
               )}
               <button

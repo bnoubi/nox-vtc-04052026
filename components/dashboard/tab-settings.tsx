@@ -2110,7 +2110,20 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
                       className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-foreground text-center text-lg font-mono placeholder:text-muted-foreground/40 focus:outline-none focus:border-gold/50 transition-colors"
                       style={{ letterSpacing: "0.15em" }}
                     />
-                    {twoFaError && <p className="text-[11px] text-red-400 text-center">{twoFaError}</p>}
+                    {twoFaError && (
+                      <div className="text-center space-y-1.5">
+                        <p className="text-[11px] text-red-400">{twoFaError}</p>
+                        {twoFaCode.length === 6 && (
+                          <button
+                            type="button"
+                            onClick={handleVerify2FA}
+                            className="text-[11px] text-red-300 underline underline-offset-2 hover:text-red-200 transition-colors"
+                          >
+                            Réessayer
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={handleResendCode}

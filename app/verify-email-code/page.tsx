@@ -53,23 +53,28 @@ function VerifyEmailCodeContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function handleVerify(e: React.FormEvent) {
-    e.preventDefault()
+  async function doVerify() {
     if (code.length !== 6) return
     setIsVerifying(true)
     setError(null)
-
-    const result = await verifyTwoFactorCodeAction(code)
-    if (!result.success) {
-      setError(result.error ?? 'Code incorrect, veuillez réessayer.')
-      setCode('')
+    try {
+      const result = await verifyTwoFactorCodeAction(code)
+      if (!result.success) {
+        setError(result.error ?? 'Code incorrect, veuillez réessayer.')
+        setCode('')
+        return
+      }
+      window.location.href = searchParams.get('next') || '/'
+    } catch {
+      setError('Erreur réseau, veuillez réessayer.')
+    } finally {
       setIsVerifying(false)
-      return
     }
+  }
 
-    const next = searchParams.get('next') || '/'
-    router.push(next)
-    router.refresh()
+  async function handleVerify(e: React.FormEvent) {
+    e.preventDefault()
+    await doVerify()
   }
 
   async function handleResend() {
@@ -131,9 +136,18 @@ function VerifyEmailCodeContent() {
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-center text-[12px] text-red-400"
+                className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-center text-[12px] text-red-400 space-y-2"
               >
-                {error}
+                <p>{error}</p>
+                {code.length === 6 && (
+                  <button
+                    type="button"
+                    onClick={doVerify}
+                    className="text-[11px] text-red-300 underline underline-offset-2 hover:text-red-200 transition-colors"
+                  >
+                    Réessayer
+                  </button>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
