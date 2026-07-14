@@ -6,7 +6,7 @@ import { Mail, Lock, Eye, EyeOff, ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Turnstile } from "@marsidev/react-turnstile"
-import { sendTwoFactorCodeAction, verifyTwoFactorCodeAction } from "@/app/actions/two-factor"
+import { requestTwoFactorCodeAction, verifyTwoFactorCodeAction } from "@/app/actions/two-factor"
 
 export function AuthScreen({ initialError }: { initialError?: string }) {
   const [email, setEmail] = useState("")
@@ -57,7 +57,7 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
     setPersistentError(null)
     setForgotSent(false)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
       email,
       password,
       options: { captchaToken: captchaToken || undefined }
@@ -80,13 +80,21 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
       return
     }
 
-    // Vérifier si l'utilisateur a la 2FA email active
-    const tf = await sendTwoFactorCodeAction()
-    if (tf.twoFactorRequired) {
-      setShowEmailMfaStep(true)
-      setIsLoading(false)
-      startEmailResendCooldown()
-      return
+    // Vérifier 2FA côté client — session disponible immédiatement après signInWithPassword
+    const userId = authData.user?.id
+    if (userId) {
+      const { data: account } = await supabase
+        .from('user_accounts')
+        .select('two_factor_email_enabled')
+        .eq('id', userId)
+        .maybeSingle()
+      if (account?.two_factor_email_enabled) {
+        await requestTwoFactorCodeAction()
+        setShowEmailMfaStep(true)
+        setIsLoading(false)
+        startEmailResendCooldown()
+        return
+      }
     }
 
     router.push("/")
@@ -108,16 +116,20 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
     if (emailMfaCode.length !== 6) return
     setIsLoading(true)
     setEmailMfaError(null)
-    const result = await verifyTwoFactorCodeAction(emailMfaCode)
-    if (!result.success) {
-      setEmailMfaError(result.error ?? 'Code incorrect, veuillez réessayer.')
-      setEmailMfaCode('')
+    try {
+      const result = await verifyTwoFactorCodeAction(emailMfaCode)
+      if (!result.success) {
+        setEmailMfaError(result.error ?? 'Code incorrect, veuillez réessayer.')
+        setEmailMfaCode('')
+        setIsLoading(false)
+        return
+      }
+      router.push("/")
+      router.refresh()
+    } catch {
+      setEmailMfaError('Une erreur est survenue. Veuillez réessayer.')
       setIsLoading(false)
-      return
     }
-    setIsLoading(false)
-    router.push("/")
-    router.refresh()
   }
 
   async function handleGoogleLogin() {
@@ -251,8 +263,8 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
                 type="button"
                 onClick={async () => {
                   if (emailResendCooldown > 0) return
-                  const tf = await sendTwoFactorCodeAction()
-                  if (tf.twoFactorRequired) startEmailResendCooldown()
+                  await requestTwoFactorCodeAction()
+                  startEmailResendCooldown()
                 }}
                 disabled={emailResendCooldown > 0}
                 className="w-full text-[12px] text-[#888888] hover:text-[#D4AF37] transition-colors py-2 disabled:opacity-50"

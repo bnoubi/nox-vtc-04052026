@@ -102,6 +102,7 @@ function AppPage() {
       setOnboardingStatus(status)
 
       if (status === "completed") {
+        void fetch("/api/onboarding/welcome", { method: "POST" }).catch(() => {})
         setStep("dashboard")
       } else if (resumeStep > 0) {
         // Reprise d'onboarding : skip directement vers l'étape sauvegardée

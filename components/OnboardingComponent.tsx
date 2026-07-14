@@ -595,12 +595,6 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   }
 
   async function afterDriverStep() {
-    // Step 6 validé : déclenche l'email de bienvenue + l'email d'activation
-    // d'essai programmé 3 minutes plus tard (Resend scheduledAt natif).
-    // Fire-and-forget : ne bloque pas l'UX si Resend est lent ou indisponible.
-    void fetch("/api/onboarding/welcome", { method: "POST" }).catch((err) =>
-      console.error("[Onboarding] welcome emails:", err),
-    )
     // Utilisateurs Google OAuth : skip création de mot de passe
     if (isGoogleUser) {
       await finishOnboarding()
