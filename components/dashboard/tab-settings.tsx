@@ -24,6 +24,7 @@ import {
   Phone,
   MapPin,
   BadgeCheck,
+  Fingerprint,
   Eye,
   EyeOff,
   Hash,
@@ -1820,7 +1821,6 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
   const [resendCooldown, setResendCooldown] = useState(0)
 
   // ── Password state ──
-  const [biometric, setBiometric] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [pwForm, setPwForm] = useState({ current: '', newPwd: '', confirm: '' })
   const [pwLoading, setPwLoading] = useState(false)
@@ -2077,28 +2077,24 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
             )}
           </AnimatePresence>
 
-          {/* Biometric (façade) */}
-          <div className="flex items-center gap-3 px-4 py-3.5">
-            <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0">
-              <BadgeCheck className="h-4 w-4 text-gold" strokeWidth={1.5} />
+          {/* Biometric — placeholder, non fonctionnel */}
+          <div className="flex items-center gap-3 px-4 py-3.5 opacity-50">
+            <div className="w-9 h-9 rounded-xl bg-secondary/40 border border-onyx-border/30 flex items-center justify-center shrink-0">
+              <Fingerprint className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground">Connexion biométrique</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-foreground">Connexion biométrique</p>
+                <span className="px-1.5 py-0.5 text-[8px] font-semibold rounded bg-secondary/60 text-muted-foreground border border-onyx-border/40 tracking-wide whitespace-nowrap">Bientôt</span>
+              </div>
               <p className="text-[11px] text-muted-foreground mt-0.5">Face ID / Empreinte digitale</p>
             </div>
-            <button
-              onClick={() => setBiometric(!biometric)}
-              className={cn(
-                "relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0",
-                biometric ? "bg-gold" : "bg-secondary/80 border border-onyx-border/50"
-              )}
+            <div
+              aria-disabled="true"
+              className="relative w-11 h-6 rounded-full bg-secondary/60 border border-onyx-border/40 shrink-0 cursor-not-allowed"
             >
-              <motion.div
-                className={cn("absolute top-0.5 w-5 h-5 rounded-full shadow-sm", biometric ? "bg-primary-foreground" : "bg-muted-foreground/60")}
-                animate={{ left: biometric ? 22 : 2 }}
-                transition={{ type: "spring", stiffness: 500, damping: 30 }}
-              />
-            </button>
+              <div className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-muted-foreground/30" />
+            </div>
           </div>
         </GlassCard>
 
