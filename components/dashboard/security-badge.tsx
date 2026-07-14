@@ -8,7 +8,7 @@ export function SecurityBadge() {
       <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-onyx-card/80 border border-gold/10 backdrop-blur-sm">
         <Shield className="h-3.5 w-3.5 text-gold/70" strokeWidth={1.5} />
         <span className="text-[9px] text-gold/70 font-medium tracking-wide">
-          AES-256 Secured
+          Connexion sécurisée (TLS)
         </span>
       </div>
     </div>

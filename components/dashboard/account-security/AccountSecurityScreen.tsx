@@ -9,7 +9,7 @@ import {
   SettingRow, 
   SettingItem 
 } from "../tab-settings"
-import { User, Lock, Trash2, AlertTriangle, ChevronRight } from "lucide-react"
+import { User, Lock, Trash2, ChevronRight, Shield } from "lucide-react"
 
 // Import sub-screens
 import { EditProfileScreen } from "./EditProfileScreen"
@@ -31,7 +31,7 @@ const slideBack = {
   exit: { opacity: 0, x: 60 },
 }
 
-export function AccountSecurityScreen({ onBack }: { onBack: () => void }) {
+export function AccountSecurityScreen({ onBack, onNavigateSecurity }: { onBack: () => void; onNavigateSecurity?: () => void }) {
   const [subScreen, setSubScreen] = useState<AccountSubScreen>("main")
   const [userInfo, setUserInfo] = useState({ name: "Chargement...", email: "" })
 
@@ -71,6 +71,14 @@ export function AccountSecurityScreen({ onBack }: { onBack: () => void }) {
               <GlassCard className="mb-5">
                 <SettingRow item={settingsItems[0]} onPress={() => setSubScreen("editProfile")} />
                 <SettingRow item={settingsItems[1]} onPress={() => setSubScreen("updatePassword")} />
+              </GlassCard>
+
+              <SectionLabel>Sécurité</SectionLabel>
+              <GlassCard className="mb-5">
+                <SettingRow
+                  item={{ icon: <Shield className="h-4 w-4" strokeWidth={1.5} />, label: "Double authentification & sécurité", description: "2FA email, mot de passe, chiffrement" }}
+                  onPress={() => onNavigateSecurity?.()}
+                />
               </GlassCard>
 
               <SectionLabel>Zone de Danger</SectionLabel>

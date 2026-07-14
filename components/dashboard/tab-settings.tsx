@@ -10,7 +10,6 @@ import {
   ChevronRight,
   ChevronLeft,
   LogOut,
-  CreditCard,
   Bell,
   User,
   Users,
@@ -27,7 +26,6 @@ import {
   BadgeCheck,
   Eye,
   EyeOff,
-  Landmark,
   Hash,
   Sparkles,
   Globe,
@@ -191,7 +189,7 @@ const SOLO_LIMIT = 1
 const DUO_LIMIT = 2
 const TEAM_LIMIT = 10
 
-type SettingsScreen = "main" | "team" | "fleet" | "profile" | "accountSecurity" | "enterprise" | "banking" | "subscription" | "notifications" | "security" | "cgv" | "tarifs" | "wallet_history"
+type SettingsScreen = "main" | "team" | "fleet" | "profile" | "accountSecurity" | "enterprise" | "subscription" | "notifications" | "security" | "cgv" | "tarifs" | "wallet_history"
 
 // ── Animation variants ────────────────────────────────────────
 
@@ -963,115 +961,6 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
             "Enregistrer les modifications"
           )}
         </button>
-      </div>
-    </motion.div>
-  )
-}
-
-// ── Infos Bancaires Screen ─────────────────────────────────────
-
-function BankingScreen({ onBack }: { onBack: () => void }) {
-  const { enterprise, updateEnterprise } = useNox()
-  const [editing, setEditing] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const [bank, setBank] = useState({
-    banque: enterprise.bankName || "À renseigner",
-    iban: enterprise.iban || "À renseigner",
-    bic: enterprise.bic || "À renseigner",
-  })
-
-  function handleSave() {
-    setIsSaving(true)
-    try {
-      updateEnterprise({
-        bankName: bank.banque,
-        iban: bank.iban,
-        bic: bank.bic
-      })
-      setEditing(false)
-      toast.success("Modifications enregistrées ✓", { duration: 3000 })
-    } catch {
-      toast.error("Une erreur est survenue, veuillez réessayer")
-    } finally {
-      setTimeout(() => setIsSaving(false), 500)
-    }
-  }
-
-  return (
-    <motion.div key="banking" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
-      <SubScreenHeader title="Infos Bancaires" onBack={onBack} />
-      <div className="flex-1 overflow-y-auto pb-24">
-        {/* Security Banner */}
-        <div className="mx-4 mb-5 px-4 py-3 rounded-2xl bg-gold/5 border border-gold/20 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
-            <Shield className="h-4 w-4 text-gold" strokeWidth={1.5} />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-foreground">Chiffrement AES-256</p>
-            <p className="text-[10px] text-muted-foreground">Vos données bancaires sont sécurisées</p>
-          </div>
-        </div>
-
-        <SectionLabel>Compte bancaire</SectionLabel>
-        <GlassCard className="mb-5">
-          {editing ? (
-            <div className="p-4 space-y-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Banque</p>
-                <input type="text" value={bank.banque} onChange={(e) => setBank({ ...bank, banque: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors" />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">IBAN</p>
-                <input type="text" value={bank.iban} onChange={(e) => setBank({ ...bank, iban: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground font-mono focus:outline-none focus:border-gold/50 transition-colors" />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">BIC / SWIFT</p>
-                <input type="text" value={bank.bic} onChange={(e) => setBank({ ...bank, bic: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground font-mono focus:outline-none focus:border-gold/50 transition-colors" />
-              </div>
-            </div>
-          ) : (
-            <>
-              <InfoCard icon={<Landmark className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="Banque" value={bank.banque} />
-              <InfoCard icon={<CreditCard className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="IBAN" value={bank.iban} masked />
-              <InfoCard icon={<Hash className="h-4 w-4 text-gold" strokeWidth={1.5} />} label="BIC / SWIFT" value={bank.bic} masked />
-            </>
-          )}
-        </GlassCard>
-
-        <SectionLabel>Moyen de paiement</SectionLabel>
-        <GlassCard className="mb-5">
-          <div className="flex items-center gap-3 p-4 group hover:bg-gold/5 transition-colors rounded-2xl">
-            <div className="w-9 h-9 rounded-xl bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0 group-hover:bg-gold/15 transition-colors">
-              <CreditCard className="h-4 w-4 text-gold" strokeWidth={1.5} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Carte bancaire</p>
-              <p className="text-sm font-medium text-foreground">Visa **** **** **** 4242</p>
-            </div>
-            <span className="px-2 py-1 text-[9px] font-semibold rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Active</span>
-          </div>
-        </GlassCard>
-
-        <div className="px-4">
-          <button
-            onClick={() => editing ? handleSave() : setEditing(true)}
-            disabled={isSaving}
-            className={cn(
-              "w-full py-3 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-all",
-              editing
-                ? isSaving
-                  ? "bg-gold/50 text-primary-foreground cursor-not-allowed"
-                  : "bg-gold text-primary-foreground hover:bg-gold-light gold-glow-sm"
-                : "bg-gold/10 border border-gold/30 text-gold hover:bg-gold/20"
-            )}
-          >
-            {editing
-              ? isSaving
-                ? <span className="animate-pulse">Enregistrement...</span>
-                : "Enregistrer les modifications"
-              : "Modifier mes coordonnées bancaires"}
-          </button>
-        </div>
       </div>
     </motion.div>
   )
@@ -2063,17 +1952,14 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
     <motion.div key="security" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
       <SubScreenHeader title="Sécurité" onBack={onBack} />
       <div className="flex-1 overflow-y-auto pb-24">
-        {/* AES-256 Banner */}
+        {/* Security Banner */}
         <div className="mx-4 mb-5 p-4 rounded-2xl bg-gold/5 border border-gold/20 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
             <Shield className="h-5 w-5 text-gold" strokeWidth={1.5} />
           </div>
           <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-xs font-semibold text-foreground">Chiffrement de bout en bout</p>
-              <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-gold/15 text-gold border border-gold/25">AES-256</span>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Toutes vos données sont protégées par un chiffrement de grade militaire.</p>
+            <p className="text-xs font-semibold text-foreground">Connexion sécurisée</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Vos données sont chiffrées lors de leur transmission (TLS) et stockées sur des serveurs chiffrés.</p>
           </div>
         </div>
 
@@ -2587,7 +2473,6 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
     { icon: <Building2 className="h-4 w-4" strokeWidth={1.5} />, label: "Profil Entreprise", description: enterpriseDesc, screen: "enterprise" },
     { icon: <FileText className="h-4 w-4" strokeWidth={1.5} />, label: "Mes Conditions de Vente", description: "CGV rattachées à vos documents", screen: "cgv", alertBadge: !enterprise?.cgvMode },
     { icon: <Calculator className="h-4 w-4" strokeWidth={1.5} />, label: "Mes Grilles Tarifaires", description: "Tarifs, suppléments et forfaits", screen: "tarifs" },
-    { icon: <Landmark className="h-4 w-4" strokeWidth={1.5} />, label: "Infos Bancaires", description: "Non renseigné", badge: "AES-256", screen: "banking" },
     { icon: <Crown className="h-4 w-4" strokeWidth={1.5} />, label: "Mon Abonnement", description: plan === "TEAM" ? "Offre Premium active" : plan === "DUO" ? "Offre Pro active" : "Offre Starter active", screen: "subscription" },
   ]
 
@@ -2608,7 +2493,6 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
 
   const appSettings: SettingItem[] = [
     { icon: <Bell className="h-4 w-4" strokeWidth={1.5} />, label: "Notifications", description: "Push, Email, SMS", screen: "notifications" },
-    { icon: <Shield className="h-4 w-4" strokeWidth={1.5} />, label: "Sécurité", badge: "AES-256", description: "Chiffrement de bout en bout", screen: "security" },
   ]
 
   return (
@@ -2759,7 +2643,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
           <p className="text-[10px] text-muted-foreground/50 font-medium">NoX VTC v1.0.0</p>
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gold/5 border border-gold/15">
             <Shield className="h-3 w-3 text-gold/60" strokeWidth={1.5} />
-            <span className="text-[9px] font-semibold text-gold/60 tracking-wider">AES-256 Secured</span>
+            <span className="text-[9px] font-semibold text-gold/60 tracking-wider">Connexion sécurisée (TLS)</span>
           </div>
         </div>
       </div>
@@ -2788,9 +2672,8 @@ export function SettingsTab() {
           {screen === "team" && <TeamScreen key="team" onBack={() => setScreen("main")} />}
           {screen === "fleet" && <FleetScreen key="fleet" onBack={() => setScreen("main")} />}
           {screen === "profile" && <ProfileScreen key="profile" onBack={() => setScreen("main")} />}
-          {screen === "accountSecurity" && <AccountSecurityScreen key="accountSecurity" onBack={() => setScreen("main")} />}
+          {screen === "accountSecurity" && <AccountSecurityScreen key="accountSecurity" onBack={() => setScreen("main")} onNavigateSecurity={() => setScreen("security")} />}
           {screen === "enterprise" && <EnterpriseScreen key="enterprise" onBack={() => setScreen("main")} />}
-          {screen === "banking" && <BankingScreen key="banking" onBack={() => setScreen("main")} />}
           {screen === "subscription" && <SubscriptionScreen key="subscription" onBack={() => setScreen("main")} />}
           {screen === "notifications" && <NotificationsScreen key="notifications" onBack={() => setScreen("main")} />}
           {screen === "security" && <SecurityScreen key="security" onBack={() => setScreen("main")} />}

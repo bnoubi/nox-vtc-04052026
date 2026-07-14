@@ -3,7 +3,7 @@
 import { createContext, useContext, useCallback, useRef, useState } from "react"
 import type { TabId } from "./bottom-nav"
 
-type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "banking" | "subscription" | "notifications" | "security" | "cgv" | "wallet_history"
+type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "subscription" | "notifications" | "security" | "cgv" | "wallet_history"
 
 export interface EntityNavigation {
   entityType: "driver" | "vehicle"
