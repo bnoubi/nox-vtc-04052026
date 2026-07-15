@@ -117,16 +117,17 @@ export async function GET(req: NextRequest) {
 
       const ids = filtered.map(u => u.id)
       const accounts = ids.length
-        ? (await supabase.from('user_accounts').select('id, email, prenom, full_name').in('id', ids)).data ?? []
+        ? (await supabase.from('user_accounts').select('id, email, prenom, full_name, marketing_email_consent').in('id', ids)).data ?? []
         : []
 
       const recipients = filtered.map(u => {
-        const acc = accounts.find((a: { id: string }) => a.id === u.id) as { id: string; email: string | null; prenom: string | null; full_name: string | null } | undefined
+        const acc = accounts.find((a: { id: string }) => a.id === u.id) as { id: string; email: string | null; prenom: string | null; full_name: string | null; marketing_email_consent: boolean } | undefined
+        if (!acc?.marketing_email_consent) return null
         return {
           email: u.email ?? acc?.email ?? '',
           prenom: acc?.prenom ?? acc?.full_name?.split(' ')[0] ?? 'Abonné',
         }
-      }).filter(r => r.email)
+      }).filter((r): r is { email: string; prenom: string } => !!r && !!r.email)
 
       results[seg.key] = await sendSegment(supabase, seg.key, recipients)
     }

@@ -64,6 +64,8 @@ import { AccountSecurityScreen } from "./account-security/AccountSecurityScreen"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 import { usePromo } from "@/lib/hooks/usePromo"
 import { SupportTicketModal } from "./support-ticket-modal"
+import { getNotifPrefsAction, saveNotifPrefsAction } from "@/app/actions/notifications"
+import type { NotifPrefs } from "@/app/actions/notifications"
 import { SupportHistory } from "./support-history"
 import { planLabel } from "@/lib/plans"
 import { isPasswordStrong, PasswordStrengthIndicator } from "@/lib/password"
@@ -1736,16 +1738,6 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
 
 // ── Notifications Screen ─────────────────────────────────────
 
-type NotifPrefs = {
-  pushReservations: boolean
-  pushMessages: boolean
-  pushPromotions: boolean
-  emailRecap: boolean
-  emailFactures: boolean
-  smsConfirmation: boolean
-  smsRappel: boolean
-}
-
 function NotifToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
@@ -1784,42 +1776,72 @@ function NotifRow({ label, description, checked, onChange }: {
 }
 
 function NotificationsScreen({ onBack }: { onBack: () => void }) {
-  const [prefs, setPrefs] = useState<NotifPrefs>({
-    pushReservations: true,
-    pushMessages: true,
-    pushPromotions: false,
-    emailRecap: true,
-    emailFactures: true,
-    smsConfirmation: true,
-    smsRappel: false,
-  })
+  const [prefs, setPrefs] = useState<NotifPrefs | null>(null)
+
+  useEffect(() => {
+    getNotifPrefsAction().then(setPrefs)
+  }, [])
 
   function toggle(field: keyof NotifPrefs) {
-    setPrefs(prev => ({ ...prev, [field]: !prev[field] }))
+    if (!prefs) return
+    const next = { ...prefs, [field]: !prefs[field] }
+    setPrefs(next)
+    void saveNotifPrefsAction(next)
   }
+
+  const SmsDisabledRow = ({ label, description }: { label: string; description: string }) => (
+    <div className="flex items-center gap-3 px-4 py-3.5 opacity-50">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          <span className="px-1.5 py-0.5 text-[8px] font-semibold rounded bg-secondary/60 text-muted-foreground border border-onyx-border/40 tracking-wide whitespace-nowrap">Bientôt</span>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>
+      </div>
+      <div aria-disabled="true" className="relative w-11 h-6 rounded-full bg-secondary/60 border border-onyx-border/40 shrink-0 cursor-not-allowed">
+        <div className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-muted-foreground/30" />
+      </div>
+    </div>
+  )
 
   return (
     <motion.div key="notifications" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
       <SubScreenHeader title="Notifications" onBack={onBack} />
       <div className="flex-1 overflow-y-auto pb-24">
-        <SectionLabel>Notifications Push</SectionLabel>
-        <GlassCard className="mb-5">
-          <NotifRow label="Réservations" description="Nouvelles courses et modifications" checked={prefs.pushReservations} onChange={() => toggle("pushReservations")} />
-          <NotifRow label="Messages" description="Messages des clients et passagers" checked={prefs.pushMessages} onChange={() => toggle("pushMessages")} />
-          <NotifRow label="Promotions" description="Offres spéciales et nouveautés NoX" checked={prefs.pushPromotions} onChange={() => toggle("pushPromotions")} />
-        </GlassCard>
+        {!prefs ? (
+          <div className="flex justify-center py-12">
+            <div className="h-5 w-5 rounded-full border-2 border-gold border-t-transparent animate-spin" />
+          </div>
+        ) : (
+          <>
+            <SectionLabel>Notifications Push</SectionLabel>
+            <GlassCard className="mb-5">
+              <NotifRow label="Activité courses" description="Rappels de courses et confirmations" checked={prefs.pushReservations} onChange={() => toggle("pushReservations")} />
+              <NotifRow label="Offres et promotions" description="Recevoir des offres et promotions (push et email)" checked={prefs.pushPromotions} onChange={() => toggle("pushPromotions")} />
+            </GlassCard>
 
-        <SectionLabel>Notifications Email</SectionLabel>
-        <GlassCard className="mb-5">
-          <NotifRow label="Récapitulatif journalier" description="Résumé quotidien de votre activité" checked={prefs.emailRecap} onChange={() => toggle("emailRecap")} />
-          <NotifRow label="Factures" description="Envoi automatique des factures générées" checked={prefs.emailFactures} onChange={() => toggle("emailFactures")} />
-        </GlassCard>
+            <SectionLabel>Notifications Email</SectionLabel>
+            <GlassCard className="mb-5">
+              <NotifRow label="Récapitulatif journalier" description="Résumé quotidien de votre activité" checked={prefs.emailRecap} onChange={() => toggle("emailRecap")} />
+              <div className="flex items-center gap-3 px-4 py-3.5 opacity-70">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-foreground">Factures</p>
+                    <span className="px-1.5 py-0.5 text-[8px] font-semibold rounded bg-secondary/60 text-muted-foreground border border-onyx-border/40 tracking-wide whitespace-nowrap">Obligatoire</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Envoi automatique des factures générées</p>
+                </div>
+                <Lock className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
+              </div>
+            </GlassCard>
 
-        <SectionLabel>Notifications SMS</SectionLabel>
-        <GlassCard className="mb-5">
-          <NotifRow label="Confirmations" description="SMS de confirmation de réservation" checked={prefs.smsConfirmation} onChange={() => toggle("smsConfirmation")} />
-          <NotifRow label="Rappels" description="Rappel 1h avant chaque course" checked={prefs.smsRappel} onChange={() => toggle("smsRappel")} />
-        </GlassCard>
+            <SectionLabel>Notifications SMS</SectionLabel>
+            <GlassCard className="mb-5">
+              <SmsDisabledRow label="Confirmations" description="SMS de confirmation de réservation" />
+              <SmsDisabledRow label="Rappels" description="Rappel 1h avant chaque course" />
+            </GlassCard>
+          </>
+        )}
       </div>
     </motion.div>
   )

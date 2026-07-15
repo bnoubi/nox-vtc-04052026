@@ -137,10 +137,12 @@ export function DashboardHeader() {
   }, []) // eslint-disable-line
 
   async function markAllRead() {
-    const ids = notifications.filter(n => !n.read).map(n => n.id)
+    const ids = notifications.filter(n => !n.read && n.type !== 'trip_confirmation').map(n => n.id)
     if (!ids.length) return
     await supabase.from('notifications').update({ read: true }).in('id', ids)
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    setNotifications(prev => prev.map(n =>
+      n.type !== 'trip_confirmation' ? { ...n, read: true } : n
+    ))
   }
 
   async function markRead(id: string) {
