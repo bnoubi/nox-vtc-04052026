@@ -1734,10 +1734,57 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
   )
 }
 
-// ── Notifications Screen ───��──────────────────────────────────
+// ── Notifications Screen ─────────────────────────────────────
+
+type NotifPrefs = {
+  pushReservations: boolean
+  pushMessages: boolean
+  pushPromotions: boolean
+  emailRecap: boolean
+  emailFactures: boolean
+  smsConfirmation: boolean
+  smsRappel: boolean
+}
+
+function NotifToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0",
+        checked ? "bg-gold" : "bg-secondary/80 border border-onyx-border/50"
+      )}
+    >
+      <motion.div
+        className={cn("absolute top-0.5 w-5 h-5 rounded-full shadow-sm", checked ? "bg-primary-foreground" : "bg-muted-foreground/60")}
+        animate={{ left: checked ? 22 : 2 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+      />
+    </button>
+  )
+}
+
+function NotifRow({ label, description, checked, onChange }: {
+  label: string
+  description: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <div className="relative h-[70px] px-4 overflow-hidden">
+      <div className="absolute inset-y-0 left-4 right-20 flex flex-col justify-center">
+        <p className="text-sm font-medium text-foreground truncate max-w-[70%]">{label}</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5 truncate max-w-[70%]">{description}</p>
+      </div>
+      <div className="absolute inset-y-0 right-4 flex items-center">
+        <NotifToggle checked={checked} onChange={onChange} />
+      </div>
+    </div>
+  )
+}
 
 function NotificationsScreen({ onBack }: { onBack: () => void }) {
-  const [prefs, setPrefs] = useState({
+  const [prefs, setPrefs] = useState<NotifPrefs>({
     pushReservations: true,
     pushMessages: true,
     pushPromotions: false,
@@ -1747,36 +1794,8 @@ function NotificationsScreen({ onBack }: { onBack: () => void }) {
     smsRappel: false,
   })
 
-  function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-    return (
-      <button
-        onClick={() => onChange(!checked)}
-        className={cn(
-          "relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0",
-          checked ? "bg-gold" : "bg-secondary/80 border border-onyx-border/50"
-        )}
-      >
-        <motion.div
-          className={cn("absolute top-0.5 w-5 h-5 rounded-full shadow-sm", checked ? "bg-primary-foreground" : "bg-muted-foreground/60")}
-          animate={{ left: checked ? 22 : 2 }}
-          transition={{ type: "spring", stiffness: 500, damping: 30 }}
-        />
-      </button>
-    )
-  }
-
-  function NotifRow({ label, description, field }: { label: string; description: string; field: keyof typeof prefs }) {
-    return (
-      <div className="relative h-[70px] px-4 overflow-hidden">
-        <div className="absolute inset-y-0 left-4 right-20 flex flex-col justify-center">
-          <p className="text-sm font-medium text-foreground truncate max-w-[70%]">{label}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5 truncate max-w-[70%]">{description}</p>
-        </div>
-        <div className="absolute inset-y-0 right-4 flex items-center">
-          <Toggle checked={prefs[field]} onChange={(v) => setPrefs({ ...prefs, [field]: v })} />
-        </div>
-      </div>
-    )
+  function toggle(field: keyof NotifPrefs) {
+    setPrefs(prev => ({ ...prev, [field]: !prev[field] }))
   }
 
   return (
@@ -1785,21 +1804,21 @@ function NotificationsScreen({ onBack }: { onBack: () => void }) {
       <div className="flex-1 overflow-y-auto pb-24">
         <SectionLabel>Notifications Push</SectionLabel>
         <GlassCard className="mb-5">
-          <NotifRow label="Réservations" description="Nouvelles courses et modifications" field="pushReservations" />
-          <NotifRow label="Messages" description="Messages des clients et passagers" field="pushMessages" />
-          <NotifRow label="Promotions" description="Offres spéciales et nouveautés NoX" field="pushPromotions" />
+          <NotifRow label="Réservations" description="Nouvelles courses et modifications" checked={prefs.pushReservations} onChange={() => toggle("pushReservations")} />
+          <NotifRow label="Messages" description="Messages des clients et passagers" checked={prefs.pushMessages} onChange={() => toggle("pushMessages")} />
+          <NotifRow label="Promotions" description="Offres spéciales et nouveautés NoX" checked={prefs.pushPromotions} onChange={() => toggle("pushPromotions")} />
         </GlassCard>
 
         <SectionLabel>Notifications Email</SectionLabel>
         <GlassCard className="mb-5">
-          <NotifRow label="Récapitulatif journalier" description="Résumé quotidien de votre activité" field="emailRecap" />
-          <NotifRow label="Factures" description="Envoi automatique des factures générées" field="emailFactures" />
+          <NotifRow label="Récapitulatif journalier" description="Résumé quotidien de votre activité" checked={prefs.emailRecap} onChange={() => toggle("emailRecap")} />
+          <NotifRow label="Factures" description="Envoi automatique des factures générées" checked={prefs.emailFactures} onChange={() => toggle("emailFactures")} />
         </GlassCard>
 
         <SectionLabel>Notifications SMS</SectionLabel>
         <GlassCard className="mb-5">
-          <NotifRow label="Confirmations" description="SMS de confirmation de réservation" field="smsConfirmation" />
-          <NotifRow label="Rappels" description="Rappel 1h avant chaque course" field="smsRappel" />
+          <NotifRow label="Confirmations" description="SMS de confirmation de réservation" checked={prefs.smsConfirmation} onChange={() => toggle("smsConfirmation")} />
+          <NotifRow label="Rappels" description="Rappel 1h avant chaque course" checked={prefs.smsRappel} onChange={() => toggle("smsRappel")} />
         </GlassCard>
       </div>
     </motion.div>
