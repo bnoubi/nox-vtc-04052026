@@ -67,7 +67,7 @@ import { SupportTicketModal } from "./support-ticket-modal"
 import { getNotifPrefsAction, saveNotifPrefsAction } from "@/app/actions/notifications"
 import type { NotifPrefs } from "@/app/actions/notifications"
 import { SupportHistory } from "./support-history"
-import { planLabel } from "@/lib/plans"
+import { planLabel, getPlanLimits } from "@/lib/plans"
 import { isPasswordStrong, PasswordStrengthIndicator } from "@/lib/password"
 import { sendPasswordChangedEmailAction } from "@/app/actions/security"
 import {
@@ -972,15 +972,16 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
 // ── Abonnement Screen ──────────────────────────────────────────
 
 function SubscriptionScreen({ onBack }: { onBack: () => void }) {
-  const { plan } = useNox()
+  const { plan, subscriptionStatus, trialEndsAt } = useNox()
   const { promo } = usePromo()
   const isTeam = plan === "TEAM"
   const isDuo = plan === "DUO"
+  const isTrial = subscriptionStatus === "trial"
   const [targetPlan, setTargetPlan] = useState<"DUO" | "TEAM" | null>(null)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
-  const [subDetails, setSubDetails] = useState<{ cancel_at: string | null; current_period_end: string | null } | null>(null)
+  const [subDetails, setSubDetails] = useState<{ cancel_at: string | null; current_period_end: string | null; status: string | null; trial_ends_at: string | null } | null>(null)
 
   function handleChoose(target: "DUO" | "TEAM") {
     setTargetPlan(target)
@@ -999,14 +1000,14 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
     const supabase = createClient()
     supabase
       .from('subscriptions')
-      .select('cancel_at, current_period_end')
+      .select('cancel_at, current_period_end, status, trial_ends_at')
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
-          const d = data as { cancel_at: string | null; current_period_end: string | null }
-          setSubDetails({ cancel_at: d.cancel_at, current_period_end: d.current_period_end })
+          const d = data as { cancel_at: string | null; current_period_end: string | null; status: string | null; trial_ends_at: string | null }
+          setSubDetails({ cancel_at: d.cancel_at, current_period_end: d.current_period_end, status: d.status, trial_ends_at: d.trial_ends_at })
         }
       })
   }, [])
@@ -1042,7 +1043,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
       name: "Starter",
       subtitle: "L\u2019offre Ind\u00e9pendant",
       price: null as number | null,
-      capacity: "Max 1 Chauffeur / Max 1 V\u00e9hicule",
+      capacity: `Max ${getPlanLimits("solo").drivers} Chauffeur / Max ${getPlanLimits("solo").vehicles} V\u00e9hicule`,
       features: ["Signature Entreprise incluse", "Paiement \u00e0 l\u2019usage (jetons)"],
     },
     {
@@ -1051,7 +1052,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
       subtitle: "L\u2019offre Bin\u00f4me",
       price: 4.99 as number | null,
       priceSuffix: "/mois",
-      capacity: "Max 2 Chauffeurs / Max 2 V\u00e9hicules",
+      capacity: `Max ${getPlanLimits("duo").drivers} Chauffeurs / Max ${getPlanLimits("duo").vehicles} V\u00e9hicules`,
       features: ["Signature Entreprise incluse", "Documents ILLIMIT\u00c9S"],
     },
     {
@@ -1060,7 +1061,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
       subtitle: "L\u2019offre Flotte",
       price: 9.99 as number | null,
       priceSuffix: "/mois",
-      capacity: "Max 10 Chauffeurs / Max 10 V\u00e9hicules",
+      capacity: `Max ${getPlanLimits("team").drivers} Chauffeurs / Max ${getPlanLimits("team").vehicles} V\u00e9hicules`,
       features: ["Signature Entreprise incluse", "Documents ILLIMIT\u00c9S", "API & Int\u00e9grations", "Statistiques avanc\u00e9es"],
     },
   ]
@@ -1080,13 +1081,20 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
         )}>
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Plan actuel</p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                {isTrial ? "Plan actuel (Essai)" : "Plan actuel"}
+              </p>
               <p className={cn(
                 "text-2xl font-bold font-heading mt-0.5",
                 isTeam ? "gold-gradient-text" : isDuo ? "text-gold" : "text-foreground"
               )}>
                 {planLabel(plan)}
               </p>
+              {isTrial && trialEndsAt && (
+                <p className="text-xs text-gold/80 mt-1">
+                  Acc\u00e8s gratuit jusqu&apos;au {fmtDateFr(trialEndsAt)}
+                </p>
+              )}
             </div>
             <div className={cn(
               "w-12 h-12 rounded-2xl flex items-center justify-center",
@@ -1096,11 +1104,13 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            {isTeam
-              ? "Vous profitez de toutes les fonctionnalit\u00e9s premium NoX VTC."
-              : isDuo
-                ? "Documents illimit\u00e9s inclus. Passez en Premium pour g\u00e9rer votre flotte compl\u00e8te."
-                : "Paiement \u00e0 l\u2019usage via jetons. Passez en Pro ou Premium pour des documents illimit\u00e9s."
+            {isTrial
+              ? "Profitez de toutes les fonctionnalit\u00e9s pendant votre essai. Souscrivez pour continuer apr\u00e8s."
+              : isTeam
+                ? "Vous profitez de toutes les fonctionnalit\u00e9s premium NoX VTC."
+                : isDuo
+                  ? "Documents illimit\u00e9s inclus. Passez en Premium pour g\u00e9rer votre flotte compl\u00e8te."
+                  : "Paiement \u00e0 l\u2019usage via jetons. Passez en Pro ou Premium pour des documents illimit\u00e9s."
             }
           </p>
         </div>
@@ -1193,9 +1203,21 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                     Choisir cette offre
                   </button>
                 )}
-                {/* Résiliation pour abonnés DUO/TEAM */}
+                {/* Essai ou résiliation pour abonnés DUO/TEAM */}
                 {!isCurrent && p.id === "SOLO" && (plan === "DUO" || plan === "TEAM") && (
-                  subDetails?.cancel_at ? (
+                  isTrial ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-center text-[11px] text-muted-foreground">
+                        Essai gratuit — fin le {fmtDateFr(subDetails?.trial_ends_at ?? trialEndsAt)}
+                      </p>
+                      <button
+                        onClick={() => handleChoose(plan as "DUO" | "TEAM")}
+                        className="w-full py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-bold active:scale-[0.98] transition-all hover:bg-gold-light gold-glow"
+                      >
+                        Continuer avec {planLabel(plan)} après l&apos;essai
+                      </button>
+                    </div>
+                  ) : subDetails?.cancel_at ? (
                     <p className="w-full mt-3 py-2 text-center text-[11px] text-muted-foreground">
                       Résiliation programmée le {fmtDateFr(subDetails.cancel_at)}
                     </p>
@@ -2479,7 +2501,7 @@ function WalletHistoryScreen({ onBack }: { onBack: () => void }) {
 }
 
 function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => void }) {
-  const { plan, tokens, driverCount, vehicleCount, enterprise } = useNox()
+  const { plan, tokens, driverCount, vehicleCount, enterprise, subscriptionStatus, trialEndsAt } = useNox()
   const { logout } = useNav()
   const isTeam = plan === "TEAM"
   const [walletOpen, setWalletOpen] = useState(false)
@@ -2548,42 +2570,54 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
 
       <div className="flex-1 overflow-y-auto pb-24">
         {/* NoX Wallet */}
-        <div className="mx-4 mb-5 p-5 rounded-2xl bg-onyx-card/80 backdrop-blur-sm border border-onyx-border/30">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-gold/10 flex items-center justify-center">
-              <Coins className="h-5 w-5 text-gold" strokeWidth={1.5} />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">NoX Wallet</p>
-              {plan === "SOLO" ? (
-                <p className="text-xl font-bold font-heading text-foreground">
-                  {tokens} <span className="text-gold text-sm font-semibold">Jetons</span>
-                </p>
-              ) : (
-                <p className="text-lg font-bold font-heading text-gold">
-                  Illimité
-                </p>
-              )}
-            </div>
-          </div>
-          {plan === "SOLO" ? (
-            <button
-              onClick={() => setWalletOpen(true)}
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#D4AF37]/20 via-[#D4AF37]/10 to-[#D4AF37]/20 border border-gold/40 flex items-center justify-center gap-2 hover:border-gold/60 active:scale-[0.98] transition-all"
-            >
-              <Coins className="h-4 w-4 text-gold" strokeWidth={1.5} />
-              <span className="text-[11px] font-bold text-gold tracking-wider uppercase">Recharger mes Jetons</span>
-            </button>
-          ) : (
-            <div className="w-full py-2 rounded-xl bg-gold/15 border border-gold/30 flex flex-col items-center justify-center gap-0.5">
-              <span className="text-[11px] font-bold text-gold tracking-wider uppercase">Documents Illimités</span>
-              <div className="flex items-center gap-1">
-                <Headphones className="h-3 w-3 text-gold/70" strokeWidth={1.5} />
-                <span className="text-[9px] text-gold/70 font-medium">Support Prioritaire 24/7</span>
+        <button
+          onClick={() => onNavigate("subscription")}
+          className="w-full mx-0 mb-5 text-left active:scale-[0.99] transition-transform"
+        >
+          <div className="mx-4 p-5 rounded-2xl bg-onyx-card/80 backdrop-blur-sm border border-onyx-border/30 hover:border-gold/30 transition-colors">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-gold/10 flex items-center justify-center">
+                <Coins className="h-5 w-5 text-gold" strokeWidth={1.5} />
               </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground">NoX Wallet</p>
+                {plan === "SOLO" ? (
+                  <p className="text-xl font-bold font-heading text-foreground">
+                    {tokens} <span className="text-gold text-sm font-semibold">Jetons</span>
+                  </p>
+                ) : (
+                  <p className="text-lg font-bold font-heading text-gold">
+                    Illimité
+                  </p>
+                )}
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
             </div>
-          )}
-        </div>
+            {plan === "SOLO" ? (
+              <div className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#D4AF37]/20 via-[#D4AF37]/10 to-[#D4AF37]/20 border border-gold/40 flex items-center justify-center gap-2">
+                <Coins className="h-4 w-4 text-gold" strokeWidth={1.5} />
+                <span className="text-[11px] font-bold text-gold tracking-wider uppercase">Gérer mon abonnement</span>
+              </div>
+            ) : subscriptionStatus === "trial" ? (
+              <div className="w-full py-2 rounded-xl bg-gold/10 border border-gold/25 flex flex-col items-center justify-center gap-0.5">
+                <span className="text-[11px] font-bold text-gold tracking-wider uppercase">Essai {planLabel(plan)}</span>
+                {trialEndsAt && (
+                  <span className="text-[9px] text-gold/70 font-medium">
+                    Jusqu&apos;au {new Date(trialEndsAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="w-full py-2 rounded-xl bg-gold/15 border border-gold/30 flex flex-col items-center justify-center gap-0.5">
+                <span className="text-[11px] font-bold text-gold tracking-wider uppercase">Documents Illimités</span>
+                <div className="flex items-center gap-1">
+                  <Headphones className="h-3 w-3 text-gold/70" strokeWidth={1.5} />
+                  <span className="text-[9px] text-gold/70 font-medium">Support Prioritaire 24/7</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </button>
 
         {/* Compte */}
         <SectionLabel>Compte</SectionLabel>
