@@ -192,7 +192,7 @@ const SOLO_LIMIT = 1
 const DUO_LIMIT = 2
 const TEAM_LIMIT = 10
 
-type SettingsScreen = "main" | "team" | "fleet" | "profile" | "accountSecurity" | "enterprise" | "subscription" | "notifications" | "security" | "cgv" | "tarifs" | "wallet_history"
+type SettingsScreen = "main" | "team" | "fleet" | "profile" | "accountSecurity" | "enterprise" | "subscription" | "plans" | "notifications" | "security" | "cgv" | "tarifs" | "wallet_history"
 
 // ── Animation variants ────────────────────────────────────────
 
@@ -969,9 +969,122 @@ function EnterpriseScreen({ onBack }: { onBack: () => void }) {
   )
 }
 
-// ── Abonnement Screen ──────────────────────────────────────────
+// ── Abonnement Screen (statut personnel) ──────────────────────
 
-function SubscriptionScreen({ onBack }: { onBack: () => void }) {
+function SubscriptionScreen({ onBack, onNavigatePlans }: { onBack: () => void; onNavigatePlans: () => void }) {
+  const { plan, subscriptionStatus, trialEndsAt } = useNox()
+  const isTeam = plan === "TEAM"
+  const isDuo = plan === "DUO"
+  const isTrial = subscriptionStatus === "trial"
+  const [subDetails, setSubDetails] = useState<{ cancel_at: string | null; current_period_end: string | null } | null>(null)
+
+  function fmtDateFr(iso: string | null): string {
+    if (!iso) return ''
+    return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+  }
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase
+      .from('subscriptions')
+      .select('cancel_at, current_period_end')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          const d = data as { cancel_at: string | null; current_period_end: string | null }
+          setSubDetails({ cancel_at: d.cancel_at, current_period_end: d.current_period_end })
+        }
+      })
+  }, [])
+
+  return (
+    <motion.div key="subscription" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
+      <SubScreenHeader title="Mon Abonnement" onBack={onBack} />
+      <div className="flex-1 overflow-y-auto pb-24">
+        {/* Current Plan Banner */}
+        <div className={cn(
+          "mx-4 mb-5 p-5 rounded-2xl border",
+          isTeam
+            ? "bg-gradient-to-br from-gold/15 via-gold/5 to-transparent border-gold/40 gold-glow-sm"
+            : isDuo
+              ? "bg-gold/5 border-gold/30"
+              : "bg-onyx-card border-onyx-border/30"
+        )}>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                {isTrial ? "Plan actuel (Essai)" : "Plan actuel"}
+              </p>
+              <p className={cn(
+                "text-2xl font-bold font-heading mt-0.5",
+                isTeam ? "gold-gradient-text" : isDuo ? "text-gold" : "text-foreground"
+              )}>
+                {planLabel(plan)}
+              </p>
+              {isTrial && trialEndsAt && (
+                <p className="text-xs text-gold/80 mt-1">
+                  Accès gratuit jusqu&apos;au {fmtDateFr(trialEndsAt)}
+                </p>
+              )}
+              {!isTrial && (plan === "DUO" || plan === "TEAM") && (
+                subDetails?.cancel_at ? (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Actif jusqu&apos;au {fmtDateFr(subDetails.cancel_at)}, puis retour automatique en Starter
+                  </p>
+                ) : subDetails?.current_period_end ? (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Valide jusqu&apos;au {fmtDateFr(subDetails.current_period_end)}
+                  </p>
+                ) : null
+              )}
+            </div>
+            <div className={cn(
+              "w-12 h-12 rounded-2xl flex items-center justify-center",
+              isTeam ? "bg-gold/20 border border-gold/40" : "bg-gold/10 border border-gold/20"
+            )}>
+              <Crown className={cn("h-6 w-6", isTeam ? "text-gold" : "text-gold/60")} strokeWidth={1.5} />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {isTrial
+              ? "Profitez de toutes les fonctionnalités pendant votre essai. Souscrivez pour continuer après."
+              : isTeam
+                ? "Vous profitez de toutes les fonctionnalités premium NoX VTC."
+                : isDuo
+                  ? "Documents illimités inclus. Passez en Premium pour gérer votre flotte complète."
+                  : "Paiement à l'usage via jetons. Passez en Pro ou Premium pour des documents illimités."
+            }
+          </p>
+        </div>
+
+        {/* CTA Voir les offres */}
+        <div className="px-4 mb-5">
+          <button
+            onClick={onNavigatePlans}
+            className="w-full py-3 rounded-2xl bg-gold/10 border border-gold/30 text-gold text-xs font-bold flex items-center justify-center gap-2 hover:bg-gold/15 active:scale-[0.98] transition-all"
+          >
+            Voir toutes les offres
+            <ChevronRight className="h-4 w-4" strokeWidth={2} />
+          </button>
+        </div>
+
+        {/* Token conservation note */}
+        <div className="mx-4 mb-5 flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-onyx-card/50 border border-onyx-border/20">
+          <Coins className="h-3.5 w-3.5 text-gold/50 shrink-0 mt-0.5" strokeWidth={1.5} />
+          <p className="text-[10px] text-muted-foreground leading-relaxed">
+            {"Vos jetons acquis sont conservés précieusement en cas de changement d'offre."}
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Plans Screen (vitrine des offres) ─────────────────────────
+
+function PlansScreen({ onBack }: { onBack: () => void }) {
   const { plan, subscriptionStatus, trialEndsAt } = useNox()
   const { promo } = usePromo()
   const isTeam = plan === "TEAM"
@@ -983,9 +1096,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
   const [cancelError, setCancelError] = useState<string | null>(null)
   const [subDetails, setSubDetails] = useState<{ cancel_at: string | null; current_period_end: string | null; status: string | null; trial_ends_at: string | null } | null>(null)
 
-  function handleChoose(target: "DUO" | "TEAM") {
-    setTargetPlan(target)
-  }
+  function handleChoose(target: "DUO" | "TEAM") { setTargetPlan(target) }
 
   function fmtPrice(n: number) {
     return (Math.floor(n * 100) / 100).toFixed(2).replace('.', ',') + '€'
@@ -1021,11 +1132,11 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
       if (!res.ok || !data.success) {
         setCancelError(data.error ?? 'Erreur lors de la résiliation')
       } else {
-        setSubDetails(prev => ({ ...(prev ?? { current_period_end: null }), cancel_at: data.cancel_at }))
-        toast('Résiliation confirmée', {
+        setSubDetails(prev => ({ ...(prev ?? { current_period_end: null, status: null, trial_ends_at: null }), cancel_at: data.cancel_at }))
+        toast("Fin d’abonnement enregistrée", {
           description: data.cancel_at
-            ? `Votre accès reste actif jusqu'au ${fmtDateFr(data.cancel_at)}`
-            : 'Votre résiliation a bien été enregistrée',
+            ? `Votre accès reste actif jusqu'au ${fmtDateFr(data.cancel_at)}, puis retour automatique en Starter.`
+            : "Votre demande a bien été enregistrée.",
           duration: 5000,
         })
       }
@@ -1041,81 +1152,35 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
     {
       id: "SOLO" as const,
       name: "Starter",
-      subtitle: "L\u2019offre Ind\u00e9pendant",
+      subtitle: "L'offre Indépendant",
       price: null as number | null,
-      capacity: `Max ${getPlanLimits("solo").drivers} Chauffeur / Max ${getPlanLimits("solo").vehicles} V\u00e9hicule`,
-      features: ["Signature Entreprise incluse", "Paiement \u00e0 l\u2019usage (jetons)"],
+      capacity: `Max ${getPlanLimits("solo").drivers} Chauffeur / Max ${getPlanLimits("solo").vehicles} Véhicule`,
+      features: ["Signature Entreprise incluse", "Paiement à l'usage (jetons)"],
     },
     {
       id: "DUO" as const,
       name: "Pro",
-      subtitle: "L\u2019offre Bin\u00f4me",
+      subtitle: "L'offre Binôme",
       price: 4.99 as number | null,
       priceSuffix: "/mois",
-      capacity: `Max ${getPlanLimits("duo").drivers} Chauffeurs / Max ${getPlanLimits("duo").vehicles} V\u00e9hicules`,
-      features: ["Signature Entreprise incluse", "Documents ILLIMIT\u00c9S"],
+      capacity: `Max ${getPlanLimits("duo").drivers} Chauffeurs / Max ${getPlanLimits("duo").vehicles} Véhicules`,
+      features: ["Signature Entreprise incluse", "Documents ILLIMITÉS"],
     },
     {
       id: "TEAM" as const,
       name: "Premium",
-      subtitle: "L\u2019offre Flotte",
+      subtitle: "L'offre Flotte",
       price: 9.99 as number | null,
       priceSuffix: "/mois",
-      capacity: `Max ${getPlanLimits("team").drivers} Chauffeurs / Max ${getPlanLimits("team").vehicles} V\u00e9hicules`,
-      features: ["Signature Entreprise incluse", "Documents ILLIMIT\u00c9S", "API & Int\u00e9grations", "Statistiques avanc\u00e9es"],
+      capacity: `Max ${getPlanLimits("team").drivers} Chauffeurs / Max ${getPlanLimits("team").vehicles} Véhicules`,
+      features: ["Signature Entreprise incluse", "Documents ILLIMITÉS", "API & Intégrations", "Statistiques avancées"],
     },
   ]
 
   return (
-    <motion.div key="subscription" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
-      <SubScreenHeader title="Mon Abonnement" onBack={onBack} />
+    <motion.div key="plans" variants={slideIn} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25, ease: "easeInOut" }} className="flex flex-col h-full">
+      <SubScreenHeader title="Découvrir les offres" onBack={onBack} />
       <div className="flex-1 overflow-y-auto pb-24">
-        {/* Current Plan Banner */}
-        <div className={cn(
-          "mx-4 mb-5 p-5 rounded-2xl border",
-          isTeam
-            ? "bg-gradient-to-br from-gold/15 via-gold/5 to-transparent border-gold/40 gold-glow-sm"
-            : isDuo
-              ? "bg-gold/5 border-gold/30"
-              : "bg-onyx-card border-onyx-border/30"
-        )}>
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                {isTrial ? "Plan actuel (Essai)" : "Plan actuel"}
-              </p>
-              <p className={cn(
-                "text-2xl font-bold font-heading mt-0.5",
-                isTeam ? "gold-gradient-text" : isDuo ? "text-gold" : "text-foreground"
-              )}>
-                {planLabel(plan)}
-              </p>
-              {isTrial && trialEndsAt && (
-                <p className="text-xs text-gold/80 mt-1">
-                  Acc\u00e8s gratuit jusqu&apos;au {fmtDateFr(trialEndsAt)}
-                </p>
-              )}
-            </div>
-            <div className={cn(
-              "w-12 h-12 rounded-2xl flex items-center justify-center",
-              isTeam ? "bg-gold/20 border border-gold/40" : "bg-gold/10 border border-gold/20"
-            )}>
-              <Crown className={cn("h-6 w-6", isTeam ? "text-gold" : "text-gold/60")} strokeWidth={1.5} />
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {isTrial
-              ? "Profitez de toutes les fonctionnalit\u00e9s pendant votre essai. Souscrivez pour continuer apr\u00e8s."
-              : isTeam
-                ? "Vous profitez de toutes les fonctionnalit\u00e9s premium NoX VTC."
-                : isDuo
-                  ? "Documents illimit\u00e9s inclus. Passez en Premium pour g\u00e9rer votre flotte compl\u00e8te."
-                  : "Paiement \u00e0 l\u2019usage via jetons. Passez en Pro ou Premium pour des documents illimit\u00e9s."
-            }
-          </p>
-        </div>
-
-        {/* Plan Cards */}
         <SectionLabel>Offres disponibles</SectionLabel>
         <div className="space-y-3 px-4 mb-4">
           {planCards.map((p) => {
@@ -1171,7 +1236,6 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                   </div>
                 </div>
 
-                {/* Capacity - single line */}
                 <p className={cn(
                   "text-[10px] font-semibold mb-2",
                   isPlanTeam ? "text-gold/80" : isPlanDuo ? "text-gold/70" : "text-muted-foreground"
@@ -1179,7 +1243,6 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                   {p.capacity}
                 </p>
 
-                {/* Features */}
                 <div className="space-y-1.5">
                   {p.features.map((f) => (
                     <div key={f} className="flex items-center gap-2">
@@ -1189,7 +1252,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                   ))}
                 </div>
 
-                {/* Show button for upgrades */}
+                {/* Upgrade CTA */}
                 {isUpgrade && (
                   <button
                     onClick={() => handleChoose(p.id)}
@@ -1203,8 +1266,9 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                     Choisir cette offre
                   </button>
                 )}
-                {/* Essai ou résiliation pour abonnés DUO/TEAM */}
-                {!isCurrent && p.id === "SOLO" && (plan === "DUO" || plan === "TEAM") && (
+
+                {/* Actions sous la carte du plan actif */}
+                {isCurrent && (plan === "DUO" || plan === "TEAM") && (
                   isTrial ? (
                     <div className="mt-3 space-y-2">
                       <p className="text-center text-[11px] text-muted-foreground">
@@ -1214,20 +1278,27 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                         onClick={() => handleChoose(plan as "DUO" | "TEAM")}
                         className="w-full py-2.5 rounded-xl bg-gold text-primary-foreground text-xs font-bold active:scale-[0.98] transition-all hover:bg-gold-light gold-glow"
                       >
-                        Continuer avec {planLabel(plan)} après l&apos;essai
+                        Choisir cette offre
                       </button>
                     </div>
                   ) : subDetails?.cancel_at ? (
                     <p className="w-full mt-3 py-2 text-center text-[11px] text-muted-foreground">
-                      Résiliation programmée le {fmtDateFr(subDetails.cancel_at)}
+                      Actif jusqu&apos;au {fmtDateFr(subDetails.cancel_at)}, puis retour automatique en Starter
                     </p>
                   ) : (
-                    <button
-                      onClick={() => setShowCancelConfirm(true)}
-                      className="w-full mt-3 py-2 rounded-xl text-[11px] font-medium text-red-400 border border-red-500/30 hover:border-red-500/50 hover:bg-red-500/5 active:scale-[0.98] transition-all"
-                    >
-                      Résilier mon abonnement
-                    </button>
+                    <div className="mt-3 space-y-2">
+                      {subDetails?.current_period_end && (
+                        <p className="text-center text-[11px] text-muted-foreground">
+                          Valide jusqu&apos;au {fmtDateFr(subDetails.current_period_end)}
+                        </p>
+                      )}
+                      <button
+                        onClick={() => setShowCancelConfirm(true)}
+                        className="w-full py-2 rounded-xl text-[11px] font-medium text-red-400 border border-red-500/30 hover:border-red-500/50 hover:bg-red-500/5 active:scale-[0.98] transition-all"
+                      >
+                        Mettre fin à mon abonnement
+                      </button>
+                    </div>
                   )
                 )}
               </div>
@@ -1235,7 +1306,6 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
           })}
         </div>
 
-        {/* Token conservation note */}
         <div className="mx-4 mb-5 flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-onyx-card/50 border border-onyx-border/20">
           <Coins className="h-3.5 w-3.5 text-gold/50 shrink-0 mt-0.5" strokeWidth={1.5} />
           <p className="text-[10px] text-muted-foreground leading-relaxed">
@@ -1244,14 +1314,12 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
         </div>
       </div>
 
-      {/* Subscription Payment Drawer */}
       <SubscriptionDrawer
         open={!!targetPlan}
         targetPlan={targetPlan}
         onClose={() => setTargetPlan(null)}
       />
 
-      {/* Modale de confirmation de résiliation */}
       <AnimatePresence>
         {showCancelConfirm && (
           <motion.div
@@ -1268,7 +1336,6 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
               transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
               className="absolute bottom-0 left-0 right-0 mx-auto mb-10 w-[calc(100%-2rem)] max-w-md rounded-2xl bg-[#0A0A0A] border border-red-500/40 shadow-[0_8px_40px_rgba(0,0,0,0.9)] p-4 pb-safe"
             >
-              {/* Close X */}
               <button
                 onClick={() => setShowCancelConfirm(false)}
                 disabled={isCancelling}
@@ -1277,35 +1344,26 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
               >
                 <X className="h-3.5 w-3.5 text-[#A1A1AA]" strokeWidth={2.5} />
               </button>
-
-              {/* Alert Icon */}
               <div className="flex justify-center mb-3 mt-1">
                 <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center">
                   <AlertTriangle className="h-4.5 w-4.5 text-red-400" strokeWidth={1.5} />
                 </div>
               </div>
-
-              {/* Title */}
               <p className="text-xs font-bold text-red-400 text-center tracking-wider uppercase mb-3">
-                Confirmer la résiliation
+                Confirmer la fin d'abonnement
               </p>
-
-              {/* Message */}
               <div className="text-[11px] text-[#A1A1AA] text-center leading-relaxed px-1 mb-1 space-y-1.5">
-                <p>Êtes-vous sûr de vouloir résilier votre abonnement <span className="text-foreground font-medium">{planLabel(plan)}</span> ?</p>
+                <p>Votre offre <span className="text-foreground font-medium">{planLabel(plan)}</span> restera active jusqu'à la fin de la période en cours.</p>
                 <p>
                   {subDetails?.current_period_end
-                    ? <>Votre accès reste actif jusqu&apos;au <span className="text-foreground font-semibold">{fmtDateFr(subDetails.current_period_end)}</span>.</>
+                    ? <>Accès confirmé jusqu'au <span className="text-foreground font-semibold">{fmtDateFr(subDetails.current_period_end)}</span>.</>
                     : "Votre accès restera actif jusqu'à la fin de votre période actuelle."}
                 </p>
                 <p>Après cette date, vous passerez automatiquement en <span className="text-foreground font-medium">Starter</span>.</p>
               </div>
-
               {cancelError && (
                 <p className="text-[10px] text-red-400 text-center mt-2">{cancelError}</p>
               )}
-
-              {/* Buttons */}
               <div className="flex gap-2 mt-4">
                 <button
                   onClick={() => setShowCancelConfirm(false)}
@@ -1319,7 +1377,7 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
                   disabled={isCancelling}
                   className="flex-1 py-2.5 min-h-[44px] rounded-xl text-[11px] font-bold bg-red-500/90 text-white hover:bg-red-600 active:scale-[0.97] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {isCancelling ? <span className="animate-pulse">En cours...</span> : 'Confirmer la résiliation'}
+                  {isCancelling ? <span className="animate-pulse">En cours...</span> : 'Confirmer'}
                 </button>
               </div>
             </motion.div>
@@ -1329,8 +1387,6 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
     </motion.div>
   )
 }
-
-
 
 // ── Locked Slot ───────────────────────────────────────────────
 
@@ -2508,6 +2564,7 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
   const [supportOpen, setSupportOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [userInfo, setUserInfo] = useState({ name: "Chargement...", email: "" })
+  const [currentPeriodEnd, setCurrentPeriodEnd] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadUser() {
@@ -2522,6 +2579,20 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
     }
     loadUser()
   }, [])
+
+  useEffect(() => {
+    if (subscriptionStatus === "trial" || plan === "SOLO") return
+    const supabase = createClient()
+    supabase
+      .from("subscriptions")
+      .select("current_period_end")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.current_period_end) setCurrentPeriodEnd(data.current_period_end)
+      })
+  }, [subscriptionStatus, plan])
 
   const enterpriseDesc = enterprise.name 
     ? `${enterprise.name}${enterprise.siren ? ` \u2022 SIRET ${enterprise.siren}` : ""}`
@@ -2614,6 +2685,11 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
                   <Headphones className="h-3 w-3 text-gold/70" strokeWidth={1.5} />
                   <span className="text-[9px] text-gold/70 font-medium">Support Prioritaire 24/7</span>
                 </div>
+                {currentPeriodEnd && (
+                  <span className="text-[9px] text-gold/50 font-medium mt-0.5">
+                    Valide jusqu&apos;au {new Date(currentPeriodEnd).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -2745,7 +2821,8 @@ export function SettingsTab() {
           {screen === "profile" && <ProfileScreen key="profile" onBack={() => setScreen("main")} />}
           {screen === "accountSecurity" && <AccountSecurityScreen key="accountSecurity" onBack={() => setScreen("main")} onNavigateSecurity={() => setScreen("security")} />}
           {screen === "enterprise" && <EnterpriseScreen key="enterprise" onBack={() => setScreen("main")} />}
-          {screen === "subscription" && <SubscriptionScreen key="subscription" onBack={() => setScreen("main")} />}
+          {screen === "subscription" && <SubscriptionScreen key="subscription" onBack={() => setScreen("main")} onNavigatePlans={() => setScreen("plans")} />}
+          {screen === "plans" && <PlansScreen key="plans" onBack={() => setScreen("subscription")} />}
           {screen === "notifications" && <NotificationsScreen key="notifications" onBack={() => setScreen("main")} />}
           {screen === "security" && <SecurityScreen key="security" onBack={() => setScreen("main")} />}
           {screen === "cgv" && <CGVSettings key="cgv" onBack={() => setScreen("main")} />}
