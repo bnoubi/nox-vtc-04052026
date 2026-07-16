@@ -1252,16 +1252,26 @@ function PlansScreen({ onBack }: { onBack: () => void }) {
                   ))}
                 </div>
 
-                {/* Upgrade CTA */}
-                {isUpgrade && (
+                {/* Upgrade CTA — ou switch pendant un essai (sauf SOLO) */}
+                {!isCurrent && (isUpgrade || (isTrial && p.id !== "SOLO")) && (
                   <button
-                    onClick={() => handleChoose(p.id)}
+                    onClick={() => handleChoose(p.id as "DUO" | "TEAM")}
                     className={cn(
                       "w-full mt-3 py-2.5 rounded-xl text-xs font-bold active:scale-[0.98] transition-all",
                       isPlanTeam
                         ? "bg-gold text-primary-foreground hover:bg-gold-light gold-glow"
                         : "bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25"
                     )}
+                  >
+                    Choisir cette offre
+                  </button>
+                )}
+
+                {/* Starter pendant un essai → annuler l'essai */}
+                {!isCurrent && isTrial && p.id === "SOLO" && (
+                  <button
+                    onClick={() => setShowCancelConfirm(true)}
+                    className="w-full mt-3 py-2.5 rounded-xl bg-gold/15 border border-gold/30 text-gold text-xs font-bold active:scale-[0.98] transition-all hover:bg-gold/25"
                   >
                     Choisir cette offre
                   </button>
