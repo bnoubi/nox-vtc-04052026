@@ -19,6 +19,8 @@ const supabase = createClient(
 const i18n = {
   fr: {
     sub: "Remplissez ce formulaire pour confirmer votre course",
+    consentLabel: (op: string) => `En soumettant ce formulaire, j'accepte que mes informations (nom, contact, adresses) soient transmises à ${op} dans le cadre de ma demande de trajet. NoX VTC agit uniquement comme prestataire technique.`,
+    consentRequired: "Veuillez accepter la politique de confidentialité pour continuer.",
     sectionIdentity: "Vos informations",
     sectionRoute: "Trajet",
     sectionSchedule: "Date & Passagers",
@@ -44,6 +46,8 @@ const i18n = {
   },
   en: {
     sub: "Fill in this form to confirm your ride",
+    consentLabel: (op: string) => `By submitting this form, I agree that my information (name, contact, addresses) will be shared with ${op} for the purpose of my trip request. NoX VTC acts solely as a technical provider.`,
+    consentRequired: "Please accept the privacy policy to continue.",
     sectionIdentity: "Your information",
     sectionRoute: "Route",
     sectionSchedule: "Date & Passengers",
@@ -69,6 +73,8 @@ const i18n = {
   },
   es: {
     sub: "Complete este formulario para confirmar su traslado",
+    consentLabel: (op: string) => `Al enviar este formulario, acepto que mis datos (nombre, contacto, direcciones) sean transmitidos a ${op} en el marco de mi solicitud de viaje. NoX VTC actúa únicamente como proveedor técnico.`,
+    consentRequired: "Por favor, acepte la política de privacidad para continuar.",
     sectionIdentity: "Sus datos",
     sectionRoute: "Viaje",
     sectionSchedule: "Fecha y pasajeros",
@@ -94,6 +100,8 @@ const i18n = {
   },
   it: {
     sub: "Compila questo modulo per confermare il tuo trasferimento",
+    consentLabel: (op: string) => `Inviando questo modulo, accetto che i miei dati (nome, contatto, indirizzi) vengano trasmessi a ${op} nell'ambito della mia richiesta di trasferimento. NoX VTC agisce solo come fornitore tecnico.`,
+    consentRequired: "Accettare l'informativa sulla privacy per continuare.",
     sectionIdentity: "I tuoi dati",
     sectionRoute: "Percorso",
     sectionSchedule: "Data e passeggeri",
@@ -179,6 +187,7 @@ export function TripRequestForm({
   const [notes, setNotes] = useState(initialNotes)
   const [estimatedDistance, setEstimatedDistance] = useState<number | null>(null)
   const [estimatedDuration, setEstimatedDuration] = useState<string | null>(null)
+  const [consentChecked, setConsentChecked] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState("")
@@ -239,6 +248,10 @@ export function TripRequestForm({
       setError(t.required)
       return
     }
+    if (!consentChecked) {
+      setError(t.consentRequired)
+      return
+    }
     setError("")
     setSubmitting(true)
     try {
@@ -270,7 +283,7 @@ export function TripRequestForm({
         await fetch("/api/trip-request/confirm-passenger", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, firstname, departure, arrival, date, time, lang }),
+          body: JSON.stringify({ email, firstname, departure, arrival, date, time, lang, operatorUserId, operatorName }),
         })
       }
       await fetch("/api/trip-request/notify-operator", {
@@ -476,9 +489,22 @@ export function TripRequestForm({
               className="w-full bg-[#F9F6F0] rounded-xl px-3 py-2.5 text-[#1A1A1A] text-sm placeholder:text-[#BBAA88] outline-none border border-[#E8D5A3] focus:border-[#C5A059] focus:ring-1 focus:ring-[#C5A059]/20 resize-none" />
           </div>
 
+          {/* RGPD consent */}
+          <label className="flex items-start gap-3 p-3 rounded-xl border border-[#E8D5A3]/60 bg-white cursor-pointer">
+            <input
+              type="checkbox"
+              checked={consentChecked}
+              onChange={e => setConsentChecked(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#C5A059]"
+            />
+            <span className="text-[11px] text-[#555] leading-relaxed">
+              {t.consentLabel(operatorName)}
+            </span>
+          </label>
+
           {error && <p className="text-sm text-red-500 text-center px-2">{error}</p>}
 
-          <button type="submit" disabled={submitting}
+          <button type="submit" disabled={submitting || !consentChecked}
             className="w-full py-4 rounded-2xl bg-[#C5A059] text-white font-bold text-sm hover:bg-[#B8955A] transition-colors active:scale-[0.98] disabled:opacity-60">
             {submitting ? t.submitting : t.submit}
           </button>

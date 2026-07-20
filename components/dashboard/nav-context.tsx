@@ -26,6 +26,8 @@ interface NavContextValue {
   navigateToBC: (id: string) => void
   clearPendingBcId: () => void
   navigateToWalletHistory: () => void
+  navigateToRecurring: () => void
+  registerRecurringOpener: (fn: () => void) => void
 }
 
 const NavContext = createContext<NavContextValue | null>(null)
@@ -41,6 +43,7 @@ export function NavProvider({
 }) {
   const settingsNavigatorRef = useRef<((screen: SettingsScreen) => void) | null>(null)
   const walletOpenerRef = useRef<(() => void) | null>(null)
+  const recurringOpenerRef = useRef<(() => void) | null>(null)
   const [pendingEntityNavigation, setPendingEntityNavigation] = useState<EntityNavigation | null>(null)
   const [pendingBcId, setPendingBcId] = useState<string | null>(null)
 
@@ -109,6 +112,17 @@ export function NavProvider({
     }, 150)
   }, [onTabChange])
 
+  const registerRecurringOpener = useCallback((fn: () => void) => {
+    recurringOpenerRef.current = fn
+  }, [])
+
+  const navigateToRecurring = useCallback(() => {
+    onTabChange("documents")
+    setTimeout(() => {
+      recurringOpenerRef.current?.()
+    }, 50)
+  }, [onTabChange])
+
   const clearPendingBcId = useCallback(() => {
     setPendingBcId(null)
   }, [])
@@ -129,6 +143,8 @@ export function NavProvider({
       navigateToBC,
       clearPendingBcId,
       navigateToWalletHistory,
+      navigateToRecurring,
+      registerRecurringOpener,
     }}>
       {children}
     </NavContext.Provider>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Clock } from "lucide-react"
 import { useNox } from "./nox-context"
+import { useNav } from "./nav-context"
 
 const THIRTY_MIN_MS = 30 * 60 * 1000
 const ONE_HOUR_MS = 60 * 60 * 1000
@@ -43,6 +44,7 @@ function formatTripDate(date: string, time?: string): string {
 
 export function NextTripWidget() {
   const { bcs } = useNox()
+  const { navigateToBC, switchTab } = useNav()
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -74,7 +76,10 @@ export function NextTripWidget() {
 
   return (
     <section className="px-4">
-      <div className="flex items-center gap-3 p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20">
+      <button
+        onClick={() => { navigateToBC(nextTrip.id!); switchTab("documents") }}
+        className="w-full flex items-center gap-3 p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 hover:border-amber-500/40 active:scale-[0.98] transition-all text-left"
+      >
         <Clock className="h-5 w-5 text-amber-400 shrink-0" strokeWidth={1.5} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2 mb-0.5">
@@ -86,7 +91,7 @@ export function NextTripWidget() {
           <p className="text-sm font-semibold text-foreground truncate">{nextTrip.client}</p>
           <p className="text-[11px] text-muted-foreground mt-0.5">{dateLabel}</p>
         </div>
-      </div>
+      </button>
     </section>
   )
 }

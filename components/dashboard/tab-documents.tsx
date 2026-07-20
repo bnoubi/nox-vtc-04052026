@@ -1114,7 +1114,7 @@ export function DocumentsTab() {
   const [openBCFlowOnLink, setOpenBCFlowOnLink] = useState(false)
   const bcIdsBeforeRef = useRef<Set<string>>(new Set())
   const convertingRequestRef = useRef<TripRequest | null>(null)
-  const { pendingBcId, clearPendingBcId } = useNav()
+  const { pendingBcId, clearPendingBcId, registerRecurringOpener } = useNav()
 
   useEffect(() => {
     if (!pendingBcId) return
@@ -1122,6 +1122,10 @@ export function DocumentsTab() {
     if (bc) { setViewingBC(bc); setActiveType("bc") }
     clearPendingBcId()
   }, [pendingBcId, bcs, clearPendingBcId])
+
+  useEffect(() => {
+    registerRecurringOpener(() => setShowRecurring(true))
+  }, [registerRecurringOpener])
 
   useEffect(() => {
     void loadTripRequests()

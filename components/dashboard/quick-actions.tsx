@@ -81,7 +81,7 @@ export function QuickActions() {
   const [showSubDrawer, setShowSubDrawer] = useState(false)
   const [subDrawerPlan, setSubDrawerPlan] = useState<"DUO" | "TEAM">("DUO")
   const { plan, driverCount, vehicleCount, addDriver, addVehicle } = useNox()
-  const { navigateToSubscription } = useNav()
+  const { navigateToSubscription, navigateToRecurring } = useNav()
   const limits = getPlanLimits(plan)
   const driversFull = driverCount >= limits.drivers
   const vehiclesFull = vehicleCount >= limits.vehicles
@@ -186,6 +186,7 @@ export function QuickActions() {
       <CreateBCFlow
         open={showBCFlow}
         onClose={() => setShowBCFlow(false)}
+        onNavigateToRecurring={navigateToRecurring}
       />
       <CreateInvoiceFlow
         open={showInvoiceFlow}

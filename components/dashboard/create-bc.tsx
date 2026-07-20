@@ -687,7 +687,14 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNaviga
     setModalSelectedCompany(null)
   }, [drivers, vehicles, availableSupplements, cgvConfigured])
 
-  const handleClose = () => { setStep("menu"); onClose() }
+  const handleClose = () => {
+    if (tab === "apercu") {
+      resetForm()
+    } else {
+      setStep("menu")
+    }
+    onClose()
+  }
 
   const isPhone = (val: string) => /^[+0-9\s]{6,}$/.test(val)
 
