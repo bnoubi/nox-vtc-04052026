@@ -27,7 +27,8 @@ interface NavContextValue {
   clearPendingBcId: () => void
   navigateToWalletHistory: () => void
   navigateToRecurring: () => void
-  registerRecurringOpener: (fn: () => void) => void
+  pendingRecurring: boolean
+  clearPendingRecurring: () => void
 }
 
 const NavContext = createContext<NavContextValue | null>(null)
@@ -43,9 +44,9 @@ export function NavProvider({
 }) {
   const settingsNavigatorRef = useRef<((screen: SettingsScreen) => void) | null>(null)
   const walletOpenerRef = useRef<(() => void) | null>(null)
-  const recurringOpenerRef = useRef<(() => void) | null>(null)
   const [pendingEntityNavigation, setPendingEntityNavigation] = useState<EntityNavigation | null>(null)
   const [pendingBcId, setPendingBcId] = useState<string | null>(null)
+  const [pendingRecurring, setPendingRecurring] = useState(false)
 
   const registerSettingsNavigator = useCallback((fn: (screen: SettingsScreen) => void) => {
     settingsNavigatorRef.current = fn
@@ -112,16 +113,14 @@ export function NavProvider({
     }, 150)
   }, [onTabChange])
 
-  const registerRecurringOpener = useCallback((fn: () => void) => {
-    recurringOpenerRef.current = fn
-  }, [])
-
   const navigateToRecurring = useCallback(() => {
+    setPendingRecurring(true)
     onTabChange("documents")
-    setTimeout(() => {
-      recurringOpenerRef.current?.()
-    }, 50)
   }, [onTabChange])
+
+  const clearPendingRecurring = useCallback(() => {
+    setPendingRecurring(false)
+  }, [])
 
   const clearPendingBcId = useCallback(() => {
     setPendingBcId(null)
@@ -144,7 +143,8 @@ export function NavProvider({
       clearPendingBcId,
       navigateToWalletHistory,
       navigateToRecurring,
-      registerRecurringOpener,
+      pendingRecurring,
+      clearPendingRecurring,
     }}>
       {children}
     </NavContext.Provider>

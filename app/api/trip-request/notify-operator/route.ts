@@ -56,17 +56,15 @@ export async function POST(req: NextRequest) {
 <p>L'équipe NoX VTC</p>
 `
 
-  const [emailResult] = await Promise.all([
-    sendEmail(user.email, "🔔 Nouvelle demande de trajet reçue", html),
-    adminSupabase.from("notifications").insert({
-      user_id: userId,
-      type: "trip_request",
-      title: "📋 Nouvelle demande de trajet",
-      message: `${passengerName} — ${departure}${arrival ? ` → ${arrival}` : ""}`,
-      data: {},
-      read: false,
-    }),
-  ])
+  void adminSupabase.from("notifications").insert({
+    user_id: userId,
+    type: "trip_request",
+    title: "📋 Nouvelle demande de trajet",
+    message: `${passengerName} — ${departure}${arrival ? ` → ${arrival}` : ""}`,
+    data: {},
+    read: false,
+  })
 
+  const emailResult = await sendEmail(user.email, "🔔 Nouvelle demande de trajet reçue", html)
   return NextResponse.json({ ok: emailResult.success })
 }

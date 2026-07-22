@@ -173,6 +173,11 @@ export function TripRequestForm({
   const [lang, setLang] = useState<Lang>("fr")
   const t = i18n[lang]
 
+  useEffect(() => {
+    const code = navigator.language.slice(0, 2).toLowerCase()
+    if (code === "en" || code === "es" || code === "it") setLang(code as Lang)
+  }, [])
+
   const [civility, setCivility] = useState<"M." | "Mme">("M.")
   const [firstname, setFirstname] = useState("")
   const [lastname, setLastname] = useState("")
@@ -280,13 +285,13 @@ export function TripRequestForm({
       if (dbError) throw dbError
 
       if (email) {
-        await fetch("/api/trip-request/confirm-passenger", {
+        fetch("/api/trip-request/confirm-passenger", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, firstname, departure, arrival, date, time, lang, operatorUserId, operatorName }),
-        })
+        }).catch(() => {})
       }
-      await fetch("/api/trip-request/notify-operator", {
+      fetch("/api/trip-request/notify-operator", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
