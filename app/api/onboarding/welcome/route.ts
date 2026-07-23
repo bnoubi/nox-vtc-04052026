@@ -27,16 +27,13 @@ export async function POST() {
 
   const { data: subscription } = await supabase
     .from("subscriptions")
-    .select("trial_ends_at")
+    .select("trial_ends_at, status")
     .eq("user_id", user.id)
     .maybeSingle()
 
-  const trialEndsAt = subscription?.trial_ends_at
-    ? new Date(subscription.trial_ends_at)
-    : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+  const isTrial = subscription?.status === "trial"
 
   const welcome = welcomeEmail({ prenom, nom })
-  const trial = trialStartEmail({ prenom, nom, trialEndsAt })
 
   const welcomeResult = await sendEmail(user.email, welcome.subject, welcome.html)
   if (!welcomeResult.success) {
@@ -51,6 +48,15 @@ export async function POST() {
     .update({ welcome_emails_sent_at: new Date().toISOString() })
     .eq("id", user.id)
 
+  if (!isTrial) {
+    return NextResponse.json({ sent: 1, scheduled: 0, reason: "no_trial" })
+  }
+
+  const trialEndsAt = subscription?.trial_ends_at
+    ? new Date(subscription.trial_ends_at)
+    : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+
+  const trial = trialStartEmail({ prenom, nom, trialEndsAt })
   const scheduledAt = new Date(Date.now() + 3 * 60 * 1000).toISOString()
   const trialResult = await sendEmail(user.email, trial.subject, trial.html, { scheduledAt })
   if (!trialResult.success) {

@@ -90,20 +90,29 @@ export async function GET(request: NextRequest) {
     // mais ne bloque pas la création de auth.users). Tous les upserts
     // utilisent ON CONFLICT DO NOTHING — JAMAIS DO UPDATE — donc une ligne
     // déjà créée par le trigger ne sera jamais écrasée.
+
+    // Lire le feature flag — même logique que le trigger PG
+    const { data: flagRow } = await adminClient
+      .from('app_config')
+      .select('value')
+      .eq('key', 'disable_auto_trial')
+      .maybeSingle()
+    const disableTrial = flagRow?.value === 'true'
+
+    const subscriptionPayload = disableTrial
+      ? { user_id: userId, plan: 'SOLO', status: 'active', target_plan: 'solo',
+          trial_started_at: null as string | null, trial_ends_at: null as string | null }
+      : { user_id: userId, plan: 'TEAM', status: 'trial', target_plan: 'solo',
+          trial_started_at: new Date().toISOString(),
+          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() }
+
     const tasks: Promise<unknown>[] = [
       adminClient
         .from('wallets')
         .upsert({ user_id: userId, balance: 0 }, { onConflict: 'user_id', ignoreDuplicates: true }),
       adminClient
         .from('subscriptions')
-        .upsert({
-          user_id: userId,
-          plan: 'TEAM',
-          target_plan: 'solo',
-          status: 'trial',
-          trial_started_at: new Date().toISOString(),
-          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-        }, { onConflict: 'user_id', ignoreDuplicates: true }),
+        .upsert(subscriptionPayload, { onConflict: 'user_id', ignoreDuplicates: true }),
     ]
     if (session.user.email) {
       tasks.push(
