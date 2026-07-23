@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "fr.noxvtc.app",
+    "sha256_cert_fingerprints": [
+      "CE:36:91:6E:42:40:D3:6E:52:B0:EA:68:90:46:FB:BC:C2:24:97:24:2E:32:86:A5:A1:BB:CB:14:30:DB:EA:32"
+    ]
+  }
+}]
