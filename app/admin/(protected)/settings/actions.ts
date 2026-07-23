@@ -14,9 +14,10 @@ async function logConfigAction(
   action: string,
   details: Record<string, unknown>,
 ) {
-  await createAdminClient()
+  const { error } = await createAdminClient()
     .from("admin_logs")
-    .insert({ action, admin_id: adminId, target_user_id: adminId, details })
+    .insert({ action, admin_id: adminId, target_user_id: adminId, new_values: details })
+  if (error) console.error("[logConfigAction] admin_logs insert failed:", error.message)
 }
 
 export async function togglePromoAction(
