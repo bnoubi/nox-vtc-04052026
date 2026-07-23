@@ -7,6 +7,7 @@ import { Building2, ArrowRight, ShieldCheck, User, Save, CheckCircle2, Eye, EyeO
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 import { isValidPhoneNumber, parsePhoneNumber, getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js"
+import { isPasswordStrong } from "@/lib/password"
 
 function flagEmoji(code: string) {
   return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('')
@@ -605,7 +606,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
 
   async function handleSavePassword() {
     setSaveError(null)
-    if (pwd.length < 8) { setSaveError("Mot de passe trop court (8 caractères minimum)."); return }
+    if (!isPasswordStrong(pwd)) { setSaveError("Le mot de passe doit contenir au moins 8 caractères, avec : une lettre minuscule, une lettre majuscule, un chiffre (0 à 9), et un caractère spécial (ex: ! @ # $ % &)."); return }
     if (pwd !== pwdConfirm) { setSaveError("Les mots de passe ne correspondent pas."); return }
     setLoading(true)
     try {

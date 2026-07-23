@@ -6,6 +6,7 @@ import { Lock, Eye, EyeOff } from "lucide-react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { isPasswordStrong } from "@/lib/password"
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("")
@@ -27,8 +28,8 @@ export default function ResetPasswordPage() {
       setError("Les mots de passe ne correspondent pas.")
       return
     }
-    if (password.length < 8) {
-      setError("Le mot de passe doit contenir au moins 8 caractères.")
+    if (!isPasswordStrong(password)) {
+      setError("Le mot de passe doit contenir au moins 8 caractères, avec : une lettre minuscule, une lettre majuscule, un chiffre (0 à 9), et un caractère spécial (ex: ! @ # $ % &).")
       return
     }
 
