@@ -111,6 +111,6 @@ async function handleAdminRoute(request: NextRequest): Promise<NextResponse> {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|data/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|data/|\\.well-known/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
