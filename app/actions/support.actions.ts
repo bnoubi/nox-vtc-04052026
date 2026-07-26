@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email/resend'
+import { ADMIN_URL } from '@/lib/admin-url'
 
 function adminClient() {
   return createClient(
@@ -47,7 +48,7 @@ export async function sendClientReply(
   if (error) throw new Error(error.message)
 
   const adminEmail = getAdminEmail()
-  const ticketUrl = `https://app.noxvtc.fr/admin/support/${ticketId}`
+  const ticketUrl = `${ADMIN_URL}/admin/support/${ticketId}`
 
   await sendEmail(
     adminEmail,
@@ -81,7 +82,7 @@ export async function notifyAdminNewTicket(ticketId: string) {
   const content = messages[0]?.content ?? ''
 
   const adminEmail = getAdminEmail()
-  const ticketUrl = `https://app.noxvtc.fr/admin/support/${ticketId}`
+  const ticketUrl = `${ADMIN_URL}/admin/support/${ticketId}`
 
   await sendEmail(
     adminEmail,

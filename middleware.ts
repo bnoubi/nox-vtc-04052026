@@ -18,6 +18,12 @@ function buildCspHeaders(request: NextRequest): { nonce: string; csp: string } {
   return { nonce, csp }
 }
 
+function isAdminHost(request: NextRequest): boolean {
+  const host = request.headers.get('host') ?? ''
+  const adminHost = process.env.NEXT_PUBLIC_ADMIN_HOST ?? ''
+  return adminHost !== '' && host === adminHost
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const { nonce, csp } = buildCspHeaders(request)
@@ -28,12 +34,11 @@ export async function middleware(request: NextRequest) {
 
   let response: NextResponse
 
-  if (pathname.startsWith('/admin')) {
-    if (pathname === '/admin/login') {
-      response = NextResponse.next({ request: patchedRequest })
-    } else {
-      response = await handleAdminRoute(patchedRequest)
-    }
+  if (isAdminHost(request)) {
+    response = await handleAdminSubdomain(patchedRequest)
+  } else if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin/')) {
+    // Phase 9 — /admin/* et /api/admin/* fermés sur app.noxvtc.fr
+    response = new NextResponse(null, { status: 404 })
   } else {
     response = await updateSession(patchedRequest)
   }
@@ -42,10 +47,13 @@ export async function middleware(request: NextRequest) {
   return response
 }
 
-async function handleAdminRoute(request: NextRequest): Promise<NextResponse> {
+type AuthResult =
+  | { ok: true; supabaseResponse: NextResponse }
+  | { ok: false; redirect: NextResponse }
+
+async function checkAdminAuth(request: NextRequest): Promise<AuthResult> {
   let supabaseResponse = NextResponse.next({ request })
 
-  // Client anon avec cookies pour valider la session utilisateur
   const supabaseAuth = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -78,19 +86,15 @@ async function handleAdminRoute(request: NextRequest): Promise<NextResponse> {
     const url = request.nextUrl.clone()
     url.pathname = '/admin/login'
     url.searchParams.set('error', 'unauthorized')
-    return NextResponse.redirect(url)
+    return { ok: false, redirect: NextResponse.redirect(url) }
   }
 
-  // Client service role pour contourner la RLS sur user_roles/admin_roles
   const supabaseAdmin = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: { getAll: () => [], setAll: () => {} },
-    }
+    { cookies: { getAll: () => [], setAll: () => {} } }
   )
 
-  // Vérifie la présence dans user_roles — accepte TOUS les rôles (admin, super_admin, support, finance)
   const { data: userRole } = await supabaseAdmin
     .from('user_roles')
     .select('id')
@@ -103,10 +107,57 @@ async function handleAdminRoute(request: NextRequest): Promise<NextResponse> {
     const url = request.nextUrl.clone()
     url.pathname = '/admin/login'
     url.searchParams.set('error', 'unauthorized')
-    return NextResponse.redirect(url)
+    return { ok: false, redirect: NextResponse.redirect(url) }
   }
 
-  return supabaseResponse
+  return { ok: true, supabaseResponse }
+}
+
+async function handleAdminSubdomain(request: NextRequest): Promise<NextResponse> {
+  const { pathname } = request.nextUrl
+
+  // Normalize / and /admin (exact) to /admin/dashboard
+  const targetPathname =
+    pathname === '/' || pathname === '/admin' ? '/admin/dashboard' : pathname
+
+  // Public paths — no auth check
+  if (
+    targetPathname === '/admin/login' ||
+    targetPathname.startsWith('/api/admin/') ||
+    targetPathname === '/auth/callback' ||
+    targetPathname.startsWith('/_next/') ||
+    targetPathname.startsWith('/.well-known/')
+  ) {
+    return NextResponse.next({ request })
+  }
+
+  // Any non-/admin path on admin subdomain → 404
+  if (!targetPathname.startsWith('/admin')) {
+    return new NextResponse(null, { status: 404 })
+  }
+
+  // Protected /admin/* — check auth
+  const auth = await checkAdminAuth(request)
+  if (!auth.ok) return auth.redirect
+
+  // If pathname was normalized (/ or /admin → /admin/dashboard), rewrite internally
+  if (pathname !== targetPathname) {
+    const url = request.nextUrl.clone()
+    url.pathname = targetPathname
+    const rewrite = NextResponse.rewrite(url)
+    auth.supabaseResponse.cookies.getAll().forEach(({ name, value, ...opts }) =>
+      rewrite.cookies.set(name, value, opts)
+    )
+    return rewrite
+  }
+
+  return auth.supabaseResponse
+}
+
+async function handleAdminRoute(request: NextRequest): Promise<NextResponse> {
+  const auth = await checkAdminAuth(request)
+  if (!auth.ok) return auth.redirect
+  return auth.supabaseResponse
 }
 
 export const config = {
