@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getPayPalAccessToken } from '@/lib/paypal/client'
-import { getItem } from '@/lib/config/prices'
+import { getPlan } from '@/lib/config/prices'
+import { createAdminClient } from '@/lib/supabase/admin'
+
 
 const BASE_URL = process.env.PAYPAL_MODE === 'live'
   ? 'https://api-m.paypal.com'
@@ -10,7 +12,7 @@ const BASE_URL = process.env.PAYPAL_MODE === 'live'
 const APP_BASE = process.env.NEXT_PUBLIC_SITE_URL || 'https://app.noxvtc.fr'
 
 const schema = z.object({
-  itemType: z.enum(['pack_decouverte', 'pack_privilege', 'pack_prestige', 'plan_duo', 'plan_team']),
+  itemType: z.string().min(1),
   userId:   z.string().uuid(),
 })
 
@@ -28,9 +30,28 @@ export async function POST(req: NextRequest) {
   }
 
   const { itemType, userId } = parsed.data
-  const item = getItem(itemType)
-  if (!item) {
-    return NextResponse.json({ error: 'Item inconnu' }, { status: 400 })
+  
+  const plan = getPlan(itemType)
+  let price: number
+  let description: string
+
+  if (plan) {
+    price = plan.price
+    description = plan.description
+  } else {
+    const db = createAdminClient()
+    const { data: packDB } = await db
+      .from('token_packs')
+      .select('prix_eur, nom, quantite_jetons')
+      .eq('id', itemType)
+      .eq('actif', true)
+      .maybeSingle()
+
+    if (!packDB) {
+      return NextResponse.json({ error: 'Item inconnu' }, { status: 400 })
+    }
+    price = packDB.prix_eur
+    description = `${packDB.nom} – ${packDB.quantite_jetons} jetons`
   }
 
   const returnUrl = `${APP_BASE}/api/paypal/capture-order?userId=${userId}&itemType=${itemType}`
@@ -44,9 +65,8 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         intent: 'CAPTURE',
         purchase_units: [{
-          amount: { currency_code: 'EUR', value: item.price.toFixed(2) },
-          description: item.description,
-        }],
+          amount: { currency_code: 'EUR', value: price.toFixed(2) },
+          description: description,        }],
         application_context: {
           return_url:  returnUrl,
           cancel_url:  cancelUrl,

@@ -2,16 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { capturePayPalOrder } from '@/lib/paypal/client'
 import { createServerClient } from '@supabase/ssr'
-import { getTokenPack, getPlan } from '@/lib/config/prices'
+import { getPlan } from '@/lib/config/prices'
 import { generateAndStoreSaasInvoice } from '@/lib/saas-invoice-generator'
 import { saasInvoiceEmail } from '@/emails/saas-invoice'
 import { sendEmail } from '@/lib/email/resend'
 
+
 const schema = z.object({
   orderID:  z.string().min(1),
-  itemType: z.enum(['pack_decouverte', 'pack_privilege', 'pack_prestige', 'plan_duo', 'plan_team']),
+  itemType: z.string().min(1),
   userId:   z.string().uuid(),
 })
+
 
 function makeAdminDb() {
   return createServerClient(
@@ -45,15 +47,19 @@ async function handleSaasInvoicePaypal(opts: {
       return
     }
 
-    const isPack = itemType.startsWith('pack_')
+    const isPack = !itemType.startsWith('plan_')
     let description: string
     let montantTTC: number
     let type: 'subscription' | 'token_pack'
-
     if (isPack) {
-      const pack = getTokenPack(itemType)
-      description = pack?.description ?? 'Pack jetons NoX VTC'
-      montantTTC  = pack?.price ?? 0
+      const { data: packDB } = await db
+        .from('token_packs')
+        .select('prix_eur, nom, quantite_jetons')
+        .eq('id', itemType)
+        .eq('actif', true)
+        .maybeSingle()
+      description = packDB ? `${packDB.nom} – ${packDB.quantite_jetons} jetons` : 'Pack jetons NoX VTC'
+      montantTTC  = packDB?.prix_eur ?? 0
       type = 'token_pack'
     } else {
       const plan = getPlan(itemType)
@@ -110,12 +116,17 @@ async function processCapture(orderID: string, itemType: string, userId: string)
   }
 
   const db     = makeAdminDb()
-  const isPack = itemType.startsWith('pack_')
+  const isPack = !itemType.startsWith('plan_')
 
   if (isPack) {
-    const pack = getTokenPack(itemType)
-    const tokens = pack?.tokens ?? 0
-
+    const { data: packDB } = await db
+      .from('token_packs')
+      .select('quantite_jetons')
+      .eq('id', itemType)
+      .eq('actif', true)
+      .maybeSingle()
+    const tokens = packDB?.quantite_jetons ?? 0
+    
     const { data: wallet } = await db
       .from('wallets')
       .select('id, balance')

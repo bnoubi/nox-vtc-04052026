@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getTokenPack, getPlan } from '@/lib/config/prices'
+import { getPlan } from '@/lib/config/prices'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-04-10',
@@ -26,18 +26,29 @@ export async function POST(request: NextRequest) {
     const promoActive = promoConfig?.find(c => c.key === 'promo_active')?.value === 'true'
     const promoCouponId = promoConfig?.find(c => c.key === 'promo_coupon_id')?.value
 
-    const pack = getTokenPack(itemType)
     const plan = getPlan(itemType)
-    if (!pack && !plan) {
-      return NextResponse.json({ error: 'Invalid item type' }, { status: 400 })
-    }
+    let priceId: string | undefined
+    let mode: 'subscription' | 'payment'
 
-    const mode: 'subscription' | 'payment' = plan ? 'subscription' : 'payment'
-    const envKey = (pack ?? plan)!.stripeEnvKey
-    const priceId = process.env[envKey]
+    if (plan) {
+      mode = 'subscription'
+      priceId = process.env[plan.stripeEnvKey]
+      if (!priceId) {
+        return NextResponse.json({ error: `Price ID not configured (${plan.stripeEnvKey})` }, { status: 500 })
+      }
+    } else {
+      const { data: packDB } = await adminClient
+        .from('token_packs')
+        .select('stripe_price_id')
+        .eq('id', itemType)
+        .eq('actif', true)
+        .maybeSingle()
 
-    if (!priceId) {
-      return NextResponse.json({ error: `Price ID not configured (${envKey})` }, { status: 500 })
+      if (!packDB) {
+        return NextResponse.json({ error: 'Invalid item type' }, { status: 400 })
+      }
+      mode = 'payment'
+      priceId = packDB.stripe_price_id
     }
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://app.noxvtc.fr'
