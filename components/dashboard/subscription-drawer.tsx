@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, ShieldCheck, Loader2, CheckCircle2, Crown, Coins } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useNox } from "./nox-context"
 import { usePromo } from "@/lib/hooks/usePromo"
+import { getSubscriptionPlansAction } from "@/lib/actions/subscription-plans"
 import type { Plan } from "./data"
 
 type PayState = "idle" | "loading"
@@ -14,7 +15,6 @@ const PLAN_DETAILS = {
   DUO: {
     name: "Pro",
     subtitle: "L'offre Binôme",
-    price: "4,99",
     bulletPoints: [
       { text: "Signature Entreprise incluse", highlight: true },
       { text: "Max 2 Chauffeurs / Max 2 Véhicules", highlight: false },
@@ -25,7 +25,6 @@ const PLAN_DETAILS = {
   TEAM: {
     name: "Premium",
     subtitle: "L'offre Flotte",
-    price: "9,99",
     bulletPoints: [
       { text: "Signature Entreprise incluse", highlight: true },
       { text: "Max 10 Chauffeurs / Max 10 Véhicules", highlight: false },
@@ -37,22 +36,39 @@ const PLAN_DETAILS = {
   },
 } as const
 
+const DEFAULT_PRICES: Record<"DUO" | "TEAM", number> = { DUO: 4.99, TEAM: 9.99 }
+
 interface SubscriptionDrawerProps {
   open: boolean
   targetPlan: "DUO" | "TEAM" | null
   onClose: () => void
 }
 
-const ORIGINAL_PRICES: Record<"DUO" | "TEAM", number> = { DUO: 4.99, TEAM: 9.99 }
-
 export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDrawerProps) {
   const { userId, tokens } = useNox()
   const { promo } = usePromo()
   const [payState, setPayState] = useState<PayState>("idle")
+  const [planPrices, setPlanPrices] = useState<Record<"DUO" | "TEAM", number>>(DEFAULT_PRICES)
 
-  const planInfo = targetPlan ? PLAN_DETAILS[targetPlan] : null
-  const originalPrice = targetPlan ? ORIGINAL_PRICES[targetPlan] : 0
-  const promoPrice = promo.active ? (Math.floor(originalPrice * (1 - promo.percent / 100) * 100) / 100).toFixed(2).replace('.', ',') : null
+  useEffect(() => {
+    getSubscriptionPlansAction()
+      .then(plans => {
+        const prices = { ...DEFAULT_PRICES }
+        for (const p of plans) {
+          if (p.code === 'DUO') prices.DUO = Number(p.price_per_month)
+          if (p.code === 'TEAM') prices.TEAM = Number(p.price_per_month)
+        }
+        setPlanPrices(prices)
+      })
+      .catch(() => { /* garder les valeurs par defaut */ })
+  }, [])
+
+  const planInfo    = targetPlan ? PLAN_DETAILS[targetPlan] : null
+  const originalPrice = targetPlan ? planPrices[targetPlan] : 0
+  const formattedPrice = originalPrice.toFixed(2).replace('.', ',')
+  const promoPrice  = promo.active
+    ? (Math.floor(originalPrice * (1 - promo.percent / 100) * 100) / 100).toFixed(2).replace('.', ',')
+    : null
 
   async function handlePay() {
     if (payState !== "idle" || !targetPlan || !userId) return
@@ -70,7 +86,7 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
           itemType,
           userId,
           successUrl,
-          cancelUrl:  `${origin}/`,
+          cancelUrl: `${origin}/`,
         }),
       })
       const data = await res.json() as { url?: string; error?: string }
@@ -87,7 +103,7 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
     setPayState("loading")
     try {
       const itemType = targetPlan === "DUO" ? "plan_duo" : "plan_team"
-      const res = await fetch("/api/paypal/create-order", {
+      const res = await fetch("/api/paypal/create-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ itemType, userId }),
@@ -139,7 +155,7 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
             <div className="flex items-center justify-between px-5 pb-4 shrink-0">
               <div>
                 <h2 className="text-base font-bold tracking-wide text-[#D4AF37]">
-                  ACTIVER L'OFFRE {planInfo.name}
+                  ACTIVER L&apos;OFFRE {planInfo.name}
                 </h2>
                 <p className="text-[11px] text-[#A1A1AA] mt-0.5">{planInfo.subtitle}</p>
               </div>
@@ -182,11 +198,11 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
                   </div>
                   <div className="text-right">
                     {promo.active && (
-                      <p className="text-[11px] text-[#A1A1AA] line-through">{planInfo.price}€</p>
+                      <p className="text-[11px] text-[#A1A1AA] line-through">{formattedPrice}€</p>
                     )}
                     <div className="flex items-center gap-1.5 justify-end">
                       <p className="text-2xl font-bold text-[#D4AF37]">
-                        {promo.active ? `${promoPrice}€` : `${planInfo.price}€`}
+                        {promo.active ? `${promoPrice}€` : `${formattedPrice}€`}
                       </p>
                       {promo.active && (
                         <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-bold">
@@ -195,7 +211,7 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
                       )}
                     </div>
                     <p className="text-[10px] text-[#A1A1AA]">
-                      {promo.active ? "Premier mois — puis " + planInfo.price + "€/mois" : "/mois"}
+                      {promo.active ? "Premier mois — puis " + formattedPrice + "€/mois" : "/mois"}
                     </p>
                   </div>
                 </div>

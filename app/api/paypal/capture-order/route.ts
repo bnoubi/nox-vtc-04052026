@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { capturePayPalOrder } from '@/lib/paypal/client'
 import { createServerClient } from '@supabase/ssr'
-import { getPlan } from '@/lib/config/prices'
 import { generateAndStoreSaasInvoice } from '@/lib/saas-invoice-generator'
 import { saasInvoiceEmail } from '@/emails/saas-invoice'
 import { sendEmail } from '@/lib/email/resend'
@@ -47,26 +46,15 @@ async function handleSaasInvoicePaypal(opts: {
       return
     }
 
-    const isPack = !itemType.startsWith('plan_')
-    let description: string
-    let montantTTC: number
-    let type: 'subscription' | 'token_pack'
-    if (isPack) {
-      const { data: packDB } = await db
-        .from('token_packs')
-        .select('prix_eur, nom, quantite_jetons')
-        .eq('id', itemType)
-        .eq('actif', true)
-        .maybeSingle()
-      description = packDB ? `${packDB.nom} – ${packDB.quantite_jetons} jetons` : 'Pack jetons NoX VTC'
-      montantTTC  = packDB?.prix_eur ?? 0
-      type = 'token_pack'
-    } else {
-      const plan = getPlan(itemType)
-      description = plan?.description ?? 'Abonnement NoX VTC'
-      montantTTC  = plan?.price ?? 0
-      type = 'subscription'
-    }
+    const { data: packDB } = await db
+      .from('token_packs')
+      .select('prix_eur, nom, quantite_jetons')
+      .eq('id', itemType)
+      .eq('actif', true)
+      .maybeSingle()
+    const description: string = packDB ? `${packDB.nom} – ${packDB.quantite_jetons} jetons` : 'Pack jetons NoX VTC'
+    const montantTTC: number  = packDB?.prix_eur ?? 0
+    const type: 'token_pack'  = 'token_pack'
 
     if (montantTTC <= 0) {
       console.log('[saas-invoice] PayPal — montant 0, pas de facture')
@@ -107,6 +95,10 @@ async function handleSaasInvoicePaypal(opts: {
 async function processCapture(orderID: string, itemType: string, userId: string) {
   const parsed = schema.safeParse({ orderID, itemType, userId })
   if (!parsed.success) return { error: 'Paramètres invalides', status: 400 }
+
+  if (itemType === 'plan_duo' || itemType === 'plan_team') {
+    return { error: 'Utilisez /api/paypal/create-subscription pour les abonnements', status: 400 }
+  }
 
   try {
     await capturePayPalOrder(orderID)
@@ -168,42 +160,7 @@ async function processCapture(orderID: string, itemType: string, userId: string)
     return { redirectUrl: `/payment/success?type=token_pack&amount=${tokens}&before=${balanceBefore}&after=${balanceAfter}` }
   }
 
-  // Subscription
-  const plan = itemType === 'plan_duo' ? 'DUO' : 'TEAM'
-
-  const { data: existing } = await db
-    .from('subscriptions')
-    .select('id')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-
-  if (existing) {
-    await db
-      .from('subscriptions')
-      .update({ plan, status: 'active', payment_provider: 'paypal', current_period_end: periodEnd })
-      .eq('id', (existing as { id: string }).id)
-  } else {
-    await db.from('subscriptions').insert({
-      user_id:              userId,
-      plan,
-      target_plan:          'solo',
-      status:               'active',
-      payment_provider:     'paypal',
-      current_period_start: new Date().toISOString(),
-      current_period_end:   periodEnd,
-    })
-  }
-
-  await db.from('user_accounts').update({ plan }).eq('id', userId)
-
-  await handleSaasInvoicePaypal({ userId, itemType, orderID })
-
-  const validUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-  return { redirectUrl: `/payment/success?type=subscription&plan=${plan}&valid_until=${validUntil}` }
+  return { error: 'Item inconnu', status: 400 }
 }
 
 export async function GET(req: NextRequest) {

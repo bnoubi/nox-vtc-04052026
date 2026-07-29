@@ -1,20 +1,18 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Shield, Crown } from "lucide-react"
-import { getPlan } from "@/lib/config/prices"
+import { getSubscriptionPlansAction } from "@/lib/actions/subscription-plans"
 
 function fmtPrice(n: number) {
-  return n.toFixed(2).replace('.', ',') + '€/mois'
+  return n.toFixed(2).replace('.', ',') + '\u20ac/mois'
 }
-
-const PRO_PRICE_LABEL = fmtPrice(getPlan('plan_duo')?.price ?? 4.99)
-const PREMIUM_PRICE_LABEL = fmtPrice(getPlan('plan_team')?.price ?? 9.99)
 
 interface LimitAlertModalProps {
   open: boolean
   onClose: () => void
-  /** "chauffeur" | "véhicule" */
+  /** "chauffeur" | "vehicule" */
   resourceLabel: string
   onManageOffer: () => void
   customMessage?: string
@@ -25,7 +23,19 @@ interface LimitAlertModalProps {
 
 export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer, customMessage, customTitle, onUpgradePro, onUpgradePremium }: LimitAlertModalProps) {
   const hasDualButtons = onUpgradePro && onUpgradePremium
-  const displayMessage = customMessage?.replace(/^🔒\s*/, "") ?? `Vous avez atteint la limite d'ajout de ${resourceLabel} pour votre offre actuelle. Passez à une offre supérieure pour continuer.`
+  const displayMessage = customMessage?.replace(/^\u{1F512}\s*/u, "") ?? `Vous avez atteint la limite d'ajout de ${resourceLabel} pour votre offre actuelle. Passez a une offre superieure pour continuer.`
+
+  const [proPriceLabel, setProPriceLabel] = useState(fmtPrice(4.99))
+  const [premiumPriceLabel, setPremiumPriceLabel] = useState(fmtPrice(9.99))
+
+  useEffect(() => {
+    getSubscriptionPlansAction().then(plans => {
+      const duo = plans.find(p => p.code === 'DUO')
+      const team = plans.find(p => p.code === 'TEAM')
+      if (duo) setProPriceLabel(fmtPrice(duo.price_per_month))
+      if (team) setPremiumPriceLabel(fmtPrice(team.price_per_month))
+    })
+  }, [])
 
   return (
     <AnimatePresence>
@@ -56,7 +66,7 @@ export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer, c
               <X className="h-4 w-4 text-[#D4AF37]" strokeWidth={2.5} />
             </button>
 
-            {/* Shield Icon — masqué quand customTitle contient déjà un emoji */}
+            {/* Shield Icon - masque quand customTitle contient deja un emoji */}
             {!customTitle && (
               <div className="flex justify-center mb-4 mt-1">
                 <div className="w-12 h-12 rounded-full bg-gradient-to-b from-[#D4AF37]/25 to-[#D4AF37]/5 border border-[#D4AF37]/40 flex items-center justify-center shadow-[0_0_25px_rgba(212,175,55,0.25)]">
@@ -84,7 +94,7 @@ export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer, c
                 >
                   <Crown className="h-3.5 w-3.5 text-[#D4AF37]" strokeWidth={2} />
                   <span className="text-xs font-bold text-[#D4AF37] tracking-wider uppercase">Pro</span>
-                  <span className="text-[10px] text-[#D4AF37]/70">{PRO_PRICE_LABEL}</span>
+                  <span className="text-[10px] text-[#D4AF37]/70">{proPriceLabel}</span>
                 </button>
                 <button
                   onClick={() => { onClose(); onUpgradePremium() }}
@@ -92,7 +102,7 @@ export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer, c
                 >
                   <Crown className="h-3.5 w-3.5 text-[#1A1A1A]" strokeWidth={2} />
                   <span className="text-xs font-bold text-[#1A1A1A] tracking-wider uppercase">Premium</span>
-                  <span className="text-[10px] text-[#1A1A1A]/70">{PREMIUM_PRICE_LABEL}</span>
+                  <span className="text-[10px] text-[#1A1A1A]/70">{premiumPriceLabel}</span>
                 </button>
               </div>
             ) : (

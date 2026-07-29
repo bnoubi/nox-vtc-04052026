@@ -1,4 +1,5 @@
 import { SubscriptionsTable } from './_components/subscriptions-table'
+import { SubscriptionPlansManager } from './_components/subscription-plans-manager'
 
 export default function SubscriptionsPage() {
   return (
@@ -11,6 +12,7 @@ export default function SubscriptionsPage() {
           Gestion des abonnements actifs sur NoX VTC
         </p>
       </div>
+      <SubscriptionPlansManager />
       <SubscriptionsTable />
     </div>
   )

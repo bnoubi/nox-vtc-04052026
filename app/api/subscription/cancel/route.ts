@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { stripe } from '@/lib/stripe/client'
+import { cancelPayPalSubscription } from '@/lib/paypal/subscriptions'
 import { sendEmail } from '@/lib/email/resend'
 import { subscriptionCancelledEmail } from '@/emails/subscription-cancelled'
 import { planLabel } from '@/lib/plans'
@@ -47,7 +48,6 @@ export async function POST(_req: NextRequest) {
   const periodEndIsValid = s.current_period_end && new Date(s.current_period_end).getTime() > Date.now()
   const cancelAt = periodEndIsValid ? s.current_period_end! : fallbackEnd
 
-  // Stripe : programmer l'annulation en fin de période
   if (s.payment_provider === 'stripe' && s.stripe_subscription_id) {
     try {
       await stripe.subscriptions.update(s.stripe_subscription_id, { cancel_at_period_end: true })
@@ -55,6 +55,28 @@ export async function POST(_req: NextRequest) {
     } catch (err) {
       console.error('[subscription/cancel] Stripe update error:', err)
       return NextResponse.json({ error: 'Erreur lors de la communication avec Stripe' }, { status: 500 })
+    }
+  }
+
+  if (s.payment_provider === 'paypal') {
+    const { data: paypalSub } = await db
+      .from('paypal_subscriptions')
+      .select('paypal_subscription_id')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const ppSubId = (paypalSub as { paypal_subscription_id: string } | null)?.paypal_subscription_id
+    if (ppSubId) {
+      try {
+        await cancelPayPalSubscription(ppSubId, 'Résiliation demandée par l\'utilisateur')
+        console.log('[subscription/cancel] PayPal subscription cancelled — ppSubId:', ppSubId)
+      } catch (err) {
+        console.error('[subscription/cancel] PayPal cancel error:', err)
+        return NextResponse.json({ error: 'Erreur lors de la communication avec PayPal' }, { status: 500 })
+      }
     }
   }
 

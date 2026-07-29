@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getPayPalAccessToken } from '@/lib/paypal/client'
-import { getPlan } from '@/lib/config/prices'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 
@@ -30,15 +29,18 @@ export async function POST(req: NextRequest) {
   }
 
   const { itemType, userId } = parsed.data
-  
-  const plan = getPlan(itemType)
+
+  if (itemType === 'plan_duo' || itemType === 'plan_team') {
+    return NextResponse.json(
+      { error: 'Utilisez /api/paypal/create-subscription pour les abonnements' },
+      { status: 400 },
+    )
+  }
+
   let price: number
   let description: string
 
-  if (plan) {
-    price = plan.price
-    description = plan.description
-  } else {
+  {
     const db = createAdminClient()
     const { data: packDB } = await db
       .from('token_packs')
@@ -53,6 +55,7 @@ export async function POST(req: NextRequest) {
     price = packDB.prix_eur
     description = `${packDB.nom} – ${packDB.quantite_jetons} jetons`
   }
+
 
   const returnUrl = `${APP_BASE}/api/paypal/capture-order?userId=${userId}&itemType=${itemType}`
   const cancelUrl = `${APP_BASE}/?cancelled=1`
