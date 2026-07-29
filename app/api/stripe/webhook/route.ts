@@ -7,36 +7,23 @@ import { saasInvoiceEmail } from '@/emails/saas-invoice'
 import { subscriptionExpiredEmail } from '@/emails/subscription-expired'
 import { sendEmail } from '@/lib/email/resend'
 
-// Mapping priceId Stripe → nb de jetons. Deux conventions de noms d'env
-// coexistent (lib/config/prices.ts utilise PACK_5/15/25 ; le webhook
-// historique utilisait DECOUVERTE/PRIVILEGE/PRESTIGE). On lit les deux,
-// chaque variable définie ajoute une entrée — pas de collision sur ''
-// puisqu'on ne pousse que des valeurs non-vides.
+// Legacy mapping: price IDs d'env → nb jetons. Deux conventions de noms coexistent
+// (PACK_5/15/25 et DECOUVERTE/PRIVILEGE/PRESTIGE). Conservé comme fallback pour les
+// sessions créées avant que token_packs ne soit introduit en base.
 function buildTokenAmounts(): Record<string, number> {
   const map: Record<string, number> = {}
   const add = (priceId: string | undefined, tokens: number) => {
     if (priceId && priceId.trim()) map[priceId] = tokens
   }
-  // Convention historique (legacy)
   add(process.env.STRIPE_PRICE_PACK_DECOUVERTE, 10)
   add(process.env.STRIPE_PRICE_PACK_PRIVILEGE,  30)
   add(process.env.STRIPE_PRICE_PACK_PRESTIGE,   50)
-  // Convention actuelle (lib/config/prices.ts)
   add(process.env.STRIPE_PRICE_PACK_5,  10)
   add(process.env.STRIPE_PRICE_PACK_15, 30)
   add(process.env.STRIPE_PRICE_PACK_25, 50)
   return map
 }
 const TOKEN_AMOUNTS: Record<string, number> = buildTokenAmounts()
-
-function resolvePlan(priceId: string): string {
-  const duo  = process.env.STRIPE_PRICE_DUO  ?? ''
-  const team = process.env.STRIPE_PRICE_TEAM ?? ''
-  console.log('[webhook] resolvePlan — priceId:', priceId, '| STRIPE_PRICE_DUO:', duo || '(empty)', '| STRIPE_PRICE_TEAM:', team || '(empty)')
-  if (duo  && priceId === duo)  return 'DUO'
-  if (team && priceId === team) return 'TEAM'
-  return 'SOLO'
-}
 
 function makeAdminDb() {
   return createServerClient(
@@ -46,25 +33,79 @@ function makeAdminDb() {
   )
 }
 
-async function creditTokens(userId: string, priceId: string, paymentIntentId: string | null) {
+async function getTokenPackByItemType(itemType: string): Promise<{ quantite_jetons: number; nom: string } | null> {
+  const db = makeAdminDb()
+  const { data, error } = await db
+    .from('token_packs')
+    .select('quantite_jetons, nom')
+    .eq('id', itemType)
+    .maybeSingle()
+  if (error) {
+    console.error('[getTokenPackByItemType] DB error:', error)
+    return null
+  }
+  return data
+}
+
+async function resolvePlanFromDb(priceId: string): Promise<string> {
+  const db = makeAdminDb()
+  const { data, error } = await db
+    .from('subscription_plans')
+    .select('code')
+    .eq('stripe_price_id', priceId)
+    .eq('active', true)
+    .maybeSingle()
+  if (error) {
+    console.error('[resolvePlanFromDb] DB error:', error)
+  }
+  if (data?.code) {
+    console.log('[webhook] resolvePlanFromDb — priceId:', priceId, '→ plan DB:', data.code)
+    return data.code
+  }
+  // Fallback env vars — couvre DUO/TEAM actuels tant que leur prix n'a pas été modifié
+  const duo  = process.env.STRIPE_PRICE_DUO  ?? ''
+  const team = process.env.STRIPE_PRICE_TEAM ?? ''
+  console.log('[webhook] resolvePlanFromDb — pas de correspondance DB, fallback env | priceId:', priceId, '| STRIPE_PRICE_DUO:', duo || '(empty)', '| STRIPE_PRICE_TEAM:', team || '(empty)')
+  if (duo  && priceId === duo)  return 'DUO'
+  if (team && priceId === team) return 'TEAM'
+  console.error('[CRITICAL] resolvePlanFromDb — aucune correspondance DB ni env pour priceId:', priceId, '— défaut SOLO')
+  return 'SOLO'
+}
+
+async function creditTokens(userId: string, priceId: string, paymentIntentId: string | null, itemType?: string) {
   // Bloc entier sous try/catch — un crash ici redémarrait PM2 sur chaque
   // checkout token pack (logs vides après "checkout.session.completed").
-  // On loggue chaque étape pour qu'un futur incident soit diagnostiquable.
-  console.log('[creditTokens] called — userId:', userId, '| priceId:', priceId, '| paymentIntentId:', paymentIntentId)
+  console.log('[creditTokens] called — userId:', userId, '| priceId:', priceId, '| paymentIntentId:', paymentIntentId, '| itemType:', itemType ?? '(absent)')
   try {
-    const tokens = TOKEN_AMOUNTS[priceId]
-    if (!tokens) {
-      console.error('[creditTokens] unknown priceId:', priceId,
-        '| TOKEN_AMOUNTS keys:', Object.keys(TOKEN_AMOUNTS).length ? Object.keys(TOKEN_AMOUNTS) : '(empty — vérifier STRIPE_PRICE_PACK_* dans .env.local)')
-      return
+    let tokens: number | undefined
+
+    // Chemin principal : lookup DB via itemType (UUID stable, résiste aux changements de prix)
+    if (itemType) {
+      const pack = await getTokenPackByItemType(itemType)
+      if (pack) {
+        tokens = pack.quantite_jetons
+        console.log('[creditTokens] pack DB trouvé — nom:', pack.nom, '| quantite_jetons:', tokens)
+      } else {
+        console.error('[CRITICAL] creditTokens — itemType présent mais aucun pack trouvé en DB:', itemType, '— tentative fallback TOKEN_AMOUNTS')
+      }
     }
-    console.log('[creditTokens] TOKEN_AMOUNTS resolved:', tokens, 'tokens')
+
+    // Fallback : TOKEN_AMOUNTS legacy (price IDs d'env, sessions antérieures à token_packs)
+    if (tokens === undefined) {
+      tokens = TOKEN_AMOUNTS[priceId]
+      if (tokens !== undefined) {
+        console.log('[creditTokens] FALLBACK TOKEN_AMOUNTS — priceId:', priceId, '| tokens:', tokens)
+      } else {
+        console.error('[CRITICAL] creditTokens — pack introuvable en DB et dans TOKEN_AMOUNTS — aucun crédit possible',
+          '| userId:', userId, '| priceId:', priceId, '| itemType:', itemType ?? '(absent)',
+          '| TOKEN_AMOUNTS keys:', Object.keys(TOKEN_AMOUNTS).length ? Object.keys(TOKEN_AMOUNTS) : '(empty — vérifier STRIPE_PRICE_PACK_* dans .env.local)')
+        return
+      }
+    }
 
     const db = makeAdminDb()
 
-    // Idempotence : si Stripe rejoue le webhook (retry après timeout), on
-    // refuse de re-créditer. paymentIntentId == null = cas legacy/anormal,
-    // on insère sans garantie d'unicité plutôt que d'échouer.
+    // Idempotence : refuse de re-créditer si Stripe rejoue le webhook (retry après timeout)
     if (paymentIntentId) {
       const { data: existingTx, error: dupErr } = await db
         .from('token_transactions')
@@ -89,8 +130,7 @@ async function creditTokens(userId: string, priceId: string, paymentIntentId: st
       return
     }
     const w = wallet as { id: string; balance: number } | null
-    console.log('[creditTokens] wallet fetched:',
-      w ? `id=${w.id} balance=${w.balance}` : 'not found')
+    console.log('[creditTokens] wallet fetched:', w ? `id=${w.id} balance=${w.balance}` : 'not found')
 
     let walletId: string | null = null
     let balanceAfter: number
@@ -109,8 +149,7 @@ async function creditTokens(userId: string, priceId: string, paymentIntentId: st
       console.log('[creditTokens] wallet updated — new balance:', balanceAfter)
     } else {
       balanceAfter = tokens
-      // maybeSingle (et non single) : ne throw pas si l'INSERT ne retourne
-      // pas de row (RLS, conflit silencieux), on traite l'erreur explicitement.
+      // maybeSingle (pas single) : ne throw pas si l'INSERT ne retourne pas de row (RLS, conflit silencieux)
       const { data: newWallet, error: insErr } = await db
         .from('wallets')
         .insert({ user_id: userId, balance: tokens })
@@ -139,16 +178,12 @@ async function creditTokens(userId: string, priceId: string, paymentIntentId: st
     }
     console.log('[creditTokens] OK — total balance après crédit:', balanceAfter)
   } catch (err) {
-    // Filet final : toute exception non prévue (réseau, JSON, etc.) est
-    // capturée ici — le webhook continue son cycle et Stripe ne re-tente pas
-    // en boucle après le 200 retourné par le POST handler.
-    console.error('[creditTokens] CRASH caught:',
-      err instanceof Error ? `${err.message}\n${err.stack}` : err)
+    console.error('[creditTokens] CRASH caught:', err instanceof Error ? `${err.message}\n${err.stack}` : err)
   }
 }
 
 async function upsertSubscription(userId: string, priceId: string, status: string, stripeSubId: string) {
-  const plan = resolvePlan(priceId)
+  const plan = await resolvePlanFromDb(priceId)
   console.log('[webhook] upsertSubscription — userId:', userId, '| priceId:', priceId, '| plan résolu:', plan, '| status:', status, '| stripeSubId:', stripeSubId)
 
   const db = makeAdminDb()
@@ -196,7 +231,7 @@ async function upsertSubscription(userId: string, priceId: string, status: strin
   }
 }
 
-function buildInvoiceDescription(priceId: string, mode: 'payment' | 'subscription'): string {
+async function buildInvoiceDescription(priceId: string, mode: 'payment' | 'subscription'): Promise<string> {
   if (mode === 'payment') {
     const pack5  = process.env.STRIPE_PRICE_PACK_5
     const pack15 = process.env.STRIPE_PRICE_PACK_15
@@ -209,7 +244,7 @@ function buildInvoiceDescription(priceId: string, mode: 'payment' | 'subscriptio
     if ((pack25 && priceId === pack25) || (packPr && priceId === packPr)) return 'Pack Prestige — 50 jetons'
     return 'Pack jetons NoX VTC'
   }
-  const plan = resolvePlan(priceId)
+  const plan = await resolvePlanFromDb(priceId)
   if (plan === 'DUO') return 'Offre Pro — abonnement mensuel'
   if (plan === 'TEAM') return 'Offre Premium — abonnement mensuel'
   return 'Abonnement NoX VTC'
@@ -247,7 +282,7 @@ async function handleSaasInvoiceStripe(opts: {
       return
     }
 
-    const description = buildInvoiceDescription(priceId, mode)
+    const description = await buildInvoiceDescription(priceId, mode)
     const type: 'subscription' | 'token_pack' = mode === 'payment' ? 'token_pack' : 'subscription'
 
     const { numero, pdfSignedUrl } = await generateAndStoreSaasInvoice({
@@ -299,11 +334,12 @@ export async function POST(req: NextRequest) {
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
-        const session = event.data.object as Stripe.Checkout.Session
-        const userId  = session.metadata?.userId
-        const priceId = session.metadata?.priceId
+        const session  = event.data.object as Stripe.Checkout.Session
+        const userId   = session.metadata?.userId
+        const priceId  = session.metadata?.priceId
+        const itemType = session.metadata?.itemType
 
-        console.log('[webhook] checkout.session.completed — mode:', session.mode, '| userId:', userId, '| priceId:', priceId, '| subscription:', session.subscription ?? 'null')
+        console.log('[webhook] checkout.session.completed — mode:', session.mode, '| userId:', userId, '| priceId:', priceId, '| itemType:', itemType ?? '(absent)', '| subscription:', session.subscription ?? 'null')
 
         if (!userId || !priceId) {
           console.error('[webhook] checkout.session.completed — userId ou priceId manquant dans metadata')
@@ -314,7 +350,7 @@ export async function POST(req: NextRequest) {
           const paymentIntentId = typeof session.payment_intent === 'string'
             ? session.payment_intent
             : session.payment_intent?.id ?? null
-          await creditTokens(userId, priceId, paymentIntentId)
+          await creditTokens(userId, priceId, paymentIntentId, itemType)
           await handleSaasInvoiceStripe({
             userId, priceId, mode: 'payment',
             montantTTC: (session.amount_total ?? 0) / 100,
@@ -397,7 +433,7 @@ export async function POST(req: NextRequest) {
           const acc = account as { email: string; full_name: string } | null
           if (acc?.email) {
             const oldPriceId = sub.items.data[0]?.price.id ?? ''
-            const oldPlan    = resolvePlan(oldPriceId)
+            const oldPlan    = await resolvePlanFromDb(oldPriceId)
             const planName   = oldPlan === 'TEAM' ? 'Premium' : 'Pro'
             const expiredAt  = sub.ended_at
               ? new Date(sub.ended_at * 1000).toISOString()
