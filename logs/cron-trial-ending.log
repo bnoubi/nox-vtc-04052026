@@ -37,4 +37,5 @@ curl: (22) The requested URL returned error: 502
 {"window":{"start":"2026-07-28T00:00:00.000Z","end":"2026-07-29T00:00:00.000Z"},"candidates":1,"sent":1,"failed":0,"raced":0}--- 2026-07-27T09:00:01+00:00 ---
 {"window":{"start":"2026-07-29T00:00:00.000Z","end":"2026-07-30T00:00:00.000Z"},"candidates":0,"sent":0,"failed":0,"raced":0}--- 2026-07-28T09:00:01+00:00 ---
 {"window":{"start":"2026-07-30T00:00:00.000Z","end":"2026-07-31T00:00:00.000Z"},"candidates":0,"sent":0,"failed":0,"raced":0}--- 2026-07-29T09:00:01+00:00 ---
-{"window":{"start":"2026-07-31T00:00:00.000Z","end":"2026-08-01T00:00:00.000Z"},"candidates":0,"sent":0,"failed":0,"raced":0}
+{"window":{"start":"2026-07-31T00:00:00.000Z","end":"2026-08-01T00:00:00.000Z"},"candidates":0,"sent":0,"failed":0,"raced":0}--- 2026-07-30T09:00:01+00:00 ---
+{"window":{"start":"2026-08-01T00:00:00.000Z","end":"2026-08-02T00:00:00.000Z"},"candidates":0,"sent":0,"failed":0,"raced":0}
