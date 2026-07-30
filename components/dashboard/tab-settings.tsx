@@ -63,6 +63,7 @@ import type { Driver, Vehicle, Client, BCDocument, InvoiceDocument, BCStatus, In
 import { AccountSecurityScreen } from "./account-security/AccountSecurityScreen"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 import { usePromo } from "@/lib/hooks/usePromo"
+import { getSubscriptionPlansAction } from "@/lib/actions/subscription-plans"
 import { SupportTicketModal } from "./support-ticket-modal"
 import { getNotifPrefsAction, saveNotifPrefsAction } from "@/app/actions/notifications"
 import type { NotifPrefs } from "@/app/actions/notifications"
@@ -1095,6 +1096,18 @@ function PlansScreen({ onBack }: { onBack: () => void }) {
   const [isCancelling, setIsCancelling] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
   const [subDetails, setSubDetails] = useState<{ cancel_at: string | null; current_period_end: string | null; status: string | null; trial_ends_at: string | null } | null>(null)
+  const [planPrices, setPlanPrices] = useState<{DUO: number, TEAM: number}>({DUO: 4.99, TEAM: 9.99})
+
+  useEffect(() => {
+    getSubscriptionPlansAction().then(plans => {
+      const duo = plans.find(p => p.code === 'DUO')
+      const team = plans.find(p => p.code === 'TEAM')
+      setPlanPrices({
+        DUO: duo?.price_per_month ?? 4.99,
+        TEAM: team?.price_per_month ?? 9.99,
+      })
+    })
+  }, [])
 
   function handleChoose(target: "DUO" | "TEAM") { setTargetPlan(target) }
 
@@ -1161,7 +1174,7 @@ function PlansScreen({ onBack }: { onBack: () => void }) {
       id: "DUO" as const,
       name: "Pro",
       subtitle: "L'offre Binôme",
-      price: 4.99 as number | null,
+      price: planPrices.DUO as number | null,
       priceSuffix: "/mois",
       capacity: `Max ${getPlanLimits("duo").drivers} Chauffeurs / Max ${getPlanLimits("duo").vehicles} Véhicules`,
       features: ["Signature Entreprise incluse", "Documents ILLIMITÉS"],
@@ -1170,7 +1183,7 @@ function PlansScreen({ onBack }: { onBack: () => void }) {
       id: "TEAM" as const,
       name: "Premium",
       subtitle: "L'offre Flotte",
-      price: 9.99 as number | null,
+      price: planPrices.TEAM as number | null,
       priceSuffix: "/mois",
       capacity: `Max ${getPlanLimits("team").drivers} Chauffeurs / Max ${getPlanLimits("team").vehicles} Véhicules`,
       features: ["Signature Entreprise incluse", "Documents ILLIMITÉS", "API & Intégrations", "Statistiques avancées"],
@@ -1403,6 +1416,19 @@ function PlansScreen({ onBack }: { onBack: () => void }) {
 function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => void }) {
   const { plan, upgrade } = useNox()
   const { promo } = usePromo()
+  const [planPrices, setPlanPrices] = useState<{DUO: number, TEAM: number}>({DUO: 4.99, TEAM: 9.99})
+
+  useEffect(() => {
+    getSubscriptionPlansAction().then(plans => {
+      const duo = plans.find(p => p.code === 'DUO')
+      const team = plans.find(p => p.code === 'TEAM')
+      setPlanPrices({
+        DUO: duo?.price_per_month ?? 4.99,
+        TEAM: team?.price_per_month ?? 9.99,
+      })
+    })
+  }, [])
+
   const limitLabel = type === "driver" ? "chauffeurs" : "vehicules"
   const currentLimit = plan === "SOLO" ? SOLO_LIMIT : DUO_LIMIT
   return (
@@ -1439,11 +1465,11 @@ function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => voi
             <span className="text-[11px] font-bold">Pro</span>
             {plan === "SOLO" && promo.active ? (
               <>
-                <span className="text-[9px] text-gold/50 line-through">4,99€/mois</span>
-                <span className="text-[10px] text-gold font-bold">{(Math.floor(4.99 * (1 - promo.percent / 100) * 100) / 100).toFixed(2).replace('.', ',')}€</span>
+                <span className="text-[9px] text-gold/50 line-through">{`${planPrices.DUO.toFixed(2).replace('.', ',')}€/mois`}</span>
+                <span className="text-[10px] text-gold font-bold">{(Math.floor(planPrices.DUO * (1 - promo.percent / 100) * 100) / 100).toFixed(2).replace('.', ',')}€</span>
               </>
             ) : (
-              <span className="text-[10px] text-gold/70 font-medium">4,99€/mois</span>
+              <span className="text-[10px] text-gold/70 font-medium">{`${planPrices.DUO.toFixed(2).replace('.', ',')}€/mois`}</span>
             )}
           </button>
           <button onClick={() => upgrade("TEAM")} className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-2xl bg-gold text-primary-foreground hover:bg-gold-light active:scale-[0.97] transition-all gold-glow">
@@ -1451,11 +1477,11 @@ function LockedSlot({ type }: { type: "driver" | "vehicle"; onUpgrade: () => voi
             <span className="text-[11px] font-bold">Premium</span>
             {plan === "SOLO" && promo.active ? (
               <>
-                <span className="text-[9px] text-primary-foreground/40 line-through">9,99€/mois</span>
-                <span className="text-[10px] text-primary-foreground font-bold">{(Math.floor(9.99 * (1 - promo.percent / 100) * 100) / 100).toFixed(2).replace('.', ',')}€</span>
+                <span className="text-[9px] text-primary-foreground/40 line-through">{`${planPrices.TEAM.toFixed(2).replace('.', ',')}€/mois`}</span>
+                <span className="text-[10px] text-primary-foreground font-bold">{(Math.floor(planPrices.TEAM * (1 - promo.percent / 100) * 100) / 100).toFixed(2).replace('.', ',')}€</span>
               </>
             ) : (
-              <span className="text-[10px] text-primary-foreground/70 font-medium">9,99€/mois</span>
+              <span className="text-[10px] text-primary-foreground/70 font-medium">{`${planPrices.TEAM.toFixed(2).replace('.', ',')}€/mois`}</span>
             )}
           </button>
         </div>
