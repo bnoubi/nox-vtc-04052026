@@ -10,7 +10,7 @@ import { WalletDrawer } from "./wallet-drawer"
 
 export function PromoModal() {
   const { shouldShow, scenario, promo, dismiss } = usePromoModal()
-  const { plan } = useNox()
+  const { plan, tokens } = useNox()
   const [subDrawerOpen,    setSubDrawerOpen]    = useState(false)
   const [walletDrawerOpen, setWalletDrawerOpen] = useState(false)
 
@@ -116,7 +116,7 @@ export function PromoModal() {
                 ) : (
                   <>
                     <p className="text-[13px] text-[#A1A1AA] leading-relaxed">
-                      Votre solde de jetons est bas. Chaque jeton vous permet de générer une facture. Rechargez maintenant pour continuer à facturer sans interruption.
+                      Votre solde est bas ({tokens} {tokens === 1 ? 'jeton' : 'jetons'}). Chaque jeton vous permet de générer des bons de commande et des factures. Rechargez maintenant pour continuer sans interruption.
                     </p>
                     <button
                       onClick={handleCTA}
