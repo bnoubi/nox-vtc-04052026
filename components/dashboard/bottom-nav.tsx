@@ -34,7 +34,7 @@ const navItems: NavItem[] = [
   },
   {
     icon: <Settings className="h-5 w-5" strokeWidth={1.5} />,
-    label: "Réglages",
+    label: "Paramètres\n& Offres",
     id: "settings",
   },
 ]
