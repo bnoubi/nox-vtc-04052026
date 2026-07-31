@@ -184,7 +184,7 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
             </div>
 
             {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto overscroll-contain px-5 pb-10">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 pb-28">
 
               {/* Vitrine : deux plans côte à côte */}
               {!activePlan && (
