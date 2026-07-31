@@ -325,7 +325,7 @@ export function DashboardHeader() {
       </div>
 
       <WalletDrawer open={walletOpen} onClose={() => setWalletOpen(false)} />
-      <SubscriptionDrawer open={subDrawerOpen} targetPlan="DUO" onClose={() => setSubDrawerOpen(false)} />
+      <SubscriptionDrawer open={subDrawerOpen} targetPlan={null} onClose={() => setSubDrawerOpen(false)} />
     </header>
   )
 }
