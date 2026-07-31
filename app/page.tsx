@@ -17,6 +17,7 @@ import { Toaster } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 
 import { NoxProvider, useNox } from "@/components/dashboard/nox-context"
+import { PromoModal } from "@/components/dashboard/promo-modal"
 import { AlertTriangle } from "lucide-react"
 import { checkIsAdmin } from "@/app/admin/actions"
 import { ADMIN_URL } from "@/lib/admin-url"
@@ -188,6 +189,7 @@ function AppPage() {
 
             <SecurityBadge />
             <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+            <PromoModal />
             <Toaster
               position="top-center"
               toastOptions={{

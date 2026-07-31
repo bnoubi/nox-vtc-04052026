@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 
-interface PromoConfig {
+export interface PromoConfig {
   active: boolean
   percent: number
   couponId: string
+  tokensActive: boolean
 }
 
 export function usePromo() {
@@ -11,6 +12,7 @@ export function usePromo() {
     active: false,
     percent: 0,
     couponId: '',
+    tokensActive: false,
   })
   const [loading, setLoading] = useState(true)
 
