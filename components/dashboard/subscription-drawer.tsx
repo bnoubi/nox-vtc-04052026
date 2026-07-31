@@ -49,6 +49,9 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
   const { promo } = usePromo()
   const [payState, setPayState] = useState<PayState>("idle")
   const [planPrices, setPlanPrices] = useState<Record<"DUO" | "TEAM", number>>(DEFAULT_PRICES)
+  const [activePlan, setActivePlan] = useState<"DUO" | "TEAM" | null>(targetPlan)
+
+  useEffect(() => { setActivePlan(targetPlan) }, [targetPlan])
 
   useEffect(() => {
     getSubscriptionPlansAction()
@@ -63,22 +66,22 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
       .catch(() => { /* garder les valeurs par defaut */ })
   }, [])
 
-  const planInfo    = targetPlan ? PLAN_DETAILS[targetPlan] : null
-  const originalPrice = targetPlan ? planPrices[targetPlan] : 0
+  const planInfo    = activePlan ? PLAN_DETAILS[activePlan] : null
+  const originalPrice = activePlan ? planPrices[activePlan] : 0
   const formattedPrice = originalPrice.toFixed(2).replace('.', ',')
   const promoPrice  = promo.active
     ? (Math.floor(originalPrice * (1 - promo.percent / 100) * 100) / 100).toFixed(2).replace('.', ',')
     : null
 
   async function handlePay() {
-    if (payState !== "idle" || !targetPlan || !userId) return
+    if (payState !== "idle" || !activePlan || !userId) return
 
     setPayState("loading")
     try {
       const origin = window.location.origin
-      const itemType = targetPlan === "DUO" ? "plan_duo" : "plan_team"
+      const itemType = activePlan === "DUO" ? "plan_duo" : "plan_team"
       const validUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-      const successUrl = `${origin}/payment/success?type=subscription&plan=${targetPlan}&valid_until=${validUntil}`
+      const successUrl = `${origin}/payment/success?type=subscription&plan=${activePlan}&valid_until=${validUntil}`
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -98,11 +101,11 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
   }
 
   async function handlePayPal() {
-    if (payState !== "idle" || !targetPlan || !userId) return
+    if (payState !== "idle" || !activePlan || !userId) return
 
     setPayState("loading")
     try {
-      const itemType = targetPlan === "DUO" ? "plan_duo" : "plan_team"
+      const itemType = activePlan === "DUO" ? "plan_duo" : "plan_team"
       const res = await fetch("/api/paypal/create-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,12 +122,11 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
   function handleClose() {
     if (payState === "loading") return
     setPayState("idle")
+    setActivePlan(targetPlan)
     onClose()
   }
 
-  if (!planInfo) return null
-
-  const isTeamPlan = targetPlan === "TEAM"
+  const isTeamPlan = activePlan === "TEAM"
 
   return (
     <AnimatePresence>
@@ -153,11 +155,24 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
 
             {/* Header */}
             <div className="flex items-center justify-between px-5 pb-4 shrink-0">
-              <div>
-                <h2 className="text-base font-bold tracking-wide text-[#D4AF37]">
-                  ACTIVER L&apos;OFFRE {planInfo.name}
-                </h2>
-                <p className="text-[11px] text-[#A1A1AA] mt-0.5">{planInfo.subtitle}</p>
+              <div className="flex items-center gap-2">
+                {activePlan && !targetPlan && (
+                  <button
+                    onClick={() => { setActivePlan(null); setPayState("idle") }}
+                    className="w-7 h-7 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 flex items-center justify-center hover:bg-[#D4AF37]/20 transition-colors mr-1"
+                    aria-label="Retour"
+                  >
+                    <svg className="h-3.5 w-3.5 text-[#D4AF37]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+                  </button>
+                )}
+                <div>
+                  <h2 className="text-base font-bold tracking-wide text-[#D4AF37]">
+                    {activePlan ? `ACTIVER L'OFFRE ${planInfo!.name}` : 'DÉCOUVRIR LES ABONNEMENTS'}
+                  </h2>
+                  <p className="text-[11px] text-[#A1A1AA] mt-0.5">
+                    {activePlan ? planInfo!.subtitle : "Choisissez l’offre adaptée à votre activité"}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={handleClose}
@@ -171,7 +186,80 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
             {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto overscroll-contain px-5 pb-10">
 
-              {/* Plan Summary Card */}
+              {/* Vitrine : deux plans côte à côte */}
+              {!activePlan && (
+                <div className="flex flex-col gap-4 mb-2">
+                  {(['DUO', 'TEAM'] as const).map(planKey => {
+                    const info = PLAN_DETAILS[planKey]
+                    const price = planPrices[planKey]
+                    const isTeam = planKey === 'TEAM'
+                    const promoP = promo.active
+                      ? (Math.floor(price * (1 - promo.percent / 100) * 100) / 100).toFixed(2).replace('.', ',')
+                      : null
+                    return (
+                      <div key={planKey} className={cn(
+                        "p-5 rounded-2xl border",
+                        isTeam
+                          ? "bg-gradient-to-br from-[#D4AF37]/15 via-[#D4AF37]/5 to-transparent border-[#D4AF37]/40"
+                          : "bg-[#D4AF37]/10 border-[#D4AF37]/30"
+                      )}>
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-10 h-10 rounded-xl flex items-center justify-center",
+                              isTeam ? "bg-[#D4AF37]/20 border border-[#D4AF37]/40" : "bg-[#D4AF37]/15 border border-[#D4AF37]/25"
+                            )}>
+                              <Crown className="h-5 w-5 text-[#D4AF37]" strokeWidth={1.5} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-[#D4AF37]">{info.name}</p>
+                              <p className="text-[10px] text-[#A1A1AA]">{info.subtitle}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            {promo.active && (
+                              <p className="text-[10px] text-[#A1A1AA] line-through">{price.toFixed(2).replace('.', ',')}€</p>
+                            )}
+                            <p className="text-lg font-bold text-[#D4AF37]">
+                              {promo.active ? `${promoP}€` : `${price.toFixed(2).replace('.', ',')}€`}
+                            </p>
+                            <p className="text-[9px] text-[#A1A1AA]">/mois</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2 mb-4">
+                          {info.bulletPoints.map((point, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <div className={cn(
+                                "w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5",
+                                point.highlight ? "bg-[#D4AF37]" : "bg-[#D4AF37]/15 border border-[#D4AF37]/30"
+                              )}>
+                                <CheckCircle2 className={cn("h-2.5 w-2.5", point.highlight ? "text-[#0E0E0E]" : "text-[#D4AF37]")} strokeWidth={2.5} />
+                              </div>
+                              <span className={cn("text-[12px] leading-relaxed", point.highlight ? "font-semibold text-[#D4AF37]" : "text-[#F5F5F5]")}>
+                                {point.text}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setActivePlan(planKey)}
+                          className={cn(
+                            "w-full py-2.5 rounded-xl text-[13px] font-bold transition-all active:scale-[0.98]",
+                            isTeam
+                              ? "bg-[#D4AF37] text-[#0E0E0E] hover:bg-[#C4A030]"
+                              : "border border-[#D4AF37]/50 text-[#D4AF37] hover:bg-[#D4AF37]/10"
+                          )}
+                        >
+                          Choisir {info.name}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Checkout : affiché uniquement quand un plan est sélectionné */}
+              {activePlan && (<>
               <div className={cn(
                 "p-5 rounded-2xl border mb-5",
                 isTeamPlan
@@ -336,6 +424,7 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
                 <ShieldCheck className="h-3.5 w-3.5 text-[#D4AF37]/60" strokeWidth={1.5} />
                 <span className="text-[10px] text-[#A1A1AA]/70">Transactions sécurisées par cryptage SSL</span>
               </div>
+              </>)}
             </div>
           </motion.div>
         </motion.div>
