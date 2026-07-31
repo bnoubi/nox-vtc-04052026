@@ -19,7 +19,7 @@ const navItems: NavItem[] = [
   },
   {
     icon: <Calendar className="h-5 w-5" strokeWidth={1.5} />,
-    label: "Calendrier",
+    label: "Calendrier\ndes courses",
     id: "calendar",
   },
   {
@@ -29,7 +29,7 @@ const navItems: NavItem[] = [
   },
   {
     icon: <Users className="h-5 w-5" strokeWidth={1.5} />,
-    label: "Clients",
+    label: "Clients\n& Sociétés",
     id: "clients",
   },
   {
@@ -42,9 +42,13 @@ const navItems: NavItem[] = [
 interface BottomNavProps {
   activeTab: TabId
   onTabChange: (id: TabId) => void
+  // TODO: brancher sur le système de promo ciblée par segment (post-launch, backlog point 3)
+  // Passer hasOffer=true depuis le parent quand une offre est dispo pour l'utilisateur connecté.
+  // La pastille disparaît quand le parent reçoit onTabChange("settings") et remet hasOffer à false.
+  hasOffer?: boolean
 }
 
-export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
+export function BottomNav({ activeTab, onTabChange, hasOffer = false }: BottomNavProps) {
   return (
     <>
       <div className="fixed bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none z-40" />
@@ -67,11 +71,14 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
                 >
                   <div
                     className={cn(
-                      "transition-all duration-200",
+                      "relative transition-all duration-200",
                       isActive && "gold-glow-sm rounded-lg p-1 -m-1",
                     )}
                   >
                     {item.icon}
+                    {item.id === "settings" && hasOffer && (
+                      <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-[#D4AF37] shadow-[0_0_6px_rgba(212,175,55,0.8)]" />
+                    )}
                   </div>
                   <span
                     className={cn(
