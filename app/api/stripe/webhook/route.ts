@@ -231,8 +231,15 @@ async function upsertSubscription(userId: string, priceId: string, status: strin
   }
 }
 
-async function buildInvoiceDescription(priceId: string, mode: 'payment' | 'subscription'): Promise<string> {
+async function buildInvoiceDescription(priceId: string, mode: 'payment' | 'subscription', itemType?: string): Promise<string> {
   if (mode === 'payment') {
+    // Chemin DB via itemType (UUID stable, résiste aux changements de prix admin)
+    if (itemType) {
+      const db = makeAdminDb()
+      const { data } = await db.from('token_packs').select('nom, quantite_jetons').eq('id', itemType).maybeSingle()
+      if (data) return `${data.nom} — ${data.quantite_jetons} jetons`
+    }
+    // Fallback env vars pour les sessions legacy (Price IDs d'origine)
     const pack5  = process.env.STRIPE_PRICE_PACK_5
     const pack15 = process.env.STRIPE_PRICE_PACK_15
     const pack25 = process.env.STRIPE_PRICE_PACK_25
@@ -256,9 +263,10 @@ async function handleSaasInvoiceStripe(opts: {
   mode: 'payment' | 'subscription'
   montantTTC: number
   providerReference: string
+  itemType?: string
 }) {
   try {
-    const { userId, priceId, mode, montantTTC, providerReference } = opts
+    const { userId, priceId, mode, montantTTC, providerReference, itemType } = opts
 
     if (montantTTC <= 0) {
       console.log('[saas-invoice] montant 0 — pas de facture générée')
@@ -282,7 +290,7 @@ async function handleSaasInvoiceStripe(opts: {
       return
     }
 
-    const description = await buildInvoiceDescription(priceId, mode)
+    const description = await buildInvoiceDescription(priceId, mode, itemType)
     const type: 'subscription' | 'token_pack' = mode === 'payment' ? 'token_pack' : 'subscription'
 
     const { numero, pdfSignedUrl } = await generateAndStoreSaasInvoice({
@@ -355,6 +363,7 @@ export async function POST(req: NextRequest) {
             userId, priceId, mode: 'payment',
             montantTTC: (session.amount_total ?? 0) / 100,
             providerReference: paymentIntentId ?? `session_${session.id}`,
+            itemType,
           })
         } else if (session.mode === 'subscription') {
           if (!session.subscription) {
