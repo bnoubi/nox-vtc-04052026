@@ -69,6 +69,7 @@ export function DashboardHeader() {
   const [walletOpen, setWalletOpen] = useState(false)
   const [planMenuOpen, setPlanMenuOpen] = useState(false)
   const [subDrawerOpen, setSubDrawerOpen] = useState(false)
+  const [subMode, setSubMode] = useState<"discover" | "my-subscription">("discover")
   const [displayName, setDisplayName] = useState("")
   const [initials, setInitials] = useState("—")
   const [salutation, setSalutation] = useState("")
@@ -300,7 +301,7 @@ export function DashboardHeader() {
                     <span className="text-[13px] font-medium">Recharger mes jetons</span>
                   </button>
                   <button
-                    onClick={() => { setPlanMenuOpen(false); setSubDrawerOpen(true) }}
+                    onClick={() => { setPlanMenuOpen(false); setSubMode("discover"); setSubDrawerOpen(true) }}
                     className="w-full flex items-center gap-2.5 px-4 py-3 text-left text-sm hover:bg-white/5 transition-colors"
                     style={{ color: '#EAB308' }}
                   >
@@ -312,20 +313,21 @@ export function DashboardHeader() {
             )}
           </div>
         ) : (
-          <div
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border"
+          <button
+            onClick={() => { setSubMode("my-subscription"); setSubDrawerOpen(true) }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border active:scale-95 transition-transform"
             style={{ background: planUi.badgeBg, borderColor: planUi.borderColor }}
           >
             <PlanIcon className="h-3.5 w-3.5" style={{ color: planUi.color }} strokeWidth={1.5} />
             <span className="text-[11px] font-bold" style={{ color: planUi.color }}>{planUi.label}</span>
             <span className="h-3 w-px" style={{ background: planUi.borderColor }} />
             <span className="text-[11px] font-bold" style={{ color: planUi.color }}>∞</span>
-          </div>
+          </button>
         )}
       </div>
 
       <WalletDrawer open={walletOpen} onClose={() => setWalletOpen(false)} />
-      <SubscriptionDrawer open={subDrawerOpen} targetPlan={null} onClose={() => setSubDrawerOpen(false)} />
+      <SubscriptionDrawer open={subDrawerOpen} targetPlan={null} mode={subMode} onClose={() => setSubDrawerOpen(false)} />
     </header>
   )
 }
