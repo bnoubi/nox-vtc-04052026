@@ -206,8 +206,9 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   }, [vMarque, vehicleModels])
 
   const modeleSuggestions = useMemo(() => {
+    if (modelsForMarque.length === 0) return []
     const q = vModele.trim().toLowerCase()
-    if (!q || modelsForMarque.length === 0) return []
+    if (!q) return modelsForMarque.slice(0, 20)
     return modelsForMarque
       .filter((m) => m.toLowerCase().includes(q) && m.toLowerCase() !== q)
       .slice(0, 8)
@@ -557,7 +558,11 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
   async function handleAddDriver() {
     setSaveError(null)
     const trimmedEmail = dEmail.trim()
-    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    if (!trimmedEmail) {
+      setSaveError("L'email du chauffeur est obligatoire.")
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       setSaveError("Format d'email invalide.")
       return
     }
@@ -1354,14 +1359,14 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                 <input type="text" value={dNom} onChange={(e) => setDNom(e.target.value)} placeholder="Dupont" className={INPUT_CLS} />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-white/70 ml-1">Email (optionnel)</label>
-                <input type="email" value={dEmail} onChange={(e) => setDEmail(e.target.value)} placeholder="chauffeur@exemple.com" className={INPUT_CLS} />
+                <label className="text-xs font-medium text-white/70 ml-1">Email <span className="text-red-400">*</span></label>
+                <input type="email" value={dEmail} onChange={(e) => setDEmail(e.target.value)} placeholder="chauffeur@exemple.com" className={INPUT_CLS} required />
               </div>
             </div>
 
             {isGoogleUser && cguCheckbox}
             {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
-            <button onClick={handleAddDriver} disabled={loading || !dPrenom || !dNom || (isGoogleUser && !cguAccepted)} className={PRIMARY_BTN}>
+            <button onClick={handleAddDriver} disabled={loading || !dPrenom || !dNom || !dEmail || (isGoogleUser && !cguAccepted)} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Ajout...</span> : <><CheckCircle2 className="h-4 w-4" strokeWidth={2} />Ajouter et terminer</>}
             </button>
             <button type="button" onClick={afterDriverStep} disabled={loading || (isGoogleUser && !cguAccepted)} className={SECONDARY_BTN}>Plus tard</button>

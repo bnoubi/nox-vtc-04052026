@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
+import { toast } from "sonner"
 import { FileText, Receipt, Car, UserPlus, UserRoundPlus, Lock, LifeBuoy } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AddClientModal } from "./add-client-modal"
@@ -107,7 +108,7 @@ export function QuickActions() {
     setShowDriverDrawer(false)
   }
 
-  function handleQuickVehicleSave(data: any) {
+  async function handleQuickVehicleSave(data: any) {
     const newVehicle = {
       id: '',
       marque: data.brand || '',
@@ -121,8 +122,13 @@ export function QuickActions() {
       assuranceTransportExpiration: data.assuranceTransportExpiration || '',
       controleTechniqueExpiration: data.expirationCT || ''
     }
-    addVehicle(newVehicle)
-    setShowVehicleDrawer(false)
+    const result = await addVehicle(newVehicle)
+    if (result.success) {
+      setShowVehicleDrawer(false)
+      toast("Véhicule ajouté", { description: `${newVehicle.marque} ${newVehicle.modele} • ${newVehicle.immatriculation}`, duration: 2000 })
+    } else {
+      toast.error("Impossible d'ajouter le véhicule", { description: result.error })
+    }
   }
 
   return (

@@ -1706,9 +1706,8 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
     setTimeout(() => upgrade(), 300)
   }
 
-  function handleVehicleSave(data: any) {
+  async function handleVehicleSave(data: any) {
     if (drawerVehicle) {
-      // Edit mode — mapping sur la nouvelle interface Vehicle
       updateVehicle(drawerVehicle.id, {
         marque: data.brand || null,
         modele: data.model || null,
@@ -1723,7 +1722,6 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
       })
       setDrawerVehicle(null)
     } else {
-      // Add mode — id omis : Supabase génère un UUID réel
       const newVehicle: Vehicle = {
         id: '',
         marque: data.brand || '',
@@ -1737,8 +1735,13 @@ function FleetScreen({ onBack }: { onBack: () => void }) {
         assuranceTransportExpiration: data.assuranceTransportExpiration || '',
         controleTechniqueExpiration: data.expirationCT || ''
       }
-      addVehicle(newVehicle)
-      setDrawerVehicle(null)
+      const result = await addVehicle(newVehicle)
+      if (result.success) {
+        setDrawerVehicle(null)
+        toast("Véhicule ajouté", { description: `${newVehicle.marque} ${newVehicle.modele} • ${newVehicle.immatriculation}`, duration: 2000 })
+      } else {
+        toast.error("Impossible d'ajouter le véhicule", { description: result.error })
+      }
     }
   }
 

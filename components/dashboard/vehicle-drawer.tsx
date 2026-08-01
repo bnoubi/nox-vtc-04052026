@@ -1,11 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { X, Car, Hash, Palette, Calendar, Shield, Trash2, ChevronLeft, ArrowRight, CheckCircle2, ChevronDown, Fuel, Grid } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { createClient } from "@/lib/supabase/client"
 import type { Vehicle, MotorType, VehicleCategory } from "./data"
+
+type VehicleModel = { marque: string; modele: string; categorie: string; motorisations: string[] }
 
 const VEHICLE_COLORS = [
   { name: "Noir", value: "#0F0F0F" },
@@ -110,6 +113,55 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
   const [saved, setSaved] = useState(false)
   const [motorDropdownOpen, setMotorDropdownOpen] = useState(false)
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
+  const [brandOpen, setBrandOpen] = useState(false)
+  const [modelOpen, setModelOpen] = useState(false)
+  const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([])
+  const [vehicleModelsLoaded, setVehicleModelsLoaded] = useState(false)
+
+  useEffect(() => {
+    if (vehicleModelsLoaded) return
+    const supabase = createClient()
+    supabase.from("vehicle_models").select("marque,modele,categorie,motorisations")
+      .order("marque", { ascending: true }).order("modele", { ascending: true })
+      .then(({ data }) => {
+        if (data) { setVehicleModels(data as VehicleModel[]); setVehicleModelsLoaded(true) }
+      })
+  }, [vehicleModelsLoaded])
+
+  const uniqueMakes = useMemo(
+    () => [...new Set(vehicleModels.map(v => v.marque))].sort((a, b) => a.localeCompare(b)),
+    [vehicleModels]
+  )
+  const brandSuggestions = useMemo(() => {
+    const q = brand.trim().toLowerCase()
+    if (!q) return []
+    return uniqueMakes.filter(m => m.toLowerCase().includes(q) && m.toLowerCase() !== q).slice(0, 8)
+  }, [brand, uniqueMakes])
+
+  const modelsForBrand = useMemo(() => {
+    const target = brand.trim().toLowerCase()
+    if (!target) return [] as string[]
+    return [...new Set(vehicleModels.filter(v => v.marque.toLowerCase() === target).map(v => v.modele))].sort((a, b) => a.localeCompare(b))
+  }, [brand, vehicleModels])
+
+  const modelSuggestions = useMemo(() => {
+    if (modelsForBrand.length === 0) return []
+    const q = model.trim().toLowerCase()
+    if (!q) return modelsForBrand.slice(0, 20)
+    return modelsForBrand.filter(m => m.toLowerCase().includes(q) && m.toLowerCase() !== q).slice(0, 8)
+  }, [model, modelsForBrand])
+
+  function selectBrand(make: string) {
+    setBrand(make); setBrandOpen(false); setModel(""); setMotorType("diesel"); setCategory("berline")
+  }
+  function selectModel(mod: string) {
+    setModel(mod); setModelOpen(false)
+    const entry = vehicleModels.find(v => v.marque.toLowerCase() === brand.trim().toLowerCase() && v.modele === mod)
+    if (entry) {
+      setCategory(entry.categorie as VehicleCategory)
+      if (entry.motorisations.length === 1) setMotorType(entry.motorisations[0] as MotorType)
+    }
+  }
 
   useEffect(() => {
     if (open) {
@@ -160,11 +212,11 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
   function handleSave() {
     setSaved(true)
     setTimeout(() => {
-      onSave({ 
-        plate, 
-        brand, 
-        model, 
-        color: color === "custom" ? customColor : color, 
+      onSave({
+        plate,
+        brand,
+        model,
+        color: color === "custom" ? customColor : color,
         customColor,
         datePremiereImmat,
         motorType,
@@ -172,10 +224,9 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
         assuranceTransportExpiration,
         expirationCT
       })
-      toast(isEditMode ? "Mise à jour effectuée" : "Véhicule ajouté", {
-        description: `${brand} ${model} • ${plate}`,
-        duration: 2000,
-      })
+      if (isEditMode) {
+        toast("Mise à jour effectuée", { description: `${brand} ${model} • ${plate}`, duration: 2000 })
+      }
       setSaved(false)
     }, 800)
   }
@@ -314,32 +365,58 @@ export function VehicleDrawer({ open, vehicle, onClose, onSave, onDelete }: Vehi
                     </div>
 
                     {/* MARQUE */}
-                    <div>
+                    <div className="relative">
                       <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-1.5 flex items-center gap-1.5">
                         <Car className="h-3 w-3" strokeWidth={1.5} />
                         MARQUE
                       </label>
                       <input
                         type="text"
-                        placeholder="Mercedes"
+                        placeholder={vehicleModelsLoaded ? "Mercedes-Benz" : "Chargement…"}
                         value={brand}
-                        onChange={(e) => setBrand(e.target.value)}
+                        onChange={(e) => { setBrand(e.target.value); setBrandOpen(true) }}
+                        onFocus={() => setBrandOpen(true)}
+                        onBlur={() => setTimeout(() => setBrandOpen(false), 150)}
+                        autoComplete="off"
                         className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] placeholder:text-[#555] focus:outline-none focus:border-[#D4AF37]/50 transition-colors"
                       />
+                      {brandOpen && brandSuggestions.length > 0 && (
+                        <ul className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto rounded-xl bg-[#1A1A1A] border border-[#333] shadow-lg">
+                          {brandSuggestions.map(m => (
+                            <li key={m}>
+                              <button type="button" onMouseDown={e => { e.preventDefault(); selectBrand(m) }}
+                                className="w-full text-left px-4 py-2.5 text-sm text-[#F5F5F5] hover:bg-[#D4AF37]/10 transition-colors">{m}</button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
 
                     {/* MODELE */}
-                    <div>
+                    <div className="relative">
                       <label className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-1.5 block">
                         MODÈLE
                       </label>
                       <input
                         type="text"
-                        placeholder="Classe S"
+                        placeholder={modelsForBrand.length > 0 ? "Classe S" : (brand ? "Modèle libre" : "Saisissez d'abord la marque")}
                         value={model}
-                        onChange={(e) => setModel(e.target.value)}
+                        onChange={(e) => { setModel(e.target.value); setModelOpen(true) }}
+                        onFocus={() => setModelOpen(true)}
+                        onBlur={() => setTimeout(() => setModelOpen(false), 150)}
+                        autoComplete="off"
                         className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] placeholder:text-[#555] focus:outline-none focus:border-[#D4AF37]/50 transition-colors"
                       />
+                      {modelOpen && modelSuggestions.length > 0 && (
+                        <ul className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto rounded-xl bg-[#1A1A1A] border border-[#333] shadow-lg">
+                          {modelSuggestions.map(m => (
+                            <li key={m}>
+                              <button type="button" onMouseDown={e => { e.preventDefault(); selectModel(m) }}
+                                className="w-full text-left px-4 py-2.5 text-sm text-[#F5F5F5] hover:bg-[#D4AF37]/10 transition-colors">{m}</button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
 
                     {/* TYPE DE MOTEUR */}

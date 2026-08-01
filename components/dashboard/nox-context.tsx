@@ -102,7 +102,7 @@ interface NoxContextType {
   addDriver: (driver: Driver) => void
   updateDriver: (id: string, data: Partial<Driver>) => void
   deleteDriver: (id: string) => void
-  addVehicle: (vehicle: Vehicle) => void
+  addVehicle: (vehicle: Vehicle) => Promise<{ success: boolean; error?: string }>
   updateVehicle: (id: string, data: Partial<Vehicle>) => void
   deleteVehicle: (id: string) => void
   addClient: (client: Client) => Promise<string | null>
@@ -881,10 +881,8 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const addVehicle = async (vehicle: Vehicle) => {
-    if (!userId) {
-      return
-    }
+  const addVehicle = async (vehicle: Vehicle): Promise<{ success: boolean; error?: string }> => {
+    if (!userId) return { success: false, error: 'Non authentifié' }
 
     const payloadFinal = {
       user_id: userId,
@@ -900,16 +898,15 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
       controle_technique_expiration: vehicle.controleTechniqueExpiration || null
     }
     try {
-      // ─── INSERT minimal sans .select() ───
       const { error } = await supabase
         .from('vehicles')
         .insert([payloadFinal])
 
       if (error) {
-        return
+        console.error('[addVehicle] insert error:', error.message, '| code:', error.code)
+        return { success: false, error: error.message }
       }
 
-      // ─── Reload complet de la liste depuis Supabase ───
       const { data: rows } = await supabase
         .from('vehicles')
         .select('*')
@@ -930,7 +927,11 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
           controleTechniqueExpiration: v.controle_technique_expiration || ''
         })))
       }
+      return { success: true }
     } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Erreur inconnue'
+      console.error('[addVehicle] exception:', msg)
+      return { success: false, error: msg }
     }
   }
 
