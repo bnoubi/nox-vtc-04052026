@@ -7,6 +7,7 @@ import { useNox } from "./nox-context"
 import { useNav } from "./nav-context"
 import { cn } from "@/lib/utils"
 import { WalletDrawer } from "./wallet-drawer"
+import { SubscriptionDrawer } from "./subscription-drawer"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 
@@ -66,6 +67,9 @@ export function DashboardHeader() {
   const badgeValue = plan === 'SOLO' ? String(tokens) : '∞'
 
   const [walletOpen, setWalletOpen] = useState(false)
+  const [planMenuOpen, setPlanMenuOpen] = useState(false)
+  const [subDrawerOpen, setSubDrawerOpen] = useState(false)
+  const [subMode, setSubMode] = useState<"discover" | "my-subscription">("discover")
   const [displayName, setDisplayName] = useState("")
   const [initials, setInitials] = useState("—")
   const [salutation, setSalutation] = useState("")
@@ -273,31 +277,57 @@ export function DashboardHeader() {
             <span className="text-[11px] font-bold text-[#EAB308]">{trialDaysLeft}j</span>
           </div>
         ) : plan === 'SOLO' ? (
+          <div className="relative">
+            <button
+              onClick={() => setPlanMenuOpen(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border active:scale-95 transition-transform"
+              style={{ background: planUi.badgeBg, borderColor: planUi.borderColor }}
+            >
+              <PlanIcon className="h-3.5 w-3.5" style={{ color: planUi.color }} strokeWidth={1.5} />
+              <span className="text-[11px] font-bold" style={{ color: planUi.color }}>{planUi.label}</span>
+              <span className="h-3 w-px" style={{ background: planUi.borderColor }} />
+              <Coins className="h-3 w-3" style={{ color: planUi.color }} strokeWidth={1.5} />
+              <span className="text-[11px] font-bold" style={{ color: planUi.color }}>{badgeValue}</span>
+            </button>
+            {planMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setPlanMenuOpen(false)} />
+                <div className="fixed top-14 right-2 w-56 bg-[#1a1a1a] border border-onyx-border/30 rounded-xl shadow-xl z-50 overflow-hidden">
+                  <button
+                    onClick={() => { setPlanMenuOpen(false); setWalletOpen(true) }}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left text-sm text-foreground hover:bg-white/5 transition-colors border-b border-onyx-border/20"
+                  >
+                    <span className="text-base leading-none">🪙</span>
+                    <span className="text-[13px] font-medium">Recharger mes jetons</span>
+                  </button>
+                  <button
+                    onClick={() => { setPlanMenuOpen(false); setSubMode("discover"); setSubDrawerOpen(true) }}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left text-sm hover:bg-white/5 transition-colors"
+                    style={{ color: '#EAB308' }}
+                  >
+                    <span className="text-base leading-none">⭐</span>
+                    <span className="text-[13px] font-medium">Découvrir les abonnements</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
           <button
-            onClick={() => setWalletOpen(true)}
+            onClick={() => { setSubMode("my-subscription"); setSubDrawerOpen(true) }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border active:scale-95 transition-transform"
             style={{ background: planUi.badgeBg, borderColor: planUi.borderColor }}
           >
             <PlanIcon className="h-3.5 w-3.5" style={{ color: planUi.color }} strokeWidth={1.5} />
             <span className="text-[11px] font-bold" style={{ color: planUi.color }}>{planUi.label}</span>
             <span className="h-3 w-px" style={{ background: planUi.borderColor }} />
-            <Coins className="h-3 w-3" style={{ color: planUi.color }} strokeWidth={1.5} />
-            <span className="text-[11px] font-bold" style={{ color: planUi.color }}>{badgeValue}</span>
-          </button>
-        ) : (
-          <div
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border"
-            style={{ background: planUi.badgeBg, borderColor: planUi.borderColor }}
-          >
-            <PlanIcon className="h-3.5 w-3.5" style={{ color: planUi.color }} strokeWidth={1.5} />
-            <span className="text-[11px] font-bold" style={{ color: planUi.color }}>{planUi.label}</span>
-            <span className="h-3 w-px" style={{ background: planUi.borderColor }} />
             <span className="text-[11px] font-bold" style={{ color: planUi.color }}>∞</span>
-          </div>
+          </button>
         )}
       </div>
 
       <WalletDrawer open={walletOpen} onClose={() => setWalletOpen(false)} />
+      <SubscriptionDrawer open={subDrawerOpen} targetPlan={null} mode={subMode} onClose={() => setSubDrawerOpen(false)} />
     </header>
   )
 }

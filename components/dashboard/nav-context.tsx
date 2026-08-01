@@ -6,7 +6,7 @@ import type { TabId } from "./bottom-nav"
 type SettingsScreen = "main" | "team" | "fleet" | "profile" | "enterprise" | "subscription" | "plans" | "notifications" | "security" | "cgv" | "wallet_history"
 
 export interface EntityNavigation {
-  entityType: "driver" | "vehicle"
+  entityType: "driver" | "vehicle" | "enterprise"
   entityId: string
   field: string
 }
@@ -19,7 +19,7 @@ interface NavContextValue {
   openWallet: () => void
   registerWalletOpener: (fn: () => void) => void
   logout: () => void
-  navigateToEntity: (entityType: "driver" | "vehicle", entityId: string, field: string) => void
+  navigateToEntity: (entityType: "driver" | "vehicle" | "enterprise", entityId: string, field: string) => void
   pendingEntityNavigation: EntityNavigation | null
   clearPendingEntityNavigation: () => void
   pendingBcId: string | null
@@ -83,19 +83,10 @@ export function NavProvider({
     }, 50)
   }, [onTabChange])
 
-  const navigateToEntity = useCallback((entityType: "driver" | "vehicle", entityId: string, field: string) => {
-    // Store the pending navigation
+  const navigateToEntity = useCallback((entityType: "driver" | "vehicle" | "enterprise", entityId: string, field: string) => {
     setPendingEntityNavigation({ entityType, entityId, field })
-    // Switch to settings tab
     onTabChange("settings")
-    // Navigate to the correct settings screen
-    setTimeout(() => {
-      if (entityType === "driver") {
-        settingsNavigatorRef.current?.("team")
-      } else {
-        settingsNavigatorRef.current?.("fleet")
-      }
-    }, 50)
+    // SettingsTab reads pendingEntityNavigation on mount and navigates to the correct sub-screen
   }, [onTabChange])
 
   const clearPendingEntityNavigation = useCallback(() => {

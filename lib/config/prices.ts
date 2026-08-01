@@ -59,6 +59,7 @@ export const TOKEN_PACKS: readonly TokenPack[] = [
   },
 ]
 
+/** @deprecated Prix DB (subscription_plans) fait foi pour PayPal. Conserver pour getPlan() / limit-alert-modal. */
 export const SUBSCRIPTION_PLANS: readonly Plan[] = [
   {
     id: 'plan_duo',

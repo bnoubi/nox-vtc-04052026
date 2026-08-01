@@ -17,8 +17,10 @@ import { Toaster } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 
 import { NoxProvider, useNox } from "@/components/dashboard/nox-context"
+import { PromoModal } from "@/components/dashboard/promo-modal"
 import { AlertTriangle } from "lucide-react"
 import { checkIsAdmin } from "@/app/admin/actions"
+import { ADMIN_URL } from "@/lib/admin-url"
 
 const tabComponents: Record<TabId, React.ComponentType> = {
   dashboard: DashboardTab,
@@ -85,7 +87,7 @@ function AppPage() {
 
       const isAdmin = await checkIsAdmin()
       if (isAdmin) {
-        router.replace("/admin/dashboard")
+        window.location.href = `${ADMIN_URL}/admin/dashboard`
         return
       }
 
@@ -187,6 +189,7 @@ function AppPage() {
 
             <SecurityBadge />
             <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+            <PromoModal />
             <Toaster
               position="top-center"
               toastOptions={{

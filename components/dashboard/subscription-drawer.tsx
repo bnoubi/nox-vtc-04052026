@@ -1,11 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, ShieldCheck, Loader2, CheckCircle2, Crown, Coins } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useNox } from "./nox-context"
 import { usePromo } from "@/lib/hooks/usePromo"
+import { getSubscriptionPlansAction } from "@/lib/actions/subscription-plans"
+import { createClient } from "@/lib/supabase/client"
+import { toast } from "sonner"
 import type { Plan } from "./data"
 
 type PayState = "idle" | "loading"
@@ -14,7 +17,6 @@ const PLAN_DETAILS = {
   DUO: {
     name: "Pro",
     subtitle: "L'offre Binôme",
-    price: "4,99",
     bulletPoints: [
       { text: "Signature Entreprise incluse", highlight: true },
       { text: "Max 2 Chauffeurs / Max 2 Véhicules", highlight: false },
@@ -25,7 +27,6 @@ const PLAN_DETAILS = {
   TEAM: {
     name: "Premium",
     subtitle: "L'offre Flotte",
-    price: "9,99",
     bulletPoints: [
       { text: "Signature Entreprise incluse", highlight: true },
       { text: "Max 10 Chauffeurs / Max 10 Véhicules", highlight: false },
@@ -37,32 +38,73 @@ const PLAN_DETAILS = {
   },
 } as const
 
+const DEFAULT_PRICES: Record<"DUO" | "TEAM", number> = { DUO: 4.99, TEAM: 9.99 }
+
 interface SubscriptionDrawerProps {
   open: boolean
   targetPlan: "DUO" | "TEAM" | null
   onClose: () => void
+  mode?: "discover" | "my-subscription"
 }
 
-const ORIGINAL_PRICES: Record<"DUO" | "TEAM", number> = { DUO: 4.99, TEAM: 9.99 }
-
-export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDrawerProps) {
-  const { userId, tokens } = useNox()
+export function SubscriptionDrawer({ open, targetPlan, onClose, mode = "discover" }: SubscriptionDrawerProps) {
+  const { userId, tokens, plan } = useNox()
   const { promo } = usePromo()
   const [payState, setPayState] = useState<PayState>("idle")
+  const [planPrices, setPlanPrices] = useState<Record<"DUO" | "TEAM", number>>(DEFAULT_PRICES)
+  const [activePlan, setActivePlan] = useState<"DUO" | "TEAM" | null>(targetPlan)
+  const [subDetails, setSubDetails] = useState<{ cancel_at: string | null; current_period_end: string | null } | null>(null)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
 
-  const planInfo = targetPlan ? PLAN_DETAILS[targetPlan] : null
-  const originalPrice = targetPlan ? ORIGINAL_PRICES[targetPlan] : 0
-  const promoPrice = promo.active ? (Math.floor(originalPrice * (1 - promo.percent / 100) * 100) / 100).toFixed(2).replace('.', ',') : null
+  useEffect(() => { setActivePlan(targetPlan) }, [targetPlan])
+
+  useEffect(() => {
+    if (mode !== "my-subscription" || !open) return
+    const supabase = createClient()
+    void supabase.from('subscriptions')
+      .select('cancel_at, current_period_end')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          const d = data as { cancel_at: string | null; current_period_end: string | null }
+          setSubDetails({ cancel_at: d.cancel_at, current_period_end: d.current_period_end })
+        }
+      })
+  }, [mode, open])
+
+  useEffect(() => {
+    getSubscriptionPlansAction()
+      .then(plans => {
+        const prices = { ...DEFAULT_PRICES }
+        for (const p of plans) {
+          if (p.code === 'DUO') prices.DUO = Number(p.price_per_month)
+          if (p.code === 'TEAM') prices.TEAM = Number(p.price_per_month)
+        }
+        setPlanPrices(prices)
+      })
+      .catch(() => { /* garder les valeurs par defaut */ })
+  }, [])
+
+  const planInfo    = activePlan ? PLAN_DETAILS[activePlan] : null
+  const originalPrice = activePlan ? planPrices[activePlan] : 0
+  const formattedPrice = originalPrice.toFixed(2).replace('.', ',')
+  const promoPrice  = promo.active
+    ? (Math.floor(originalPrice * (1 - promo.percent / 100) * 100) / 100).toFixed(2).replace('.', ',')
+    : null
 
   async function handlePay() {
-    if (payState !== "idle" || !targetPlan || !userId) return
+    if (payState !== "idle" || !activePlan || !userId) return
 
     setPayState("loading")
     try {
       const origin = window.location.origin
-      const itemType = targetPlan === "DUO" ? "plan_duo" : "plan_team"
+      const itemType = activePlan === "DUO" ? "plan_duo" : "plan_team"
       const validUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-      const successUrl = `${origin}/payment/success?type=subscription&plan=${targetPlan}&valid_until=${validUntil}`
+      const successUrl = `${origin}/payment/success?type=subscription&plan=${activePlan}&valid_until=${validUntil}`
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -70,7 +112,7 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
           itemType,
           userId,
           successUrl,
-          cancelUrl:  `${origin}/`,
+          cancelUrl: `${origin}/`,
         }),
       })
       const data = await res.json() as { url?: string; error?: string }
@@ -82,12 +124,12 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
   }
 
   async function handlePayPal() {
-    if (payState !== "idle" || !targetPlan || !userId) return
+    if (payState !== "idle" || !activePlan || !userId) return
 
     setPayState("loading")
     try {
-      const itemType = targetPlan === "DUO" ? "plan_duo" : "plan_team"
-      const res = await fetch("/api/paypal/create-order", {
+      const itemType = activePlan === "DUO" ? "plan_duo" : "plan_team"
+      const res = await fetch("/api/paypal/create-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ itemType, userId }),
@@ -100,15 +142,49 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
     }
   }
 
+  function fmtDateFr(iso: string | null) {
+    if (!iso) return ''
+    return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+  }
+
+  async function handleConfirmCancel() {
+    setIsCancelling(true)
+    setCancelError(null)
+    try {
+      const res = await fetch('/api/subscription/cancel', { method: 'POST' })
+      const data = await res.json() as { success?: boolean; cancel_at?: string; error?: string }
+      if (!res.ok || !data.success) {
+        setCancelError(data.error ?? 'Erreur lors de la résiliation')
+      } else {
+        setSubDetails(prev => ({ ...(prev ?? { current_period_end: null }), cancel_at: data.cancel_at ?? null }))
+        setShowCancelConfirm(false)
+        toast(data.cancel_at
+          ? `Accès actif jusqu'au ${fmtDateFr(data.cancel_at ?? null)}, puis retour en Starter.`
+          : "Résiliation enregistrée.")
+      }
+    } catch {
+      setCancelError('Erreur réseau, veuillez réessayer')
+    } finally {
+      setIsCancelling(false)
+    }
+  }
+
   function handleClose() {
-    if (payState === "loading") return
+    if (payState === "loading" || isCancelling) return
     setPayState("idle")
+    setActivePlan(targetPlan)
+    setShowCancelConfirm(false)
+    setCancelError(null)
     onClose()
   }
 
-  if (!planInfo) return null
-
-  const isTeamPlan = targetPlan === "TEAM"
+  const isTeamPlan = activePlan === "TEAM"
+  const drawerTitle = activePlan
+    ? `ACTIVER L’OFFRE ${planInfo!.name}`
+    : mode === "my-subscription" ? "MON ABONNEMENT" : "DÉCOUVRIR LES ABONNEMENTS"
+  const drawerSubtitle = activePlan
+    ? planInfo!.subtitle
+    : mode === "my-subscription" ? `Plan ${plan === "DUO" ? "Pro" : "Premium"} actif` : "Choisissez l’offre adaptée à votre activité"
 
   return (
     <AnimatePresence>
@@ -137,11 +213,24 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
 
             {/* Header */}
             <div className="flex items-center justify-between px-5 pb-4 shrink-0">
-              <div>
-                <h2 className="text-base font-bold tracking-wide text-[#D4AF37]">
-                  ACTIVER L'OFFRE {planInfo.name}
-                </h2>
-                <p className="text-[11px] text-[#A1A1AA] mt-0.5">{planInfo.subtitle}</p>
+              <div className="flex items-center gap-2">
+                {activePlan && !targetPlan && (
+                  <button
+                    onClick={() => { setActivePlan(null); setPayState("idle") }}
+                    className="w-7 h-7 rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 flex items-center justify-center hover:bg-[#D4AF37]/20 transition-colors mr-1"
+                    aria-label="Retour"
+                  >
+                    <svg className="h-3.5 w-3.5 text-[#D4AF37]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+                  </button>
+                )}
+                <div>
+                  <h2 className="text-base font-bold tracking-wide text-[#D4AF37]">
+                    {drawerTitle}
+                  </h2>
+                  <p className="text-[11px] text-[#A1A1AA] mt-0.5">
+                    {drawerSubtitle}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={handleClose}
@@ -153,9 +242,173 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
             </div>
 
             {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto overscroll-contain px-5 pb-10">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 pb-28">
 
-              {/* Plan Summary Card */}
+              {/* Mon Abonnement */}
+              {!activePlan && mode === "my-subscription" && (
+                <div className="flex flex-col gap-4">
+                  {/* Plan banner */}
+                  <div className={cn(
+                    "p-5 rounded-2xl border",
+                    plan === "TEAM"
+                      ? "bg-gradient-to-br from-[#D4AF37]/15 via-[#D4AF37]/5 to-transparent border-[#D4AF37]/40"
+                      : "bg-[#D4AF37]/10 border-[#D4AF37]/30"
+                  )}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Plan actuel</p>
+                        <p className="text-2xl font-bold text-[#D4AF37] mt-0.5">{plan === "DUO" ? "Pro" : "Premium"}</p>
+                        {subDetails?.cancel_at ? (
+                          <p className="text-[11px] text-[#A1A1AA] mt-1">Actif jusqu&apos;au {fmtDateFr(subDetails.cancel_at)}, puis retour en Starter</p>
+                        ) : subDetails?.current_period_end ? (
+                          <p className="text-[11px] text-[#A1A1AA] mt-1">Valide jusqu&apos;au {fmtDateFr(subDetails.current_period_end)}</p>
+                        ) : null}
+                      </div>
+                      <div className="w-12 h-12 rounded-2xl bg-[#D4AF37]/20 border border-[#D4AF37]/40 flex items-center justify-center">
+                        <Crown className="h-6 w-6 text-[#D4AF37]" strokeWidth={1.5} />
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-[#A1A1AA]">
+                      {plan === "TEAM"
+                        ? "Vous profitez de toutes les fonctionnalités premium NoX VTC."
+                        : "Documents illimités inclus. Passez en Premium pour gérer votre flotte complète."}
+                    </p>
+                  </div>
+
+                  {/* Upsell Premium — DUO uniquement, pas si résiliation déjà planifiée */}
+                  {plan === "DUO" && !subDetails?.cancel_at && (
+                    <div className="p-4 rounded-2xl border border-[#D4AF37]/50 bg-gradient-to-br from-[#D4AF37]/10 to-transparent">
+                      <p className="text-[11px] uppercase tracking-wider text-[#D4AF37] font-bold mb-3">⭐ Passer à Premium</p>
+                      <div className="space-y-2 mb-4">
+                        {["Max 10 Chauffeurs / Max 10 Véhicules", "Statistiques avancées", "API & Intégrations"].map((f, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <CheckCircle2 className="h-3 w-3 text-[#D4AF37] shrink-0" strokeWidth={2} />
+                            <span className="text-[12px] text-[#F5F5F5]">{f}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => setActivePlan("TEAM")}
+                        className="w-full py-2.5 rounded-xl bg-[#D4AF37] text-[#0E0E0E] text-[13px] font-bold hover:bg-[#C4A030] active:scale-[0.98] transition-all"
+                      >
+                        Découvrir Premium
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Résiliation */}
+                  {!subDetails?.cancel_at ? (
+                    !showCancelConfirm ? (
+                      <button
+                        onClick={() => setShowCancelConfirm(true)}
+                        className="w-full py-3 rounded-xl border border-red-500/20 text-red-400 text-[12px] font-medium hover:bg-red-500/5 active:scale-[0.98] transition-all"
+                      >
+                        Mettre fin à mon abonnement
+                      </button>
+                    ) : (
+                      <div className="p-4 rounded-xl border border-red-500/30 bg-red-500/5">
+                        <p className="text-[12px] text-[#F5F5F5] font-medium mb-1">Confirmer la résiliation ?</p>
+                        <p className="text-[11px] text-[#A1A1AA] mb-3 leading-relaxed">
+                          Votre accès reste actif jusqu&apos;à la fin de la période en cours, puis retour automatique en Starter.
+                        </p>
+                        {cancelError && <p className="text-[10px] text-red-400 mb-2">{cancelError}</p>}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { setShowCancelConfirm(false); setCancelError(null) }}
+                            className="flex-1 py-2 rounded-lg border border-[#D4AF37]/30 text-[#A1A1AA] text-[12px] hover:bg-white/5 transition-colors"
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            onClick={() => void handleConfirmCancel()}
+                            disabled={isCancelling}
+                            className="flex-1 py-2 rounded-lg bg-red-500/15 border border-red-500/30 text-red-400 text-[12px] font-medium disabled:opacity-60 active:scale-[0.98] transition-all"
+                          >
+                            {isCancelling ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Confirmer"}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  ) : (
+                    <p className="text-[11px] text-[#A1A1AA] text-center py-1">Résiliation déjà planifiée — aucune action requise.</p>
+                  )}
+                </div>
+              )}
+
+              {/* Vitrine : deux plans côte à côte */}
+              {!activePlan && mode === "discover" && (
+                <div className="flex flex-col gap-4 mb-2">
+                  {(['DUO', 'TEAM'] as const).map(planKey => {
+                    const info = PLAN_DETAILS[planKey]
+                    const price = planPrices[planKey]
+                    const isTeam = planKey === 'TEAM'
+                    const promoP = promo.active
+                      ? (Math.floor(price * (1 - promo.percent / 100) * 100) / 100).toFixed(2).replace('.', ',')
+                      : null
+                    return (
+                      <div key={planKey} className={cn(
+                        "p-5 rounded-2xl border",
+                        isTeam
+                          ? "bg-gradient-to-br from-[#D4AF37]/15 via-[#D4AF37]/5 to-transparent border-[#D4AF37]/40"
+                          : "bg-[#D4AF37]/10 border-[#D4AF37]/30"
+                      )}>
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-10 h-10 rounded-xl flex items-center justify-center",
+                              isTeam ? "bg-[#D4AF37]/20 border border-[#D4AF37]/40" : "bg-[#D4AF37]/15 border border-[#D4AF37]/25"
+                            )}>
+                              <Crown className="h-5 w-5 text-[#D4AF37]" strokeWidth={1.5} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-[#D4AF37]">{info.name}</p>
+                              <p className="text-[10px] text-[#A1A1AA]">{info.subtitle}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            {promo.active && (
+                              <p className="text-[10px] text-[#A1A1AA] line-through">{price.toFixed(2).replace('.', ',')}€</p>
+                            )}
+                            <p className="text-lg font-bold text-[#D4AF37]">
+                              {promo.active ? `${promoP}€` : `${price.toFixed(2).replace('.', ',')}€`}
+                            </p>
+                            <p className="text-[9px] text-[#A1A1AA]">/mois</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2 mb-4">
+                          {info.bulletPoints.map((point, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <div className={cn(
+                                "w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5",
+                                point.highlight ? "bg-[#D4AF37]" : "bg-[#D4AF37]/15 border border-[#D4AF37]/30"
+                              )}>
+                                <CheckCircle2 className={cn("h-2.5 w-2.5", point.highlight ? "text-[#0E0E0E]" : "text-[#D4AF37]")} strokeWidth={2.5} />
+                              </div>
+                              <span className={cn("text-[12px] leading-relaxed", point.highlight ? "font-semibold text-[#D4AF37]" : "text-[#F5F5F5]")}>
+                                {point.text}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setActivePlan(planKey)}
+                          className={cn(
+                            "w-full py-2.5 rounded-xl text-[13px] font-bold transition-all active:scale-[0.98]",
+                            isTeam
+                              ? "bg-[#D4AF37] text-[#0E0E0E] hover:bg-[#C4A030]"
+                              : "border border-[#D4AF37]/50 text-[#D4AF37] hover:bg-[#D4AF37]/10"
+                          )}
+                        >
+                          Choisir {info.name}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Checkout : affiché uniquement quand un plan est sélectionné */}
+              {activePlan && (<>
               <div className={cn(
                 "p-5 rounded-2xl border mb-5",
                 isTeamPlan
@@ -182,11 +435,11 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
                   </div>
                   <div className="text-right">
                     {promo.active && (
-                      <p className="text-[11px] text-[#A1A1AA] line-through">{planInfo.price}€</p>
+                      <p className="text-[11px] text-[#A1A1AA] line-through">{formattedPrice}€</p>
                     )}
                     <div className="flex items-center gap-1.5 justify-end">
                       <p className="text-2xl font-bold text-[#D4AF37]">
-                        {promo.active ? `${promoPrice}€` : `${planInfo.price}€`}
+                        {promo.active ? `${promoPrice}€` : `${formattedPrice}€`}
                       </p>
                       {promo.active && (
                         <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-bold">
@@ -195,7 +448,7 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
                       )}
                     </div>
                     <p className="text-[10px] text-[#A1A1AA]">
-                      {promo.active ? "Premier mois — puis " + planInfo.price + "€/mois" : "/mois"}
+                      {promo.active ? "Premier mois — puis " + formattedPrice + "€/mois" : "/mois"}
                     </p>
                   </div>
                 </div>
@@ -320,6 +573,7 @@ export function SubscriptionDrawer({ open, targetPlan, onClose }: SubscriptionDr
                 <ShieldCheck className="h-3.5 w-3.5 text-[#D4AF37]/60" strokeWidth={1.5} />
                 <span className="text-[10px] text-[#A1A1AA]/70">Transactions sécurisées par cryptage SSL</span>
               </div>
+              </>)}
             </div>
           </motion.div>
         </motion.div>

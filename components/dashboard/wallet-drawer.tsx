@@ -1,42 +1,59 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Coins, ShieldCheck, Loader2, Lock } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { useNox } from "./nox-context"
-import { TOKEN_PACKS } from "@/lib/config/prices"
-
-const PACKS = TOKEN_PACKS
+import { getTokenPacksAction, type TokenPackDB } from "@/lib/actions/token-packs"
 
 type PayState = "idle" | "loading"
 
 export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { userId, tokens } = useNox()
-  const [selected, setSelected] = useState<string>("pack_privilege")
+  const [packs, setPacks] = useState<TokenPackDB[]>([])
+  const [packsLoading, setPacksLoading] = useState(true)
+  const [selected, setSelected] = useState<string>("")
   const [payState, setPayState] = useState<PayState>("idle")
   const [paypalState, setPaypalState] = useState<PayState>("idle")
 
+  useEffect(() => {
+    getTokenPacksAction().then(data => {
+      setPacks(data)
+      if (data.length > 0) setSelected(data[1]?.id ?? data[0].id)
+      setPacksLoading(false)
+    })
+  }, [])
+
+  function getPackBadge(pack: TokenPackDB): string | null {
+    if (pack.quantite_jetons >= 50) return 'Meilleure offre'
+    if (pack.quantite_jetons >= 30) return 'Le plus populaire'
+    return null
+  }
+
+  function getPackUnit(pack: TokenPackDB): string {
+    return (pack.prix_eur / pack.quantite_jetons).toFixed(2).replace('.', ',')
+  }
+
   async function handlePay() {
     if (payState !== "idle" || !userId) return
-    const pack = PACKS.find((p) => p.id === selected)
+    const pack = packs.find((p) => p.id === selected)
     if (!pack) return
 
     setPayState("loading")
     try {
       const origin = window.location.origin
       const before = tokens
-      const after = tokens + pack.tokens
-      const successUrl = `${origin}/payment/success?type=token_pack&amount=${pack.tokens}&before=${before}&after=${after}`
+      const after = tokens + pack.quantite_jetons
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           itemType: pack.id,
           userId,
-          successUrl,
-          cancelUrl:  `${origin}/`,
+          successUrl: `${origin}/payment/success?type=token_pack&amount=${pack.quantite_jetons}&before=${before}&after=${after}`,
+          cancelUrl: `${origin}/`,
         }),
       })
       const data = await res.json() as { url?: string; error?: string }
@@ -49,7 +66,7 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
 
   async function handlePayPayPal() {
     if (paypalState !== "idle" || !userId) return
-    const pack = PACKS.find((p) => p.id === selected)
+    const pack = packs.find((p) => p.id === selected)
     if (!pack) return
 
     setPaypalState("loading")
@@ -64,7 +81,7 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
       window.location.href = data.approvalUrl
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erreur inconnue"
-      toast.error(`PayPal — ${msg}`)
+      toast.error(`PayPal - ${msg}`)
       setPaypalState("idle")
     }
   }
@@ -85,10 +102,8 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50"
         >
-          {/* Backdrop */}
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
 
-          {/* Drawer - slides from bottom */}
           <motion.div
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
@@ -120,10 +135,16 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
 
               {/* Pack Cards */}
               <div className="space-y-3 mb-6">
-                {PACKS.map((pack) => {
+                {packsLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 text-[#D4AF37] animate-spin" />
+                  </div>
+                ) : packs.map((pack) => {
                   const isSelected = selected === pack.id
-                  const hasBadge = !!pack.badge
-                  const hasSavings = pack.unit !== "1,00"
+                  const badge = getPackBadge(pack)
+                  const hasBadge = !!badge
+                  const unit = getPackUnit(pack)
+
                   return (
                     <button
                       key={pack.id}
@@ -136,10 +157,10 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
                           : "bg-[#1A1A1A]/60 border-[#D4AF37]/15 hover:border-[#D4AF37]/30"
                       )}
                     >
-                      {/* Badge label positioned at top */}
+                      {/* Badge */}
                       {hasBadge && (
                         <span className="absolute -top-2.5 left-4 px-2 py-0.5 text-[7px] font-bold uppercase tracking-wider rounded-full bg-[#D4AF37] text-[#0E0E0E] shadow-[0_0_12px_rgba(212,175,55,0.3)]">
-                          {pack.badge}
+                          {badge}
                         </span>
                       )}
 
@@ -162,25 +183,20 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
                           "text-sm font-bold",
                           isSelected ? "text-[#D4AF37]" : "text-[#F5F5F5]"
                         )}>
-                          Pack {pack.name}
+                          {pack.nom}
                         </p>
-                        <p className="text-[11px] text-[#A1A1AA] mt-0.5">{pack.tokens} jetons</p>
-                        {hasSavings && (
-                          <p className="text-[10px] text-[#D4AF37]/80 font-semibold mt-0.5">
-                            soit {pack.unit}&#8364;/doc
-                          </p>
-                        )}
+                        <p className="text-[11px] text-[#A1A1AA] mt-0.5">{pack.quantite_jetons} jetons</p>
+                        <p className="text-[10px] text-[#D4AF37]/80 font-semibold mt-0.5">
+                          soit {unit}&#8364;/doc
+                        </p>
                       </div>
 
-                      {/* Price + unit */}
+                      {/* Price */}
                       <div className="text-right shrink-0">
                         <p className={cn(
                           "text-lg font-bold",
                           isSelected ? "text-[#D4AF37]" : "text-[#F5F5F5]"
-                        )}>{pack.price}&#8364;</p>
-                        {!hasSavings && (
-                          <p className="text-[9px] text-[#A1A1AA]/60">{pack.unit}&#8364;/doc</p>
-                        )}
+                        )}>{pack.prix_eur}&#8364;</p>
                       </div>
 
                       {/* Selection indicator */}
@@ -236,35 +252,24 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-2.5">
                     <span className="text-sm font-bold text-[#F5F5F5]">Payer par carte bancaire</span>
-
-                    {/* Logos cartes — SVG inline monochromes thème dark */}
                     <div className="flex items-center justify-center gap-5 h-8">
-                      {/* Visa */}
                       <svg viewBox="0 0 80 24" className="h-5 w-auto" aria-label="Visa">
                         <text x="40" y="19" textAnchor="middle" fontFamily="Arial Black, Arial, sans-serif" fontSize="20" fontWeight="900" fontStyle="italic" fill="#E5E5E5" letterSpacing="-0.5">VISA</text>
                       </svg>
-
-                      {/* Mastercard */}
                       <svg viewBox="0 0 40 24" className="h-6 w-auto" aria-label="Mastercard">
                         <circle cx="16" cy="12" r="8" fill="none" stroke="#E5E5E5" strokeWidth="1.4"/>
                         <circle cx="24" cy="12" r="8" fill="none" stroke="#E5E5E5" strokeWidth="1.4"/>
                       </svg>
-
-                      {/* Amex */}
                       <svg viewBox="0 0 64 24" className="h-5 w-auto" aria-label="American Express">
                         <rect x="0.75" y="0.75" width="62.5" height="22.5" rx="3" fill="none" stroke="#E5E5E5" strokeWidth="1.2"/>
                         <text x="32" y="16.5" textAnchor="middle" fontFamily="Arial Black, Arial, sans-serif" fontSize="10" fontWeight="900" fill="#E5E5E5" letterSpacing="0.5">AMEX</text>
                       </svg>
-
-                      {/* Apple Pay */}
                       <svg viewBox="0 0 72 24" className="h-5 w-auto" aria-label="Apple Pay">
                         <g fill="#E5E5E5">
                           <path d="M14 7.5c-.6.7-1.5 1.3-2.4 1.2-.1-.9.4-1.9 1-2.5.6-.7 1.5-1.2 2.3-1.3.1.9-.3 1.9-.9 2.6zm.9.9c-1.3-.1-2.4.7-3.1.7-.7 0-1.6-.7-2.7-.7-1.4 0-2.7.8-3.4 2-1.4 2.5-.4 6.2 1.1 8.2.7 1 1.5 2.1 2.6 2.1 1 0 1.4-.7 2.7-.7s1.6.7 2.7.7c1.1 0 1.8-1 2.5-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2.1-.8-2.1-3.1 0-2 1.6-3 1.7-3-1-1.4-2.4-1.5-3.1-1.6z"/>
                           <text x="24" y="17" fontFamily="Arial, sans-serif" fontSize="11" fontWeight="500">Pay</text>
                         </g>
                       </svg>
-
-                      {/* Google Pay */}
                       <svg viewBox="0 0 72 24" className="h-5 w-auto" aria-label="Google Pay">
                         <g fill="#E5E5E5">
                           <path d="M11.5 11v2.6h3.8c-.1.9-.5 1.7-1.2 2.2-.6.5-1.5.8-2.6.8-2 0-3.8-1.4-4.4-3.3-.2-.6-.2-1.2 0-1.8.6-1.9 2.4-3.3 4.4-3.3 1.1 0 2.1.4 2.9 1.1l2-2c-1.3-1.2-3-1.9-4.9-1.9-2.7 0-5.1 1.6-6.2 3.9-.9 1.9-.9 4.1 0 6 1.1 2.3 3.5 3.9 6.2 3.9 1.9 0 3.5-.6 4.6-1.7 1.3-1.2 2-3 2-5.1 0-.5-.1-1-.1-1.4h-6.5z"/>
@@ -272,11 +277,9 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
                         </g>
                       </svg>
                     </div>
-
-                    {/* Badge paiement sécurisé */}
                     <div className="flex items-center justify-center gap-1.5 mt-0.5">
                       <Lock className="h-3 w-3 text-[#A1A1AA]" strokeWidth={2} />
-                      <span className="text-xs text-[#A1A1AA]">Paiement s&#233;curis&#233;</span>
+                      <span className="text-xs text-[#A1A1AA]">Paiement securise</span>
                     </div>
                   </div>
                 )}
@@ -285,7 +288,7 @@ export function WalletDrawer({ open, onClose }: { open: boolean; onClose: () => 
               {/* SSL Badge */}
               <div className="flex items-center justify-center gap-2 py-2">
                 <ShieldCheck className="h-3.5 w-3.5 text-[#D4AF37]/60" strokeWidth={1.5} />
-                <span className="text-[10px] text-[#A1A1AA]/70">Transactions s&#233;curis&#233;es par cryptage SSL</span>
+                <span className="text-[10px] text-[#A1A1AA]/70">Transactions securisees par cryptage SSL</span>
               </div>
             </div>
           </motion.div>

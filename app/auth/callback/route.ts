@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { EmailOtpType, Session } from '@supabase/supabase-js'
+import { ADMIN_URL } from '@/lib/admin-url'
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
@@ -168,7 +169,7 @@ export async function GET(request: NextRequest) {
       .limit(1)
       .maybeSingle()
     if (adminRole) {
-      const redirectUrl = new URL('/admin/dashboard', siteUrl).toString()
+      const redirectUrl = new URL('/admin/dashboard', ADMIN_URL).toString()
       console.log('[callback] admin détecté, redirect vers:', redirectUrl)
       return NextResponse.redirect(redirectUrl)
     }

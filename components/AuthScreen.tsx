@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Mail, Lock, Eye, EyeOff, ArrowLeft } from "lucide-react"
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, CheckCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Turnstile } from "@marsidev/react-turnstile"
 import { requestTwoFactorCodeAction, verifyTwoFactorCodeAction } from "@/app/actions/two-factor"
+import { sendPasswordResetCodeAction, verifyPasswordResetCodeAction, resetPasswordAction } from "@/app/actions/password-reset"
+import { isPasswordStrong } from "@/lib/password"
 
 export function AuthScreen({ initialError }: { initialError?: string }) {
   const [email, setEmail] = useState("")
@@ -21,7 +23,15 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
 
   // Nouveaux états pour le flux de reset
   const [isResetMode, setIsResetMode] = useState(false)
-  const [forgotSent, setForgotSent] = useState(false)
+  const [resetStep, setResetStep] = useState<'email' | 'code' | 'password'>('email')
+  const [resetCode, setResetCode] = useState('')
+  const [resetCodeError, setResetCodeError] = useState<string | null>(null)
+  const [resetNewPassword, setResetNewPassword] = useState('')
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('')
+  const [resetShowNewPassword, setResetShowNewPassword] = useState(false)
+  const [resetShowConfirm, setResetShowConfirm] = useState(false)
+  const [resetResendCooldown, setResetResendCooldown] = useState(0)
+  const [resetSuccess, setResetSuccess] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [turnstileKey, setTurnstileKey] = useState(0)
 
@@ -55,8 +65,6 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
     setIsLoading(true)
     setError(null)
     setPersistentError(null)
-    setForgotSent(false)
-
     const { data: authData, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -147,33 +155,80 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
   //   if (error) setError("Connexion Google indisponible. Veuillez réessayer.")
   // }
 
-  async function handleSendResetLink(e?: React.FormEvent) {
+  function startResetResendCooldown() {
+    setResetResendCooldown(60)
+    const timer = setInterval(() => {
+      setResetResendCooldown(prev => {
+        if (prev <= 1) { clearInterval(timer); return 0 }
+        return prev - 1
+      })
+    }, 1000)
+  }
+
+  async function handleSendResetCode(e?: React.FormEvent) {
     if (e) e.preventDefault()
     setError(null)
-    setForgotSent(false)
-    
-    if (!email) {
-      setError("Veuillez saisir votre adresse email.")
-      return
-    }
-    
+    if (!email) { setError("Veuillez saisir votre adresse email."); return }
     setIsLoading(true)
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${siteUrl}/auth/callback?type=recovery`,
-      captchaToken: captchaToken || undefined,
-    })
-    
+    await sendPasswordResetCodeAction(email)
     setIsLoading(false)
-    
-    // Réinitialiser le Turnstile après l'appel
     setCaptchaToken(null)
     setTurnstileKey(prev => prev + 1)
+    setResetStep('code')
+    startResetResendCooldown()
+  }
 
-    if (error) {
-      setError(error.message)
-    } else {
-      setForgotSent(true)
+  async function handleVerifyResetCode(e: React.FormEvent) {
+    e.preventDefault()
+    if (resetCode.length !== 6) return
+    setIsLoading(true)
+    setResetCodeError(null)
+    const result = await verifyPasswordResetCodeAction(email, resetCode)
+    setIsLoading(false)
+    if (!result.success) {
+      setResetCodeError(result.error ?? 'Code incorrect.')
+      return
     }
+    setResetStep('password')
+  }
+
+  async function handleResetPassword(e: React.FormEvent) {
+    e.preventDefault()
+    setResetCodeError(null)
+    if (resetNewPassword !== resetConfirmPassword) {
+      setResetCodeError("Les mots de passe ne correspondent pas.")
+      return
+    }
+    if (!isPasswordStrong(resetNewPassword)) {
+      setResetCodeError("Le mot de passe doit contenir au moins 8 caractères, avec une minuscule, une majuscule, un chiffre et un caractère spécial.")
+      return
+    }
+    setIsLoading(true)
+    const result = await resetPasswordAction(email, resetCode, resetNewPassword)
+    setIsLoading(false)
+    if (!result.success) {
+      setResetCodeError(result.error ?? 'Erreur inattendue. Veuillez réessayer.')
+      return
+    }
+    setResetSuccess(true)
+    setTimeout(() => {
+      setIsResetMode(false)
+      setResetStep('email')
+      setResetCode('')
+      setResetCodeError(null)
+      setResetNewPassword('')
+      setResetConfirmPassword('')
+      setResetSuccess(false)
+    }, 3000)
+  }
+
+  async function handleResendResetCode() {
+    if (resetResendCooldown > 0) return
+    setIsLoading(true)
+    setResetCodeError(null)
+    await sendPasswordResetCodeAction(email)
+    setIsLoading(false)
+    startResetResendCooldown()
   }
 
   return (
@@ -328,22 +383,31 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
             </motion.div>
           ) : isResetMode ? (
             <motion.form
-              key="reset-form"
+              key={`reset-${resetStep}`}
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
-              onSubmit={handleSendResetLink}
+              onSubmit={
+                resetStep === 'email' ? handleSendResetCode
+                : resetStep === 'code' ? handleVerifyResetCode
+                : handleResetPassword
+              }
               className="space-y-4"
             >
-              {forgotSent ? (
-                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
-                  <p className="text-[13px] text-emerald-400 leading-relaxed">
-                    Si un compte est associé à <strong>{email}</strong>, vous recevrez un lien de réinitialisation. Vérifiez votre boîte mail.
-                  </p>
+              {resetSuccess ? (
+                <div className="flex flex-col items-center text-center py-2">
+                  <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mb-4">
+                    <CheckCircle className="w-6 h-6 text-emerald-400" strokeWidth={1.5} />
+                  </div>
+                  <h2 className="text-[16px] font-semibold text-[#F5F5F5] mb-2">Mot de passe mis à jour</h2>
+                  <p className="text-[13px] text-[#888888] leading-relaxed">Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.</p>
                 </div>
-              ) : (
+              ) : resetStep === 'email' ? (
                 <>
+                  <p className="text-[13px] text-[#888888] leading-relaxed text-center">
+                    Entrez votre email. Nous vous enverrons un code à 6 chiffres — aucun lien à cliquer.
+                  </p>
                   <div className="relative">
                     <div className="absolute left-4 top-1/2 -translate-y-1/2">
                       <Mail className="h-4 w-4 text-[#D4AF37]/50" strokeWidth={1.5} />
@@ -357,8 +421,6 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
                       style={{ fontSize: "16px" }}
                     />
                   </div>
-                  
-                  {/* Turnstile Widget */}
                   <div className="flex justify-center mt-2 mb-2">
                     <Turnstile
                       key={`turnstile-reset-${turnstileKey}`}
@@ -369,30 +431,135 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
                       options={{ theme: 'dark', refreshExpired: 'auto' }}
                     />
                   </div>
-
                   <button
                     type="submit"
                     disabled={isLoading || !captchaToken}
                     className="w-full h-14 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[12px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 disabled:opacity-60"
                   >
-                    Envoyer le lien de réinitialisation
+                    Envoyer le code
+                  </button>
+                </>
+              ) : resetStep === 'code' ? (
+                <>
+                  <p className="text-[13px] text-[#888888] leading-relaxed text-center">
+                    Un code à 6 chiffres a été envoyé à <span className="text-[#D4AF37]">{email}</span>. Valable 10 minutes.
+                  </p>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="000000"
+                    value={resetCode}
+                    onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    autoComplete="one-time-code"
+                    autoFocus
+                    className="w-full h-14 px-4 rounded-xl bg-[#0A0A0A] border border-[#D4AF37]/30 text-[#F5F5F5] text-center font-mono placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors"
+                    style={{ fontSize: "22px", letterSpacing: "0.15em" }}
+                  />
+                  {resetCodeError && (
+                    <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-center text-[12px] text-red-400">
+                      {resetCodeError}
+                    </div>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={isLoading || resetCode.length !== 6}
+                    className="w-full h-14 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 disabled:opacity-60"
+                  >
+                    {isLoading ? 'Vérification...' : 'Vérifier le code'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResendResetCode}
+                    disabled={resetResendCooldown > 0 || isLoading}
+                    className="w-full text-[12px] text-[#888888] hover:text-[#D4AF37] transition-colors py-2 disabled:opacity-50"
+                  >
+                    {resetResendCooldown > 0 ? `Renvoyer dans ${resetResendCooldown}s` : 'Renvoyer le code'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-[13px] text-[#888888] leading-relaxed text-center">
+                    Choisissez un nouveau mot de passe.
+                  </p>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                      <Lock className="h-4 w-4 text-[#D4AF37]/50" strokeWidth={1.5} />
+                    </div>
+                    <input
+                      type={resetShowNewPassword ? "text" : "password"}
+                      placeholder="Nouveau mot de passe"
+                      value={resetNewPassword}
+                      onChange={(e) => setResetNewPassword(e.target.value)}
+                      autoFocus
+                      className="w-full h-14 pl-11 pr-12 rounded-xl bg-[#0A0A0A] border border-[#D4AF37]/30 text-[#F5F5F5] placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors"
+                      style={{ fontSize: "16px" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setResetShowNewPassword(!resetShowNewPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 p-1"
+                    >
+                      {resetShowNewPassword ? <EyeOff className="h-4 w-4 text-[#555555]" strokeWidth={1.5} /> : <Eye className="h-4 w-4 text-[#555555]" strokeWidth={1.5} />}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                      <Lock className="h-4 w-4 text-[#D4AF37]/30" strokeWidth={1.5} />
+                    </div>
+                    <input
+                      type={resetShowConfirm ? "text" : "password"}
+                      placeholder="Confirmer le mot de passe"
+                      value={resetConfirmPassword}
+                      onChange={(e) => setResetConfirmPassword(e.target.value)}
+                      className="w-full h-14 pl-11 pr-12 rounded-xl bg-[#0A0A0A] border border-[#D4AF37]/30 text-[#F5F5F5] placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors"
+                      style={{ fontSize: "16px" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setResetShowConfirm(!resetShowConfirm)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 p-1"
+                    >
+                      {resetShowConfirm ? <EyeOff className="h-4 w-4 text-[#555555]" strokeWidth={1.5} /> : <Eye className="h-4 w-4 text-[#555555]" strokeWidth={1.5} />}
+                    </button>
+                  </div>
+                  {resetCodeError && (
+                    <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-center text-[12px] text-red-400">
+                      {resetCodeError}
+                    </div>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={isLoading || !isPasswordStrong(resetNewPassword) || resetNewPassword !== resetConfirmPassword}
+                    className="w-full h-14 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 disabled:opacity-60"
+                  >
+                    {isLoading ? 'Réinitialisation...' : 'Réinitialiser le mot de passe'}
                   </button>
                 </>
               )}
-              
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsResetMode(false)
-                    setError(null)
-                    setForgotSent(false)
-                  }}
-                  className="w-full flex items-center justify-center gap-2 text-[12px] text-[#FFFFFF] hover:text-[#D4AF37] transition-colors duration-300 py-3 px-4"
-                >
-                  <ArrowLeft className="h-3 w-3" /> Retour à la connexion
-                </button>
-              </div>
+              {!resetSuccess && (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (resetStep === 'code') {
+                        setResetStep('email')
+                        setResetCode('')
+                        setResetCodeError(null)
+                      } else if (resetStep === 'password') {
+                        setResetStep('code')
+                        setResetCodeError(null)
+                      } else {
+                        setIsResetMode(false)
+                        setResetStep('email')
+                        setError(null)
+                      }
+                    }}
+                    className="w-full flex items-center justify-center gap-2 text-[12px] text-[#FFFFFF] hover:text-[#D4AF37] transition-colors duration-300 py-3 px-4"
+                  >
+                    <ArrowLeft className="h-3 w-3" /> {resetStep === 'email' ? 'Retour à la connexion' : 'Retour'}
+                  </button>
+                </div>
+              )}
             </motion.form>
           ) : (
             <motion.form

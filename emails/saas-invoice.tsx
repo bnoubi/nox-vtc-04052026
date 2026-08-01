@@ -1,5 +1,6 @@
 type SaasInvoiceEmailProps = {
   userName: string
+  prenom?: string
   numero: string
   description: string
   montantTTC: number
@@ -11,6 +12,7 @@ type SaasInvoiceEmailProps = {
 
 export function saasInvoiceEmail({
   userName,
+  prenom,
   numero,
   description,
   montantTTC,
@@ -47,7 +49,8 @@ export function saasInvoiceEmail({
             </tr>
             <tr>
               <td style="color:#F5F5F5;font-size:16px;line-height:1.6;">
-                <p style="margin:0 0 16px;">Bonjour ${userName},</p>
+                <p style="margin:0 0 8px;">Bonjour${prenom ? ` ${prenom}` : ''},</p>
+                <p style="margin:0 0 16px;">Merci pour votre achat.</p>
                 <p style="margin:0 0 24px;">Votre facture suite à votre ${achatLabel} est disponible ci-dessous.</p>
               </td>
             </tr>

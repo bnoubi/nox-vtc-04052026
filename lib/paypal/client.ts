@@ -49,7 +49,7 @@ export async function createPayPalOrder(
   return data.id
 }
 
-export async function capturePayPalOrder(orderID: string): Promise<void> {
+export async function capturePayPalOrder(orderID: string): Promise<string> {
   const token = await getPayPalAccessToken()
 
   const res = await fetch(`${BASE_URL}/v2/checkout/orders/${orderID}/capture`, {
@@ -61,4 +61,6 @@ export async function capturePayPalOrder(orderID: string): Promise<void> {
   })
 
   if (!res.ok) throw new Error(`PayPal capture failed: ${res.status}`)
+  const data = await res.json() as { status: string }
+  return data.status
 }
