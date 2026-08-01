@@ -2841,11 +2841,29 @@ function MainSettings({ onNavigate }: { onNavigate: (screen: SettingsScreen) => 
 
 export function SettingsTab() {
   const [screen, setScreen] = useState<SettingsScreen>("main")
-  const { registerSettingsNavigator } = useNav()
+  const { registerSettingsNavigator, pendingEntityNavigation, clearPendingEntityNavigation } = useNav()
 
   React.useEffect(() => {
     registerSettingsNavigator(setScreen)
   }, [registerSettingsNavigator])
+
+  // Respond to entity navigation requests from Guardian NoX (or any other source).
+  // AnimatePresence mode="wait" delays this component's mount by ~200ms after tab switch,
+  // so a setTimeout in nav-context would always fire too early. Reading the pending
+  // navigation here guarantees it executes only once the component is actually mounted.
+  React.useEffect(() => {
+    if (!pendingEntityNavigation) return
+    if (pendingEntityNavigation.entityType === "driver") {
+      setScreen("team")
+      // TeamScreen clears pendingEntityNavigation via its own effect
+    } else if (pendingEntityNavigation.entityType === "vehicle") {
+      setScreen("fleet")
+      // FleetScreen clears pendingEntityNavigation via its own effect
+    } else if (pendingEntityNavigation.entityType === "enterprise") {
+      setScreen("enterprise")
+      clearPendingEntityNavigation()
+    }
+  }, [pendingEntityNavigation, clearPendingEntityNavigation])
 
   return (
     <SettingsErrorBoundary>

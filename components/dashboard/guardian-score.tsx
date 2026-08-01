@@ -64,7 +64,7 @@ function getVehicleAgeStatus(years: number, motorType: MotorType): { status: "ok
 }
 
 interface GuardianScoreProps {
-  onNavigateToEntity?: (entityType: "driver" | "vehicle", entityId: string, field: string) => void
+  onNavigateToEntity?: (entityType: "driver" | "vehicle" | "enterprise", entityId: string, field: string) => void
 }
 
 export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
@@ -217,8 +217,8 @@ export function GuardianScore({ onNavigateToEntity }: GuardianScoreProps) {
   const scoreColor = getScoreColor(score)
   const scoreMessage = getScoreMessage(score)
 
-    function handleIssueClick(issue: DocumentIssue) {
-    if (onNavigateToEntity && issue.entityType !== "enterprise") {
+  function handleIssueClick(issue: DocumentIssue) {
+    if (onNavigateToEntity) {
       setShowDetails(false)
       onNavigateToEntity(issue.entityType, issue.entityId, issue.field)
     }
