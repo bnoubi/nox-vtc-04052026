@@ -33,13 +33,14 @@ async function handleSaasInvoicePaypal(opts: {
 
     const { data: account } = await db
       .from('user_accounts')
-      .select('email, full_name')
+      .select('email, full_name, prenom')
       .eq('id', userId)
       .maybeSingle()
 
-    const acc = account as { email: string; full_name: string } | null
+    const acc = account as { email: string; full_name: string; prenom: string | null } | null
     const userEmail = acc?.email ?? ''
     const userName  = acc?.full_name ?? 'Client'
+    const prenom    = acc?.prenom ?? undefined
 
     if (!userEmail) {
       console.warn('[saas-invoice] PayPal — email introuvable pour userId:', userId)
@@ -69,7 +70,7 @@ async function handleSaasInvoicePaypal(opts: {
     const montant_ht = Math.round((montantTTC / 1.20) * 100) / 100
     const tva_amount = Math.round((montantTTC - montant_ht) * 100) / 100
     const { subject, html } = saasInvoiceEmail({
-      userName, numero, description,
+      userName, prenom, numero, description,
       montantTTC, montantHT: montant_ht, tvaAmount: tva_amount,
       pdfUrl: pdfSignedUrl ?? '', type,
     })
