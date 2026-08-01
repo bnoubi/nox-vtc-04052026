@@ -1175,6 +1175,11 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNaviga
             </div>
           </div>
         )}
+        <SubscriptionDrawer
+          open={showSubDrawer}
+          targetPlan={subDrawerPlan}
+          onClose={() => setShowSubDrawer(false)}
+        />
       </motion.div>
     )
   }
