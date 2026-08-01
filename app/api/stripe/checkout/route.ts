@@ -32,9 +32,15 @@ export async function POST(request: NextRequest) {
 
     if (plan) {
       mode = 'subscription'
-      priceId = process.env[plan.stripeEnvKey]
+      // Always read from DB — admin can update stripe_price_id via /api/admin/subscription-plans
+      const { data: planRow } = await adminClient
+        .from('subscription_plans')
+        .select('stripe_price_id')
+        .eq('code', plan.uiId)
+        .maybeSingle()
+      priceId = (planRow as { stripe_price_id: string | null } | null)?.stripe_price_id ?? undefined
       if (!priceId) {
-        return NextResponse.json({ error: `Price ID not configured (${plan.stripeEnvKey})` }, { status: 500 })
+        return NextResponse.json({ error: `stripe_price_id introuvable pour le plan ${plan.uiId}` }, { status: 500 })
       }
     } else {
       const { data: packDB } = await adminClient

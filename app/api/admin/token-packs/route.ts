@@ -72,6 +72,8 @@ export async function PATCH(req: NextRequest) {
           unit_amount: Math.round(prix_eur * 100),
           currency: 'eur',
         })
+        // Clear product description so Stripe Checkout only shows the name
+        await stripe.products.update(productId, { description: '' })
         updates.stripe_price_id = newPrice.id
       } catch (err) {
         console.error('[token-packs] stripe price error:', err)

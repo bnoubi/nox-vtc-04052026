@@ -100,11 +100,17 @@ async function processCapture(orderID: string, itemType: string, userId: string)
     return { error: 'Utilisez /api/paypal/create-subscription pour les abonnements', status: 400 }
   }
 
+  let captureStatus: string
   try {
-    await capturePayPalOrder(orderID)
+    captureStatus = await capturePayPalOrder(orderID)
   } catch (err) {
     console.error('[paypal/capture-order] capture error:', err)
     return { error: 'Erreur lors de la capture du paiement', status: 500 }
+  }
+
+  if (captureStatus !== 'COMPLETED') {
+    console.warn('[paypal/capture-order] statut non-COMPLETED:', captureStatus, '| orderID:', orderID)
+    return { error: `Paiement non finalisé (statut PayPal : ${captureStatus})`, status: 402 }
   }
 
   const db     = makeAdminDb()
