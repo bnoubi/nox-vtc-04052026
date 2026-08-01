@@ -1116,70 +1116,73 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNaviga
             )}
           </div>
         </motion.div>
-        <LimitAlertModal
-          open={showUpgradeModal}
-          onClose={() => setShowUpgradeModal(false)}
-          resourceLabel="trajet récurrent"
-          customTitle="🔄 Trajets récurrents"
-          customMessage="Les trajets récurrents sont disponibles en offre Pro et Premium."
-          onManageOffer={() => { setShowUpgradeModal(false); navigateToSubscription() }}
-          onUpgradePro={() => { setShowUpgradeModal(false); setSubDrawerPlan("DUO"); setShowSubDrawer(true) }}
-          onUpgradePremium={() => { setShowUpgradeModal(false); setSubDrawerPlan("TEAM"); setShowSubDrawer(true) }}
-        />
-        <LimitAlertModal
-          open={showLinkLimitAlert}
-          onClose={() => setShowLinkLimitAlert(false)}
-          resourceLabel="lien de demande de trajet"
-          customTitle="🔒 Lien actif existant"
-          customMessage="🔒 Vous avez déjà un lien de demande de trajet actif. Passez en Pro pour en générer plusieurs simultanément."
-          onManageOffer={() => { setShowLinkLimitAlert(false); navigateToSubscription() }}
-          onUpgradePro={() => { setShowLinkLimitAlert(false); setSubDrawerPlan("DUO"); setShowSubDrawer(true) }}
-          onUpgradePremium={() => { setShowLinkLimitAlert(false); setSubDrawerPlan("TEAM"); setShowSubDrawer(true) }}
-        />
-        {showLinkModal && (
-          <div className="fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center px-5"
-            onClick={() => setShowLinkModal(false)}>
-            <div className="w-full max-w-sm bg-[#1a1a1a] rounded-2xl p-5 space-y-4"
-              onClick={e => e.stopPropagation()}>
-              <div className="text-center">
-                <p className="text-2xl mb-2">⏱️</p>
-                <h3 className="text-base font-bold text-foreground">Durée de validité du lien</h3>
+        {/* stopPropagation : empêche les clics dans les overlays de remonter au backdrop onClick={handleClose} */}
+        <div onClick={e => e.stopPropagation()}>
+          <LimitAlertModal
+            open={showUpgradeModal}
+            onClose={() => setShowUpgradeModal(false)}
+            resourceLabel="trajet récurrent"
+            customTitle="🔄 Trajets récurrents"
+            customMessage="Les trajets récurrents sont disponibles en offre Pro et Premium."
+            onManageOffer={() => { setShowUpgradeModal(false); navigateToSubscription() }}
+            onUpgradePro={() => { setShowUpgradeModal(false); setSubDrawerPlan("DUO"); setShowSubDrawer(true) }}
+            onUpgradePremium={() => { setShowUpgradeModal(false); setSubDrawerPlan("TEAM"); setShowSubDrawer(true) }}
+          />
+          <LimitAlertModal
+            open={showLinkLimitAlert}
+            onClose={() => setShowLinkLimitAlert(false)}
+            resourceLabel="lien de demande de trajet"
+            customTitle="🔒 Lien actif existant"
+            customMessage="🔒 Vous avez déjà un lien de demande de trajet actif. Passez en Pro pour en générer plusieurs simultanément."
+            onManageOffer={() => { setShowLinkLimitAlert(false); navigateToSubscription() }}
+            onUpgradePro={() => { setShowLinkLimitAlert(false); setSubDrawerPlan("DUO"); setShowSubDrawer(true) }}
+            onUpgradePremium={() => { setShowLinkLimitAlert(false); setSubDrawerPlan("TEAM"); setShowSubDrawer(true) }}
+          />
+          {showLinkModal && (
+            <div className="fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center px-5"
+              onClick={() => setShowLinkModal(false)}>
+              <div className="w-full max-w-sm bg-[#1a1a1a] rounded-2xl p-5 space-y-4"
+                onClick={e => e.stopPropagation()}>
+                <div className="text-center">
+                  <p className="text-2xl mb-2">⏱️</p>
+                  <h3 className="text-base font-bold text-foreground">Durée de validité du lien</h3>
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-sm text-muted-foreground">Votre lien sera valable :</p>
+                  <ul className="space-y-1 text-sm text-foreground">
+                    <li>• <span className="text-muted-foreground">Starter :</span> 24 heures</li>
+                    <li>• <span className="text-muted-foreground">Pro :</span> 48 heures</li>
+                    <li>• <span className="text-muted-foreground">Premium :</span> 72 heures</li>
+                  </ul>
+                  <p className="text-[11px] text-muted-foreground pt-1">
+                    Passé ce délai, le lien expirera automatiquement et ne pourra plus être utilisé.
+                  </p>
+                </div>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <Checkbox
+                    id="hide-validity-modal"
+                    onCheckedChange={(checked) => {
+                      if (checked) localStorage.setItem("hide_link_validity_modal", "true")
+                      else localStorage.removeItem("hide_link_validity_modal")
+                    }}
+                  />
+                  <span className="text-[11px] text-muted-foreground">Ne plus afficher ce message</span>
+                </label>
+                <button
+                  onClick={() => { setShowLinkModal(false); setStep("link") }}
+                  className="w-full py-3 rounded-xl bg-gold text-black font-semibold text-sm"
+                >
+                  J&apos;ai compris — Générer le lien
+                </button>
               </div>
-              <div className="space-y-1.5">
-                <p className="text-sm text-muted-foreground">Votre lien sera valable :</p>
-                <ul className="space-y-1 text-sm text-foreground">
-                  <li>• <span className="text-muted-foreground">Starter :</span> 24 heures</li>
-                  <li>• <span className="text-muted-foreground">Pro :</span> 48 heures</li>
-                  <li>• <span className="text-muted-foreground">Premium :</span> 72 heures</li>
-                </ul>
-                <p className="text-[11px] text-muted-foreground pt-1">
-                  Passé ce délai, le lien expirera automatiquement et ne pourra plus être utilisé.
-                </p>
-              </div>
-              <label className="flex items-center gap-2.5 cursor-pointer">
-                <Checkbox
-                  id="hide-validity-modal"
-                  onCheckedChange={(checked) => {
-                    if (checked) localStorage.setItem("hide_link_validity_modal", "true")
-                    else localStorage.removeItem("hide_link_validity_modal")
-                  }}
-                />
-                <span className="text-[11px] text-muted-foreground">Ne plus afficher ce message</span>
-              </label>
-              <button
-                onClick={() => { setShowLinkModal(false); setStep("link") }}
-                className="w-full py-3 rounded-xl bg-gold text-black font-semibold text-sm"
-              >
-                J&apos;ai compris — Générer le lien
-              </button>
             </div>
-          </div>
-        )}
-        <SubscriptionDrawer
-          open={showSubDrawer}
-          targetPlan={subDrawerPlan}
-          onClose={() => setShowSubDrawer(false)}
-        />
+          )}
+          <SubscriptionDrawer
+            open={showSubDrawer}
+            targetPlan={subDrawerPlan}
+            onClose={() => setShowSubDrawer(false)}
+          />
+        </div>
       </motion.div>
     )
   }

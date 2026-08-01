@@ -4,10 +4,7 @@ import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Shield, Crown } from "lucide-react"
 import { getSubscriptionPlansAction } from "@/lib/actions/subscription-plans"
-
-function fmtPrice(n: number) {
-  return n.toFixed(2).replace('.', ',') + '\u20ac/mois'
-}
+import { usePromo } from "@/lib/hooks/usePromo"
 
 interface LimitAlertModalProps {
   open: boolean
@@ -21,19 +18,28 @@ interface LimitAlertModalProps {
   onUpgradePremium?: () => void
 }
 
+function discounted(base: number, percent: number) {
+  return Math.floor(base * (1 - percent / 100) * 100) / 100
+}
+
+function fmt(n: number) {
+  return n.toFixed(2).replace('.', ',') + '€/mois'
+}
+
 export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer, customMessage, customTitle, onUpgradePro, onUpgradePremium }: LimitAlertModalProps) {
   const hasDualButtons = onUpgradePro && onUpgradePremium
   const displayMessage = customMessage?.replace(/^\u{1F512}\s*/u, "") ?? `Vous avez atteint la limite d'ajout de ${resourceLabel} pour votre offre actuelle. Passez a une offre superieure pour continuer.`
 
-  const [proPriceLabel, setProPriceLabel] = useState(fmtPrice(4.99))
-  const [premiumPriceLabel, setPremiumPriceLabel] = useState(fmtPrice(9.99))
+  const [proPrice, setProPrice] = useState(4.99)
+  const [premiumPrice, setPremiumPrice] = useState(9.99)
+  const { promo } = usePromo()
 
   useEffect(() => {
     getSubscriptionPlansAction().then(plans => {
       const duo = plans.find(p => p.code === 'DUO')
       const team = plans.find(p => p.code === 'TEAM')
-      if (duo) setProPriceLabel(fmtPrice(duo.price_per_month))
-      if (team) setPremiumPriceLabel(fmtPrice(team.price_per_month))
+      if (duo) setProPrice(duo.price_per_month)
+      if (team) setPremiumPrice(team.price_per_month)
     })
   }, [])
 
@@ -94,7 +100,14 @@ export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer, c
                 >
                   <Crown className="h-3.5 w-3.5 text-[#D4AF37]" strokeWidth={2} />
                   <span className="text-xs font-bold text-[#D4AF37] tracking-wider uppercase">Pro</span>
-                  <span className="text-[10px] text-[#D4AF37]/70">{proPriceLabel}</span>
+                  {promo.active ? (
+                    <>
+                      <span className="text-[9px] text-[#D4AF37]/50 line-through">{fmt(proPrice)}</span>
+                      <span className="text-[10px] text-[#D4AF37] font-bold">{fmt(discounted(proPrice, promo.percent))}</span>
+                    </>
+                  ) : (
+                    <span className="text-[10px] text-[#D4AF37]/70">{fmt(proPrice)}</span>
+                  )}
                 </button>
                 <button
                   onClick={() => { onClose(); onUpgradePremium() }}
@@ -102,7 +115,14 @@ export function LimitAlertModal({ open, onClose, resourceLabel, onManageOffer, c
                 >
                   <Crown className="h-3.5 w-3.5 text-[#1A1A1A]" strokeWidth={2} />
                   <span className="text-xs font-bold text-[#1A1A1A] tracking-wider uppercase">Premium</span>
-                  <span className="text-[10px] text-[#1A1A1A]/70">{premiumPriceLabel}</span>
+                  {promo.active ? (
+                    <>
+                      <span className="text-[9px] text-[#1A1A1A]/40 line-through">{fmt(premiumPrice)}</span>
+                      <span className="text-[10px] text-[#1A1A1A] font-bold">{fmt(discounted(premiumPrice, promo.percent))}</span>
+                    </>
+                  ) : (
+                    <span className="text-[10px] text-[#1A1A1A]/70">{fmt(premiumPrice)}</span>
+                  )}
                 </button>
               </div>
             ) : (
