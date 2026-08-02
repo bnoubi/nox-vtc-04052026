@@ -49,10 +49,11 @@ export async function POST(req: NextRequest) {
       }
     } catch (sigErr) {
       console.error('[paypal-webhook] signature verification error:', sigErr)
-      // Ne pas bloquer si verification echoue — on loggue et on continue
+      return NextResponse.json({ error: 'Erreur vérification signature' }, { status: 500 })
     }
   } else {
-    console.warn('[paypal-webhook] PAYPAL_WEBHOOK_ID non configure — verification ignoree')
+    console.error('[paypal-webhook] PAYPAL_WEBHOOK_ID non configure — webhook rejeté')
+    return NextResponse.json({ error: 'Webhook non configuré' }, { status: 500 })
   }
 
   let event: { event_type: string; resource: Record<string, unknown> }

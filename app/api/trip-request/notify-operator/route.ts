@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { sendEmail } from "@/lib/email/resend"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 const adminSupabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,11 @@ const adminSupabase = createClient(
 )
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+  if (!checkRateLimit(`notify-operator:${ip}`, 5, 60_000)) {
+    return NextResponse.json({ ok: false, error: 'Trop de requêtes' }, { status: 429 })
+  }
+
   const body = await req.json() as {
     userId?: string
     passengerName?: string

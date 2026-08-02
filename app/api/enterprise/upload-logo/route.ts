@@ -23,6 +23,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Fichier manquant" }, { status: 400 })
     }
 
+    const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "image/svg+xml"]
+    const MAX_SIZE = 2 * 1024 * 1024 // 2 Mo
+
+    if (!ALLOWED_MIME.includes(file.type)) {
+      return NextResponse.json({ error: "Type de fichier non autorisé (jpeg, png, webp, svg uniquement)" }, { status: 415 })
+    }
+    if (file.size > MAX_SIZE) {
+      return NextResponse.json({ error: "Fichier trop volumineux (max 2 Mo)" }, { status: 413 })
+    }
+
     const ext = file.name.split(".").pop()?.toLowerCase() || "png"
     const path = `${user.id}/logo.${ext}`
     const buffer = Buffer.from(await file.arrayBuffer())

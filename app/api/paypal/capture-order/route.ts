@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { capturePayPalOrder } from '@/lib/paypal/client'
 import { createServerClient } from '@supabase/ssr'
+import { createClient as createAuthClient } from '@/lib/supabase/server'
 import { generateAndStoreSaasInvoice } from '@/lib/saas-invoice-generator'
 import { saasInvoiceEmail } from '@/emails/saas-invoice'
 import { sendEmail } from '@/lib/email/resend'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 
 const schema = z.object({
@@ -13,6 +15,17 @@ const schema = z.object({
   userId:   z.string().uuid(),
 })
 
+
+async function verifySession(): Promise<string | null> {
+  try {
+    const client = await createAuthClient()
+    const { data: { user }, error } = await client.auth.getUser()
+    if (error || !user) return null
+    return user.id
+  } catch {
+    return null
+  }
+}
 
 function makeAdminDb() {
   return createServerClient(
@@ -101,6 +114,19 @@ async function processCapture(orderID: string, itemType: string, userId: string)
     return { error: 'Utilisez /api/paypal/create-subscription pour les abonnements', status: 400 }
   }
 
+  const db = makeAdminDb()
+
+  // Idempotence : rejeter si cet orderID a déjà été traité
+  const { data: existingTx } = await db
+    .from('token_transactions')
+    .select('id')
+    .eq('paypal_order_id', orderID)
+    .maybeSingle()
+  if (existingTx) {
+    console.log('[paypal/capture-order] doublon détecté, ignoré — orderID:', orderID)
+    return { redirectUrl: `/payment/success?type=token_pack&already=true` }
+  }
+
   let captureStatus: string
   try {
     captureStatus = await capturePayPalOrder(orderID)
@@ -114,7 +140,6 @@ async function processCapture(orderID: string, itemType: string, userId: string)
     return { error: `Paiement non finalisé (statut PayPal : ${captureStatus})`, status: 402 }
   }
 
-  const db     = makeAdminDb()
   const isPack = !itemType.startsWith('plan_')
 
   if (isPack) {
@@ -154,12 +179,13 @@ async function processCapture(orderID: string, itemType: string, userId: string)
     }
 
     await db.from('token_transactions').insert({
-      user_id:       userId,
-      type:          'purchase',
-      amount:        tokens,
-      description:   'Achat pack jetons (PayPal)',
-      wallet_id:     walletId || null,
-      balance_after: balanceAfter,
+      user_id:         userId,
+      type:            'purchase',
+      amount:          tokens,
+      description:     'Achat pack jetons (PayPal)',
+      wallet_id:       walletId || null,
+      balance_after:   balanceAfter,
+      paypal_order_id: orderID,
     })
 
     await handleSaasInvoicePaypal({ userId, itemType, orderID })
@@ -171,14 +197,27 @@ async function processCapture(orderID: string, itemType: string, userId: string)
 }
 
 export async function GET(req: NextRequest) {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://app.noxvtc.fr'
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+
+  if (!checkRateLimit(`paypal-capture:${ip}`, 10, 60_000)) {
+    return NextResponse.redirect(new URL('/?paypal=error&msg=Trop+de+requêtes', baseUrl))
+  }
+
   const { searchParams } = new URL(req.url)
   const orderID  = searchParams.get('token')    ?? ''  // PayPal redirects with ?token=ORDER_ID
   const itemType = searchParams.get('itemType') ?? ''
   const userId   = searchParams.get('userId')   ?? ''
 
-  const result = await processCapture(orderID, itemType, userId)
+  const sessionUserId = await verifySession()
+  if (!sessionUserId) {
+    return NextResponse.redirect(new URL('/?paypal=error&msg=Session+expirée', baseUrl))
+  }
+  if (sessionUserId !== userId) {
+    return NextResponse.redirect(new URL('/?paypal=error&msg=Utilisateur+non+autorisé', baseUrl))
+  }
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://app.noxvtc.fr'
+  const result = await processCapture(orderID, itemType, userId)
 
   if ('error' in result) {
     return NextResponse.redirect(new URL(`/?paypal=error&msg=${encodeURIComponent(result.error ?? '')}`, baseUrl))
@@ -188,6 +227,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+  if (!checkRateLimit(`paypal-capture:${ip}`, 10, 60_000)) {
+    return NextResponse.json({ error: 'Trop de requêtes' }, { status: 429 })
+  }
+
   let body: unknown
   try {
     body = await req.json()
@@ -201,6 +245,15 @@ export async function POST(req: NextRequest) {
   }
 
   const { orderID, itemType, userId } = parsed.data
+
+  const sessionUserId = await verifySession()
+  if (!sessionUserId) {
+    return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+  }
+  if (sessionUserId !== userId) {
+    return NextResponse.json({ error: 'Utilisateur non autorisé' }, { status: 403 })
+  }
+
   const result = await processCapture(orderID, itemType, userId)
 
   if ('error' in result) {
