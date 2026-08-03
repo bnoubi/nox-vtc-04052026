@@ -94,3 +94,28 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* ─── Desktop: mobile-app frame ─── */
+/* body bg only when the frame is present, keeps admin unaffected */
+@media (min-width: 1024px) {
+  body:has(.app-frame) {
+    background: #050505;
+  }
+
+  .app-frame {
+    max-width: 430px;
+    margin-left: auto;
+    margin-right: auto;
+    min-height: 100vh;
+    /*
+      translateZ(0) creates a new CSS containing block:
+      position:fixed children are fixed relative to this element
+      (not the viewport), so all overlays stay inside the 430px frame.
+      No visual translation occurs.
+    */
+    transform: translateZ(0);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.05),
+      0 0 80px rgba(0, 0, 0, 0.8);
+  }
+}

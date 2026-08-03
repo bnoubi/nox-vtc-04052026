@@ -141,7 +141,7 @@ function AppPage() {
 
   if (!mounted) {
     return (
-      <main className="min-h-screen bg-background">
+      <main className="min-h-screen bg-background app-frame">
         <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
       </main>
     )
@@ -168,7 +168,7 @@ function AppPage() {
   return (
     <NoxProvider>
         <NavProvider onTabChange={setActiveTab} onLogout={handleLogout}>
-          <main className="min-h-screen bg-background overflow-x-hidden">
+          <main className="min-h-screen bg-background overflow-x-hidden app-frame">
             <div className="fixed inset-0 bg-gradient-to-b from-gold/[0.02] to-transparent pointer-events-none" />
 
             <div className="relative max-w-md mx-auto h-screen flex flex-col pb-32 overflow-x-hidden">
