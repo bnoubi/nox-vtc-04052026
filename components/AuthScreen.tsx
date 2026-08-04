@@ -8,8 +8,24 @@ import { createClient } from "@/lib/supabase/client"
 import { Turnstile } from "@marsidev/react-turnstile"
 import { requestTwoFactorCodeAction, verifyTwoFactorCodeAction } from "@/app/actions/two-factor"
 import { sendPasswordResetCodeAction, verifyPasswordResetCodeAction, resetPasswordAction } from "@/app/actions/password-reset"
-import { checkLoginRateLimit, recordFailedLogin, clearLoginAttempts } from "@/app/auth/actions"
 import { isPasswordStrong } from "@/lib/password"
+
+async function rlCheck(email: string): Promise<{ blocked: boolean; waitSeconds: number }> {
+  const res = await fetch('/api/auth/rate-limit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'check', email }),
+  })
+  return res.json()
+}
+
+async function rlRecord(email: string): Promise<void> {
+  await fetch('/api/auth/rate-limit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'record', email }),
+  })
+}
 
 export function AuthScreen({ initialError }: { initialError?: string }) {
   const [email, setEmail] = useState("")
@@ -68,7 +84,7 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
     setPersistentError(null)
 
     // Vérification rate limit avant la tentative
-    const rl = await checkLoginRateLimit(email)
+    const rl = await rlCheck(email)
     if (rl.blocked) {
       const mins = Math.ceil(rl.waitSeconds / 60)
       setError(`Trop de tentatives échouées. Réessayez dans ${mins} minute${mins > 1 ? 's' : ''}.`)
@@ -87,7 +103,7 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
     setTurnstileKey(prev => prev + 1)
 
     if (error) {
-      await recordFailedLogin(email)
+      await rlRecord(email)
       const msg = error.message.toLowerCase()
       if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
         setError("Email ou mot de passe incorrect.")
@@ -101,9 +117,6 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
       setIsLoading(false)
       return
     }
-
-    // Connexion réussie — réinitialiser le compteur
-    await clearLoginAttempts(email)
 
     // Vérifier 2FA côté client — session disponible immédiatement après signInWithPassword
     const userId = authData.user?.id

@@ -4,47 +4,6 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
-// ─── Rate limiting login (in-memory, par email, persistant par process PM2) ───
-const WINDOW_MS = 15 * 60 * 1000 // fenêtre glissante 15 min
-const LOCKS: Array<{ minFailures: number; lockMs: number }> = [
-  { minFailures: 20, lockMs: 60 * 60 * 1000 },
-  { minFailures: 10, lockMs: 15 * 60 * 1000 },
-  { minFailures:  5, lockMs:  2 * 60 * 1000 },
-]
-type Entry = { count: number; windowStart: number; lockedUntil: number }
-const loginAttempts = new Map<string, Entry>()
-
-export async function checkLoginRateLimit(
-  email: string
-): Promise<{ blocked: boolean; waitSeconds: number }> {
-  const key = email.toLowerCase().trim()
-  const now = Date.now()
-  const entry = loginAttempts.get(key)
-  if (!entry) return { blocked: false, waitSeconds: 0 }
-  if (now - entry.windowStart > WINDOW_MS) {
-    loginAttempts.delete(key)
-    return { blocked: false, waitSeconds: 0 }
-  }
-  if (entry.lockedUntil > now) {
-    return { blocked: true, waitSeconds: Math.ceil((entry.lockedUntil - now) / 1000) }
-  }
-  return { blocked: false, waitSeconds: 0 }
-}
-
-export async function recordFailedLogin(email: string): Promise<void> {
-  const key = email.toLowerCase().trim()
-  const now = Date.now()
-  const entry = loginAttempts.get(key)
-  const windowStart = entry && now - entry.windowStart <= WINDOW_MS ? entry.windowStart : now
-  const count = entry && now - entry.windowStart <= WINDOW_MS ? entry.count + 1 : 1
-  const lock = LOCKS.find(l => count >= l.minFailures)
-  loginAttempts.set(key, { count, windowStart, lockedUntil: lock ? now + lock.lockMs : 0 })
-}
-
-export async function clearLoginAttempts(email: string): Promise<void> {
-  loginAttempts.delete(email.toLowerCase().trim())
-}
-
 export async function login(formData: FormData) {
   const supabase = await createClient()
 
