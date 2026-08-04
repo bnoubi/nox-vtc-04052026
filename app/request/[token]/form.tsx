@@ -181,7 +181,8 @@ export function TripRequestForm({
   const [civility, setCivility] = useState<"M." | "Mme">("M.")
   const [firstname, setFirstname] = useState("")
   const [lastname, setLastname] = useState("")
-  const [phone, setPhone] = useState("")
+  const [phoneLocal, setPhoneLocal] = useState("")
+  const phone = "+33" + phoneLocal.replace(/[\s\-().]/g, "")
   const [email, setEmail] = useState("")
   const [departure, setDeparture] = useState(initialDeparture)
   const [arrival, setArrival] = useState(initialArrival)
@@ -393,8 +394,13 @@ export function TripRequestForm({
             </div>
             <div>
               <label className={LABEL}>{t.phone}</label>
-              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
-                className={INPUT} placeholder="+33 6 12 34 56 78" />
+              <div className="flex gap-2">
+                <div className="flex items-center gap-1.5 shrink-0 px-3 rounded-xl border border-[#D4AF37]/20 bg-white/5 text-sm text-white/70 select-none">
+                  🇫🇷 +33
+                </div>
+                <input type="tel" value={phoneLocal} onChange={e => setPhoneLocal(e.target.value)}
+                  className={`${INPUT} flex-1`} placeholder="6 12 34 56 78" />
+              </div>
             </div>
             <div>
               <label className={LABEL}>{t.email}</label>

@@ -71,6 +71,7 @@ import { SupportHistory } from "./support-history"
 import { planLabel, getPlanLimits } from "@/lib/plans"
 import { isPasswordStrong, PasswordStrengthIndicator } from "@/lib/password"
 import { sendPasswordChangedEmailAction } from "@/app/actions/security"
+import { PhoneInput } from "@/components/ui/phone-input"
 import {
   getTwoFactorStatusAction,
   requestTwoFactorCodeAction,
@@ -413,12 +414,9 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
                 placeholder="Votre email"
                 className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
               />
-              <input
-                type="tel"
+              <PhoneInput
                 value={userMetadata.phone}
-                onChange={(e) => setUserMetadata({ ...userMetadata, phone: e.target.value })}
-                placeholder="+33 6 00 00 00 00"
-                className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-gold/50 transition-colors"
+                onChange={(v) => setUserMetadata({ ...userMetadata, phone: v })}
               />
             </div>
           ) : (

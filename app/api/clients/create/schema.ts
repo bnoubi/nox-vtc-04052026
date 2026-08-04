@@ -10,7 +10,7 @@ const ContactSchema = z.object({
   nom:       z.string().max(100),
   prenom:    z.string().max(100).optional(),
   email:     z.string().email().optional(),
-  telephone: z.string().max(20).optional(),
+  telephone: z.string().max(25).optional(),
   role:      z.string().max(50).optional(),
 }).optional()
 
@@ -23,7 +23,7 @@ export const CreateClientSchema = z.object({
   siren:          z.string().regex(/^\d{9}$/, "SIREN invalide (9 chiffres)").optional().or(z.literal("")),
   tvaIntra:       z.string().regex(/^FR\d{11}$/, "TVA intracommunautaire invalide").optional().or(z.literal("")),
   email:          z.string().email("Email invalide").optional().or(z.literal("")),
-  phone:          z.string().max(20).optional(),
+  phone:          z.string().max(25).optional(),
   billingAddress: BillingAddressSchema,
   contacts:       z.array(ContactSchema).max(20).optional(),
   notes:          z.string().max(2000).optional(),

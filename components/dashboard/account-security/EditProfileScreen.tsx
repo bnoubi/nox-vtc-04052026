@@ -6,6 +6,7 @@ import { SubScreenHeader, GlassCard } from "../tab-settings"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { Save, User, Mail, Phone, BadgeCheck, MailWarning } from "lucide-react"
+import { PhoneInput } from "@/components/ui/phone-input"
 import { useNox } from "../nox-context"
 
 const slideIn = {
@@ -190,12 +191,9 @@ export function EditProfileScreen({ onBack }: { onBack: () => void }) {
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5 ml-1">
                 <Phone className="h-3 w-3" /> Téléphone
               </label>
-              <input
-                type="tel"
+              <PhoneInput
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl bg-secondary/60 border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/50 transition-colors"
-                placeholder="+33 6 00 00 00 00"
+                onChange={(v) => setFormData({ ...formData, phone: v })}
               />
             </div>
           </div>

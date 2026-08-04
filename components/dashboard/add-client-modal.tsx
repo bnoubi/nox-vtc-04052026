@@ -8,6 +8,7 @@ import { useNox } from "./nox-context"
 import { toast } from "sonner"
 import type { ClientType, ClientContact, Client } from "./data"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
+import { PhoneInput } from "@/components/ui/phone-input"
 
 interface AddClientModalProps {
   open: boolean
@@ -370,12 +371,10 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
                                 className="w-full px-3 py-2 rounded-lg bg-background border border-onyx-border/30 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
                               />
                             </div>
-                            <input
-                              type="tel"
+                            <PhoneInput
                               value={contact.phone}
-                              onChange={(e) => updateContact(index, "phone", e.target.value)}
-                              placeholder="Téléphone"
-                              className="w-full px-3 py-2 rounded-lg bg-background border border-onyx-border/30 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
+                              onChange={(v) => updateContact(index, "phone", v)}
+                              fieldCls="bg-background border border-onyx-border/30 text-xs text-foreground focus:outline-none focus:border-gold/40 transition-colors"
                             />
                           </div>
                         ))}
@@ -395,13 +394,11 @@ export function AddClientModal({ open, onClose }: AddClientModalProps) {
                     <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
                       Téléphone *
                     </label>
-                    <input
-                      type="tel"
-                      required
+                    <PhoneInput
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+33 6 12 34 56 78"
-                      className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
+                      onChange={setPhone}
+                      required
+                      fieldCls="bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
                     />
                   </div>
                   <div>

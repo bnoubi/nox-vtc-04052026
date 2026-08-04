@@ -24,6 +24,7 @@ import { QuickAddClientModal } from "./quick-add-client-modal"
 import { LimitAlertModal } from "./limit-alert-modal"
 import { SubscriptionDrawer } from "./subscription-drawer"
 import { TokenCostModal } from "./token-cost-modal"
+import { PhoneInput } from "@/components/ui/phone-input"
 
 // ============================================================================
 // TYPES & HELPERS
@@ -1565,10 +1566,12 @@ export function CreateBCFlow({ open, onClose, prefillClient, prefillBC, onNaviga
                       placeholder="Nom du passager"
                       className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
                       style={{ fontSize: "16px" }} />
-                    <input type="tel" value={passagerTelephone} onChange={e => setPassagerTelephone(e.target.value)}
+                    <PhoneInput
+                      value={passagerTelephone}
+                      onChange={setPassagerTelephone}
                       placeholder="Téléphone du passager"
-                      className="w-full px-3 py-2.5 rounded-xl bg-[#242424] border border-onyx-border/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/50"
-                      style={{ fontSize: "16px" }} />
+                      fieldCls="bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50"
+                    />
                   </div>
                 )}
               </div>

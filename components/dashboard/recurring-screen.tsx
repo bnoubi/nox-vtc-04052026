@@ -16,6 +16,7 @@ import { useNox } from "./nox-context"
 import { QuickAddClientModal } from "./quick-add-client-modal"
 import { toast } from "sonner"
 import { type Client, type EnterpriseProfile } from "./data"
+import { PhoneInput } from "@/components/ui/phone-input"
 import { generateRecurringContractPDF, generateRecurringInvoicePDF, type RecurringInvoiceDocument } from "@/lib/pdf-generator"
 
 function generateCGVSummary(enterprise: EnterpriseProfile): string {
@@ -989,10 +990,12 @@ function CreateRecurringContract({ onBack, onSuccess }: {
                         placeholder="Nom du passager"
                         className={inputClass()}
                         style={{ fontSize: "16px" }} />
-                      <input type="tel" value={passagerTelephone} onChange={e => setPassagerTelephone(e.target.value)}
+                      <PhoneInput
+                        value={passagerTelephone}
+                        onChange={setPassagerTelephone}
                         placeholder="Téléphone du passager"
-                        className={inputClass()}
-                        style={{ fontSize: "16px" }} />
+                        fieldCls="bg-[#242424] border border-onyx-border/30 text-sm text-foreground focus:outline-none focus:border-gold/50"
+                      />
                     </div>
                   )}
                 </div>

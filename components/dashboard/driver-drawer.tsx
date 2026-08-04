@@ -6,6 +6,7 @@ import { X, User, Phone, FileText, Calendar, Trash2, CheckCircle2 } from "lucide
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { Driver } from "./data"
+import { PhoneInput } from "@/components/ui/phone-input"
 
 function getExpirationStatus(dateStr: string): { label: string; cls: string } {
   if (!dateStr) return { label: "", cls: "" }
@@ -200,12 +201,10 @@ export function DriverDrawer({ open, driver, onClose, onSave, onDelete }: Driver
                   <Phone className="h-3 w-3" strokeWidth={1.5} />
                   TÉLÉPHONE
                 </label>
-                <input
-                  type="tel"
-                  placeholder="+33 6 00 00 00 00"
+                <PhoneInput
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] placeholder:text-[#555] focus:outline-none focus:border-[#D4AF37]/50 transition-colors"
+                  onChange={setPhone}
+                  fieldCls="bg-[#1A1A1A] border border-[#333] text-sm text-[#F5F5F5] focus:outline-none focus:border-[#D4AF37]/50 transition-colors"
                 />
               </div>
 

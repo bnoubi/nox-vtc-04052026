@@ -15,6 +15,7 @@ import {
   CheckCircle2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { PhoneInput } from "@/components/ui/phone-input"
 
 function getExpirationStatus(dateStr: string): { label: string; cls: string } {
   if (!dateStr) return { label: "", cls: "" }
@@ -150,15 +151,12 @@ export function AddDriverModal({ open, onClose }: AddDriverModalProps) {
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2 mt-2">
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" strokeWidth={1.5} />
-                    <input
-                      type="tel"
-                      required
-                      placeholder="Téléphone"
+                  <div>
+                    <PhoneInput
                       value={form.phone}
-                      onChange={(e) => update("phone", e.target.value)}
-                      className="w-full pl-8 pr-3 py-2.5 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-gold/40 transition-colors"
+                      onChange={(v) => update("phone", v)}
+                      required
+                      fieldCls="bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
                     />
                   </div>
                   <div className="relative">

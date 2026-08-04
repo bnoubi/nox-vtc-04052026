@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { useNox } from "./nox-context"
 import { toast } from "sonner"
 import type { ClientType, Client } from "./data"
+import { PhoneInput } from "@/components/ui/phone-input"
 
 interface QuickAddClientModalProps {
   open: boolean
@@ -358,13 +359,11 @@ export function QuickAddClientModal({ open, onClose, clients, onClientCreated }:
             {/* Téléphone + Email */}
             <div>
               <label className={labelCls}>Téléphone <span className="text-red-500">*</span></label>
-              <input
-                type="tel"
+              <PhoneInput
                 value={phone}
-                onChange={e => { setPhone(e.target.value); if (e.target.value.trim()) setFieldErrors(prev => { const p = { ...prev }; delete p.phone; return p }) }}
-                placeholder="+33 6 12 34 56 78"
-                className={cn(inputCls, fieldErrors.phone && "border-red-500")}
-                style={{ fontSize: "16px" }}
+                onChange={(v) => { setPhone(v); if (v.trim()) setFieldErrors(prev => { const p = { ...prev }; delete p.phone; return p }) }}
+                required
+                fieldCls={cn("bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors", fieldErrors.phone && "border-red-500")}
               />
               {fieldErrors.phone && <p className="text-xs text-red-400 mt-1">Ce champ est obligatoire</p>}
             </div>

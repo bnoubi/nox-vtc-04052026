@@ -30,6 +30,7 @@ import { useNox } from "./nox-context"
 import { useNav } from "./nav-context"
 import type { Client, ClientContact } from "./data"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
+import { PhoneInput } from "@/components/ui/phone-input"
 
 // ── Helper: Get display name ─────────────────────────────────
 
@@ -515,11 +516,10 @@ function ClientDetail({
             <div className="space-y-3">
               <div>
                 <label className="text-[10px] text-muted-foreground mb-1 block">Téléphone</label>
-                <input
-                  type="tel"
+                <PhoneInput
                   value={editPhone}
-                  onChange={(e) => setEditPhone(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
+                  onChange={setEditPhone}
+                  fieldCls="bg-onyx-card border border-onyx-border/50 text-sm text-foreground focus:outline-none focus:border-gold/40 transition-colors"
                 />
               </div>
               <div>
