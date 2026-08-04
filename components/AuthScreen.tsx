@@ -6,7 +6,6 @@ import { Mail, Lock, Eye, EyeOff, ArrowLeft, CheckCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Turnstile } from "@marsidev/react-turnstile"
-import { requestTwoFactorCodeAction, verifyTwoFactorCodeAction } from "@/app/actions/two-factor"
 import { sendPasswordResetCodeAction, verifyPasswordResetCodeAction, resetPasswordAction } from "@/app/actions/password-reset"
 import { isPasswordStrong } from "@/lib/password"
 
@@ -25,6 +24,19 @@ async function rlRecord(email: string): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'record', email }),
   })
+}
+
+async function request2FA(): Promise<void> {
+  await fetch('/api/auth/request-2fa', { method: 'POST' })
+}
+
+async function verify2FA(code: string): Promise<{ success: boolean; error?: string }> {
+  const res = await fetch('/api/auth/verify-2fa', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  })
+  return res.json()
 }
 
 export function AuthScreen({ initialError }: { initialError?: string }) {
@@ -127,7 +139,7 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
         .eq('id', userId)
         .maybeSingle()
       if (account?.two_factor_email_enabled) {
-        await requestTwoFactorCodeAction()
+        await request2FA()
         setShowEmailMfaStep(true)
         setIsLoading(false)
         startEmailResendCooldown()
@@ -154,7 +166,7 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
     setIsLoading(true)
     setEmailMfaError(null)
     try {
-      const result = await verifyTwoFactorCodeAction(emailMfaCode)
+      const result = await verify2FA(emailMfaCode)
       if (!result.success) {
         setEmailMfaError(result.error ?? 'Code incorrect, veuillez réessayer.')
         setEmailMfaCode('')
@@ -358,7 +370,7 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
                 type="button"
                 onClick={async () => {
                   if (emailResendCooldown > 0) return
-                  await requestTwoFactorCodeAction()
+                  await request2FA()
                   startEmailResendCooldown()
                 }}
                 disabled={emailResendCooldown > 0}

@@ -2364,33 +2364,21 @@ function SecurityScreen({ onBack }: { onBack: () => void }) {
           </AnimatePresence>
         </GlassCard>
 
-        {/* Sessions (façade) */}
+        {/* Sessions — non implémenté */}
         <SectionLabel>Sessions actives</SectionLabel>
         <GlassCard className="mb-5">
-          {[
-            { device: "iPhone 15 Pro", location: "Paris, France", current: true },
-            { device: "MacBook Pro", location: "Paris, France", current: false },
-          ].map((session) => (
-            <div key={session.device} className="flex items-center gap-3 px-4 py-3.5">
-              <div className="w-9 h-9 rounded-xl bg-secondary/60 flex items-center justify-center shrink-0 text-muted-foreground">
-                <Globe className="h-4 w-4" strokeWidth={1.5} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-foreground">{session.device}</p>
-                  {session.current && (
-                    <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">Actuelle</span>
-                  )}
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{session.location}</p>
-              </div>
-              {!session.current && (
-                <button className="px-2.5 py-1.5 rounded-lg text-[10px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 active:scale-95 transition-all">
-                  Révoquer
-                </button>
-              )}
+          <div className="flex items-center gap-3 px-4 py-3.5 opacity-50">
+            <div className="w-9 h-9 rounded-xl bg-secondary/40 border border-onyx-border/30 flex items-center justify-center shrink-0">
+              <Globe className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
             </div>
-          ))}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-foreground">Appareils connectés</p>
+                <span className="px-1.5 py-0.5 text-[8px] font-semibold rounded bg-secondary/60 text-muted-foreground border border-onyx-border/40 tracking-wide whitespace-nowrap">Bientôt</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Gérer et révoquer les sessions actives</p>
+            </div>
+          </div>
         </GlassCard>
       </div>
     </motion.div>
