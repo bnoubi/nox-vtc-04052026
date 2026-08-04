@@ -56,7 +56,8 @@ export async function updateSession(request: NextRequest) {
 
   const isPublicRoute =
     pathname.startsWith('/politique-de-confidentialite') ||
-    pathname.startsWith('/politique-de-cookies')
+    pathname.startsWith('/politique-de-cookies') ||
+    pathname.startsWith('/request/')
 
   // Routes publiques : auth + callback + pages légales → jamais de redirection vers /login
   if (!user && !isAuthRoute && !isApiRoute && !isPublicRoute) {
