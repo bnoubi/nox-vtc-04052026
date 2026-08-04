@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Turnstile } from "@marsidev/react-turnstile"
 import { requestTwoFactorCodeAction, verifyTwoFactorCodeAction } from "@/app/actions/two-factor"
 import { sendPasswordResetCodeAction, verifyPasswordResetCodeAction, resetPasswordAction } from "@/app/actions/password-reset"
+import { checkLoginRateLimit, recordFailedLogin, clearLoginAttempts } from "@/app/auth/actions"
 import { isPasswordStrong } from "@/lib/password"
 
 export function AuthScreen({ initialError }: { initialError?: string }) {
@@ -65,28 +66,44 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
     setIsLoading(true)
     setError(null)
     setPersistentError(null)
+
+    // Vérification rate limit avant la tentative
+    const rl = await checkLoginRateLimit(email)
+    if (rl.blocked) {
+      const mins = Math.ceil(rl.waitSeconds / 60)
+      setError(`Trop de tentatives échouées. Réessayez dans ${mins} minute${mins > 1 ? 's' : ''}.`)
+      setIsLoading(false)
+      return
+    }
+
     const { data: authData, error } = await supabase.auth.signInWithPassword({
       email,
       password,
       options: { captchaToken: captchaToken || undefined }
     })
-    
+
     // Réinitialiser le Turnstile après l'appel
     setCaptchaToken(null)
     setTurnstileKey(prev => prev + 1)
 
     if (error) {
+      await recordFailedLogin(email)
       const msg = error.message.toLowerCase()
-      if (msg.includes("invalid login credentials")) {
+      if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
         setError("Email ou mot de passe incorrect.")
       } else if (msg.includes("email not confirmed")) {
         setPersistentError("Veuillez confirmer votre email avant de vous connecter.")
+      } else if (msg.includes("rate limit") || msg.includes("too many")) {
+        setError("Trop de tentatives. Veuillez patienter quelques minutes avant de réessayer.")
       } else {
-        setError(error.message)
+        setError("Une erreur est survenue. Veuillez réessayer.")
       }
       setIsLoading(false)
       return
     }
+
+    // Connexion réussie — réinitialiser le compteur
+    await clearLoginAttempts(email)
 
     // Vérifier 2FA côté client — session disponible immédiatement après signInWithPassword
     const userId = authData.user?.id

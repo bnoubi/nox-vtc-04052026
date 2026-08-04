@@ -618,7 +618,14 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       const supabase = createClient()
       const { error } = await supabase.auth.updateUser({ password: pwd })
       if (error) {
-        setSaveError(error.message)
+        const msg = error.message.toLowerCase()
+        if (msg.includes('different') || msg.includes('same password')) {
+          setSaveError("Le nouveau mot de passe doit être différent du précédent.")
+        } else if (msg.includes('weak') || msg.includes('too short') || msg.includes('too common')) {
+          setSaveError("Ce mot de passe est trop faible. Choisissez-en un plus complexe.")
+        } else {
+          setSaveError("Erreur lors de l'enregistrement du mot de passe. Réessayez.")
+        }
         return
       }
       await finishOnboarding()

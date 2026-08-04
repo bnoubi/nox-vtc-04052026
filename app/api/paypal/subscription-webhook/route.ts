@@ -143,6 +143,29 @@ export async function POST(req: NextRequest) {
           .update({ status: 'cancelled', cancelled_at: now })
           .eq('paypal_subscription_id', subscriptionId)
 
+        // Vérifie si l'annulation vient de l'app (cancel_at futur déjà posé en DB)
+        // → période déjà payée, le cron expire-trials gèrera la transition à cancel_at
+        const { data: subRow } = await db
+          .from('subscriptions')
+          .select('cancel_at')
+          .eq('user_id', userId)
+          .eq('payment_provider', 'paypal')
+          .maybeSingle()
+
+        const cancelAt = (subRow as { cancel_at: string | null } | null)?.cancel_at
+        const hasFutureCancelAt = cancelAt && new Date(cancelAt) > new Date()
+
+        if (hasFutureCancelAt) {
+          // Accès maintenu jusqu'à cancel_at — alignement sur le comportement Stripe
+          await db.from('subscriptions')
+            .update({ status: 'cancelled', updated_at: now })
+            .eq('user_id', userId)
+            .eq('payment_provider', 'paypal')
+          console.log('[paypal-webhook] CANCELLED — accès maintenu jusqu\'à', cancelAt, '(cron)')
+          break
+        }
+
+        // Annulation directe depuis PayPal (sans cancel_at) → downgrade immédiat
         await db.from('subscriptions')
           .update({ status: 'expired', plan: 'SOLO', target_plan: 'solo', updated_at: now })
           .eq('user_id', userId)
@@ -165,7 +188,7 @@ export async function POST(req: NextRequest) {
           console.error('[paypal-webhook] CANCELLED email error:', emailErr)
         }
 
-        console.log('[paypal-webhook] CANCELLED — userId:', userId, '→ SOLO')
+        console.log('[paypal-webhook] CANCELLED — userId:', userId, '→ SOLO immédiat')
         break
       }
 
