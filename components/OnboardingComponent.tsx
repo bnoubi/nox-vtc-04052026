@@ -30,7 +30,303 @@ type VehicleModel = {
   motorisations: string[]
 }
 
-const SIREN_WHITELIST = ["000000001","000000002","000000003","000000004","000000005","000000006","000000007","000000008","000000009","000000010"]
+const DEMO_COMPANIES: Record<string, {
+  siren: string
+  nom_raison_sociale: string
+  nom_complet: string
+  nature_juridique: string
+  activite_principale: string
+  siege: {
+    adresse: string
+    code_postal: string
+    libelle_commune: string
+    complement_adresse: string
+    activite_principale: string
+  }
+}> = {
+  "000000001": {
+    siren: "000000001",
+    nom_raison_sociale: "DEMO TRANSPORT VTC",
+    nom_complet: "DEMO TRANSPORT VTC",
+    nature_juridique: "5710",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "12 RUE DE LA PAIX",
+      code_postal: "75001",
+      libelle_commune: "PARIS",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000002": {
+    siren: "000000002",
+    nom_raison_sociale: "LUXURY RIDE DEMO SAS",
+    nom_complet: "LUXURY RIDE DEMO SAS",
+    nature_juridique: "5710",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "8 AVENUE DES CHAMPS ELYSEES",
+      code_postal: "75008",
+      libelle_commune: "PARIS",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000003": {
+    siren: "000000003",
+    nom_raison_sociale: "ELITE CHAUFFEUR DEMO SAS",
+    nom_complet: "ELITE CHAUFFEUR DEMO SAS",
+    nature_juridique: "5710",
+    activite_principale: "4939B",
+    siege: {
+      adresse: "3 RUE DU COMMERCE",
+      code_postal: "69001",
+      libelle_commune: "LYON",
+      complement_adresse: "",
+      activite_principale: "4939B",
+    },
+  },
+  "000000004": {
+    siren: "000000004",
+    nom_raison_sociale: "PRESTIGE AUTO DEMO",
+    nom_complet: "PRESTIGE AUTO DEMO",
+    nature_juridique: "5499",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "21 RUE DE LA REPUBLIQUE",
+      code_postal: "13001",
+      libelle_commune: "MARSEILLE",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000005": {
+    siren: "000000005",
+    nom_raison_sociale: "RAPID DRIVER DEMO EURL",
+    nom_complet: "RAPID DRIVER DEMO EURL",
+    nature_juridique: "5499",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "5 PLACE DU CAPITOLE",
+      code_postal: "31000",
+      libelle_commune: "TOULOUSE",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000006": {
+    siren: "000000006",
+    nom_raison_sociale: "FIRST CLASS VTC DEMO",
+    nom_complet: "FIRST CLASS VTC DEMO",
+    nature_juridique: "5710",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "14 RUE NATIONALE",
+      code_postal: "59000",
+      libelle_commune: "LILLE",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000007": {
+    siren: "000000007",
+    nom_raison_sociale: "CONFORT ROUTE DEMO SAS",
+    nom_complet: "CONFORT ROUTE DEMO SAS",
+    nature_juridique: "5710",
+    activite_principale: "4939B",
+    siege: {
+      adresse: "9 RUE SAINTE CATHERINE",
+      code_postal: "33000",
+      libelle_commune: "BORDEAUX",
+      complement_adresse: "",
+      activite_principale: "4939B",
+    },
+  },
+  "000000008": {
+    siren: "000000008",
+    nom_raison_sociale: "SWIFT MOBILITY DEMO",
+    nom_complet: "SWIFT MOBILITY DEMO",
+    nature_juridique: "5499",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "2 RUE DE STRASBOURG",
+      code_postal: "44000",
+      libelle_commune: "NANTES",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000009": {
+    siren: "000000009",
+    nom_raison_sociale: "NOCTURNE TRANSFERT DEMO",
+    nom_complet: "NOCTURNE TRANSFERT DEMO",
+    nature_juridique: "5710",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "17 RUE JEAN JAURES",
+      code_postal: "06000",
+      libelle_commune: "NICE",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000010": {
+    siren: "000000010",
+    nom_raison_sociale: "HORIZON VTC DEMO SASU",
+    nom_complet: "HORIZON VTC DEMO SASU",
+    nature_juridique: "5710",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "30 AVENUE DE LA GARE",
+      code_postal: "67000",
+      libelle_commune: "STRASBOURG",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000011": {
+    siren: "000000011",
+    nom_raison_sociale: "METROPOLITAN RIDE DEMO",
+    nom_complet: "METROPOLITAN RIDE DEMO",
+    nature_juridique: "5499",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "6 RUE DE LA MONNAIE",
+      code_postal: "75002",
+      libelle_commune: "PARIS",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000012": {
+    siren: "000000012",
+    nom_raison_sociale: "ROYAL TRANSFER DEMO SAS",
+    nom_complet: "ROYAL TRANSFER DEMO SAS",
+    nature_juridique: "5710",
+    activite_principale: "4939B",
+    siege: {
+      adresse: "45 RUE VICTOR HUGO",
+      code_postal: "69002",
+      libelle_commune: "LYON",
+      complement_adresse: "",
+      activite_principale: "4939B",
+    },
+  },
+  "000000013": {
+    siren: "000000013",
+    nom_raison_sociale: "AZUR CHAUFFEUR DEMO",
+    nom_complet: "AZUR CHAUFFEUR DEMO",
+    nature_juridique: "5499",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "11 BOULEVARD DE LA CROISETTE",
+      code_postal: "06400",
+      libelle_commune: "CANNES",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000014": {
+    siren: "000000014",
+    nom_raison_sociale: "EXCELLENCE DRIVE DEMO",
+    nom_complet: "EXCELLENCE DRIVE DEMO",
+    nature_juridique: "5710",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "22 RUE DES FLEURS",
+      code_postal: "34000",
+      libelle_commune: "MONTPELLIER",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000015": {
+    siren: "000000015",
+    nom_raison_sociale: "CAPITAL MOBILITY DEMO",
+    nom_complet: "CAPITAL MOBILITY DEMO",
+    nature_juridique: "5499",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "7 RUE DE RIVOLI",
+      code_postal: "75004",
+      libelle_commune: "PARIS",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000016": {
+    siren: "000000016",
+    nom_raison_sociale: "NORD TRANSFERT DEMO SAS",
+    nom_complet: "NORD TRANSFERT DEMO SAS",
+    nature_juridique: "5710",
+    activite_principale: "4939B",
+    siege: {
+      adresse: "3 RUE FAIDHERBE",
+      code_postal: "59100",
+      libelle_commune: "ROUBAIX",
+      complement_adresse: "",
+      activite_principale: "4939B",
+    },
+  },
+  "000000017": {
+    siren: "000000017",
+    nom_raison_sociale: "LIBERTÉ ROUTE DEMO EURL",
+    nom_complet: "LIBERTÉ ROUTE DEMO EURL",
+    nature_juridique: "5499",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "18 RUE DU PORT",
+      code_postal: "76600",
+      libelle_commune: "LE HAVRE",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000018": {
+    siren: "000000018",
+    nom_raison_sociale: "GRAND SUD VTC DEMO",
+    nom_complet: "GRAND SUD VTC DEMO",
+    nature_juridique: "5710",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "25 ALLEES JEAN JAURES",
+      code_postal: "31000",
+      libelle_commune: "TOULOUSE",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+  "000000019": {
+    siren: "000000019",
+    nom_raison_sociale: "ATLANTIQUE DRIVER DEMO",
+    nom_complet: "ATLANTIQUE DRIVER DEMO",
+    nature_juridique: "5499",
+    activite_principale: "4939B",
+    siege: {
+      adresse: "4 RUE DE BRETAGNE",
+      code_postal: "35000",
+      libelle_commune: "RENNES",
+      complement_adresse: "",
+      activite_principale: "4939B",
+    },
+  },
+  "000000020": {
+    siren: "000000020",
+    nom_raison_sociale: "STAR RIDE DEMO SASU",
+    nom_complet: "STAR RIDE DEMO SASU",
+    nature_juridique: "5710",
+    activite_principale: "4932Z",
+    siege: {
+      adresse: "1 RUE DE L'OPERA",
+      code_postal: "75009",
+      libelle_commune: "PARIS",
+      complement_adresse: "",
+      activite_principale: "4932Z",
+    },
+  },
+}
+
+const SIREN_WHITELIST = Object.keys(DEMO_COMPANIES)
 const NAF_VTC = new Set(["4932Z", "4939B"])
 const normalizeNAF = (code: string) => code.replace(".", "")
 
@@ -319,6 +615,12 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
     if (step !== 1) return
     const q = search.trim()
     if (q.length < 3) { setSearchResults([]); return }
+    // Interception SIREN/SIRET demo — bypass API gouv.fr
+    const trimmed = q.trim()
+    if (DEMO_COMPANIES[trimmed]) {
+      setSearchResults([DEMO_COMPANIES[trimmed] as any])
+      return
+    }
     const t = setTimeout(async () => {
       setSearching(true)
       try {
@@ -366,13 +668,16 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Utilisateur non authentifié")
-      const { data: alreadyTaken, error: rpcErr } = await supabase
-        .rpc("check_siret_exists", { p_siret: c.siren })
-      if (rpcErr) throw rpcErr
-      if (alreadyTaken) {
-        setDuplicateCompany(true)
-        setSaveError("Cette entreprise est déjà enregistrée sur NoX VTC. Si vous pensez qu'il s'agit d'une erreur, contactez-nous.")
-        return
+      // Les comptes demo peuvent être réutilisés — pas de check unicité
+      if (!SIREN_WHITELIST.includes(c.siren)) {
+        const { data: alreadyTaken, error: rpcErr } = await supabase
+          .rpc("check_siret_exists", { p_siret: c.siren })
+        if (rpcErr) throw rpcErr
+        if (alreadyTaken) {
+          setDuplicateCompany(true)
+          setSaveError("Cette entreprise est déjà enregistrée sur NoX VTC. Si vous pensez qu'il s'agit d'une erreur, contactez-nous.")
+          return
+        }
       }
       setSiret(c.siren)
       setNomEntreprise(c.nom_raison_sociale || c.nom_complet || "")
