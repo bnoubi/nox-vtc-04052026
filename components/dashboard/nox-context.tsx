@@ -666,6 +666,119 @@ export function NoxProvider({ children }: { children: React.ReactNode }) {
     setTimeout(poll, 500)
   }, [isLoaded, userId, supabase])
 
+  // Mécanisme 1 — Supabase Realtime : plan & jetons mis à jour en temps réel
+  useEffect(() => {
+    if (!userId || !isLoaded) return
+
+    const channel = supabase
+      .channel(`user-realtime-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'subscriptions',
+          filter: `user_id=eq.${userId}`,
+        },
+        async () => {
+          const { data: sub } = await supabase
+            .from('subscriptions')
+            .select('plan, status, trial_ends_at')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          if (sub?.plan) setPlan(sub.plan.toUpperCase() as Plan)
+          if (sub?.status) setSubscriptionStatus(sub.status)
+          if (sub?.trial_ends_at) setTrialEndsAt(sub.trial_ends_at)
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wallets',
+          filter: `user_id=eq.${userId}`,
+        },
+        async () => {
+          const { data: wallet } = await supabase
+            .from('wallets')
+            .select('balance')
+            .eq('user_id', userId)
+            .single()
+          if (wallet) setTokens(wallet.balance ?? 0)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [userId, isLoaded, supabase])
+
+  // Mécanisme 2 — Refresh au focus (visibilitychange)
+  useEffect(() => {
+    if (!userId || !isLoaded) return
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState !== 'visible') return
+
+      const [subResult, walletResult] = await Promise.all([
+        supabase
+          .from('subscriptions')
+          .select('plan, status, trial_ends_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('wallets')
+          .select('balance')
+          .eq('user_id', userId)
+          .single(),
+      ])
+
+      if (subResult.data?.plan) setPlan(subResult.data.plan.toUpperCase() as Plan)
+      if (subResult.data?.status) setSubscriptionStatus(subResult.data.status)
+      if (subResult.data?.trial_ends_at) setTrialEndsAt(subResult.data.trial_ends_at)
+      if (walletResult.data) setTokens(walletResult.data.balance ?? 0)
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [userId, isLoaded, supabase])
+
+  // Mécanisme 3 — Polling léger toutes les 60 secondes (filet de sécurité)
+  useEffect(() => {
+    if (!userId || !isLoaded) return
+
+    const poll = async () => {
+      const [subResult, walletResult] = await Promise.all([
+        supabase
+          .from('subscriptions')
+          .select('plan, status, trial_ends_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('wallets')
+          .select('balance')
+          .eq('user_id', userId)
+          .single(),
+      ])
+
+      if (subResult.data?.plan) setPlan(subResult.data.plan.toUpperCase() as Plan)
+      if (subResult.data?.status) setSubscriptionStatus(subResult.data.status)
+      if (subResult.data?.trial_ends_at) setTrialEndsAt(subResult.data.trial_ends_at)
+      if (walletResult.data) setTokens(walletResult.data.balance ?? 0)
+    }
+
+    const interval = setInterval(poll, 60_000)
+    return () => clearInterval(interval)
+  }, [userId, isLoaded, supabase])
+
   // ─── Mutations données métier ───
   const updateEnterprise = async (data: Partial<EnterpriseProfile>) => {
     try {
