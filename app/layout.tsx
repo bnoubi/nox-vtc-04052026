@@ -5,6 +5,7 @@ import { headers } from 'next/headers'
 
 import './globals.css'
 import { AxeptioConsent } from '@/components/AxeptioConsent'
+import { CapacitorDeepLink } from '@/components/CapacitorDeepLink'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -65,6 +66,7 @@ export default async function RootLayout({
       </head>
       <body className="font-sans antialiased" suppressHydrationWarning>
         <AxeptioConsent />
+        <CapacitorDeepLink />
         {children}
       </body>
     </html>
