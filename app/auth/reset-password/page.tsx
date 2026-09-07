@@ -6,7 +6,7 @@ import { Lock, Eye, EyeOff } from "lucide-react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { isPasswordStrong } from "@/lib/password"
+import { isPasswordStrong, PasswordStrengthIndicator } from "@/lib/password"
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("")
@@ -111,31 +111,33 @@ export default function ResetPasswordPage() {
           className="space-y-4"
         >
           {/* Nouveau mot de passe */}
-          <div className="relative">
-            <div className="absolute left-4 top-1/2 -translate-y-1/2">
-              <Lock className="h-4 w-4 text-[#D4AF37]/50" strokeWidth={1.5} />
+          <div>
+            <div className="relative">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                <Lock className="h-4 w-4 text-[#D4AF37]/50" strokeWidth={1.5} />
+              </div>
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Nouveau mot de passe"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full h-14 pl-11 pr-12 rounded-xl bg-[#0A0A0A] border border-[#D4AF37]/30 text-[#F5F5F5] placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors"
+                style={{ fontSize: "16px" }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-1"
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4 text-[#555555]" strokeWidth={1.5} />
+                ) : (
+                  <Eye className="h-4 w-4 text-[#555555]" strokeWidth={1.5} />
+                )}
+              </button>
             </div>
-            <input
-              type={showPassword ? "text" : "password"}
-              placeholder="Nouveau mot de passe"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              className="w-full h-14 pl-11 pr-12 rounded-xl bg-[#0A0A0A] border border-[#D4AF37]/30 text-[#F5F5F5] placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors"
-              style={{ fontSize: "16px" }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 p-1"
-            >
-              {showPassword ? (
-                <EyeOff className="h-4 w-4 text-[#555555]" strokeWidth={1.5} />
-              ) : (
-                <Eye className="h-4 w-4 text-[#555555]" strokeWidth={1.5} />
-              )}
-            </button>
+            <PasswordStrengthIndicator password={password} show={password.length > 0} />
           </div>
 
           {/* Confirmation */}

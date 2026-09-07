@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Turnstile } from "@marsidev/react-turnstile"
 import { sendPasswordResetCodeAction, verifyPasswordResetCodeAction, resetPasswordAction } from "@/app/actions/password-reset"
-import { isPasswordStrong } from "@/lib/password"
+import { isPasswordStrong, PasswordStrengthIndicator } from "@/lib/password"
 
 async function rlCheck(email: string): Promise<{ blocked: boolean; waitSeconds: number }> {
   const res = await fetch('/api/auth/rate-limit', {
@@ -523,26 +523,29 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
                   <p className="text-[13px] text-[#888888] leading-relaxed text-center">
                     Choisissez un nouveau mot de passe.
                   </p>
-                  <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2">
-                      <Lock className="h-4 w-4 text-[#D4AF37]/50" strokeWidth={1.5} />
+                  <div>
+                    <div className="relative">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                        <Lock className="h-4 w-4 text-[#D4AF37]/50" strokeWidth={1.5} />
+                      </div>
+                      <input
+                        type={resetShowNewPassword ? "text" : "password"}
+                        placeholder="Nouveau mot de passe"
+                        value={resetNewPassword}
+                        onChange={(e) => setResetNewPassword(e.target.value)}
+                        autoFocus
+                        className="w-full h-14 pl-11 pr-12 rounded-xl bg-[#0A0A0A] border border-[#D4AF37]/30 text-[#F5F5F5] placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors"
+                        style={{ fontSize: "16px" }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setResetShowNewPassword(!resetShowNewPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 p-1"
+                      >
+                        {resetShowNewPassword ? <EyeOff className="h-4 w-4 text-[#555555]" strokeWidth={1.5} /> : <Eye className="h-4 w-4 text-[#555555]" strokeWidth={1.5} />}
+                      </button>
                     </div>
-                    <input
-                      type={resetShowNewPassword ? "text" : "password"}
-                      placeholder="Nouveau mot de passe"
-                      value={resetNewPassword}
-                      onChange={(e) => setResetNewPassword(e.target.value)}
-                      autoFocus
-                      className="w-full h-14 pl-11 pr-12 rounded-xl bg-[#0A0A0A] border border-[#D4AF37]/30 text-[#F5F5F5] placeholder:text-[#555555] focus:outline-none focus:border-[#D4AF37]/60 transition-colors"
-                      style={{ fontSize: "16px" }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setResetShowNewPassword(!resetShowNewPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 p-1"
-                    >
-                      {resetShowNewPassword ? <EyeOff className="h-4 w-4 text-[#555555]" strokeWidth={1.5} /> : <Eye className="h-4 w-4 text-[#555555]" strokeWidth={1.5} />}
-                    </button>
+                    <PasswordStrengthIndicator password={resetNewPassword} show={resetNewPassword.length > 0} />
                   </div>
                   <div className="relative">
                     <div className="absolute left-4 top-1/2 -translate-y-1/2">
@@ -571,7 +574,7 @@ export function AuthScreen({ initialError }: { initialError?: string }) {
                   )}
                   <button
                     type="submit"
-                    disabled={isLoading || !isPasswordStrong(resetNewPassword) || resetNewPassword !== resetConfirmPassword}
+                    disabled={isLoading}
                     className="w-full h-14 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 disabled:opacity-60"
                   >
                     {isLoading ? 'Réinitialisation...' : 'Réinitialiser le mot de passe'}

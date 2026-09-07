@@ -28,7 +28,14 @@ export default function ResetPasswordPage() {
     e.preventDefault()
     setError(null)
 
-    if (!canSubmit) return
+    if (!isPasswordStrong(password)) {
+      setError("Le mot de passe ne respecte pas les critères de sécurité (voir indicateur ci-dessus).")
+      return
+    }
+    if (!passwordsMatch) {
+      setError("Les mots de passe ne correspondent pas.")
+      return
+    }
 
     setIsLoading(true)
 
@@ -152,7 +159,7 @@ export default function ResetPasswordPage() {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isLoading || !canSubmit || isSuccess}
+            disabled={isLoading || isSuccess}
             className="w-full h-14 mt-2 rounded-xl bg-[#D4AF37] text-[#0A0A0A] text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#E5C04B] active:scale-[0.98] transition-all shadow-lg shadow-[#D4AF37]/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSuccess ? "Redirection en cours..." : "Mettre à jour mon mot de passe"}

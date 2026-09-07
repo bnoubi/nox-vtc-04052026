@@ -7,7 +7,7 @@ import { Building2, ArrowRight, ShieldCheck, User, Save, CheckCircle2, Eye, EyeO
 import { createClient } from "@/lib/supabase/client"
 import { PlacesAutocomplete } from "@/components/ui/places-autocomplete"
 import { isValidPhoneNumber, parsePhoneNumber, getCountries, getCountryCallingCode, type CountryCode } from "libphonenumber-js"
-import { isPasswordStrong } from "@/lib/password"
+import { isPasswordStrong, PasswordStrengthIndicator } from "@/lib/password"
 
 function flagEmoji(code: string) {
   return [...code.toUpperCase()].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('')
@@ -1723,6 +1723,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
                     {showPwdField ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
                   </button>
                 </div>
+                <PasswordStrengthIndicator password={pwd} show={pwd.length > 0} />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-white/70 ml-1">Confirmation</label>
@@ -1745,7 +1746,7 @@ export function OnboardingComponent({ onComplete, resumeStep }: { onComplete: ()
 
             {cguCheckbox}
             {saveError && <p className="text-xs text-red-400 text-center mb-3">{saveError}</p>}
-            <button onClick={handleSavePassword} disabled={loading || pwd.length < 8 || pwd !== pwdConfirm || !cguAccepted} className={PRIMARY_BTN}>
+            <button onClick={handleSavePassword} disabled={loading || !cguAccepted} className={PRIMARY_BTN}>
               {loading ? <span className="animate-pulse">Enregistrement...</span> : <><CheckCircle2 className="h-4 w-4" strokeWidth={2} />Finaliser mon inscription</>}
             </button>
             <button type="button" onClick={finishOnboarding} disabled={loading || !cguAccepted} className={SECONDARY_BTN}>
